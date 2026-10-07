@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>步骤2：按会话ID推数据</title>
+</head>
+<body>
+    <h3>步骤2：输入会话ID，接收专属消息</h3>
+    <input type="text" id="sessionIdInput" placeholder="输入会话ID（如123）" value="123">
+    <button onclick="connectSSE()">连接SSE</button>
+    <div id="result"></div>
+
+    <script>
+        let eventSource = null;
+        const resultDom = document.getElementById("result");
+
+        // function connectSSE() {
+        //     const sessionId = document.getElementById("sessionIdInput").value;
+        //     resultDom.innerHTML = "";
+        //
+        //     // ✅ 新增：URL带session_id参数
+        //     eventSource = new EventSource(`http://127.0.0.1:8001/stream/${sessionId}`);
+        //     eventSource.onmessage = function(event) {
+        //         resultDom.innerHTML += event.data + "<br>";
+        //     };
+        // }
+        function connectSSE() {
+        const sessionId = document.getElementById("sessionIdInput").value;
+        resultDom.innerHTML = "";
+
+        // ✅ 1. 关闭旧连接，防止叠加
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+
+        eventSource = new EventSource(`http://127.0.0.1:8001/stream/${sessionId}`);
+
+        let received = 0;
+        eventSource.onmessage = function(event) {
+            resultDom.innerHTML += event.data + "<br>";
+            received++;
+            // ✅ 2. 收到预期条数后主动关闭，阻止自动重连
+            if (received >= 5) {
+                eventSource.close();
+                eventSource = null;
+                resultDom.innerHTML += "<i>—— 接收完毕，连接已关闭 ——</i><br>";
+            }
+        };
+
+        // ✅ 3. 出错时关闭，避免无限重连
+        eventSource.onerror = function() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        };
+    }
+    </script>
+</body>
+</html>
