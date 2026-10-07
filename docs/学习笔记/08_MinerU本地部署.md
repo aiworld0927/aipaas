@@ -3,8 +3,9 @@
 MinerU 是一个将 PDF 高质量转换为 Markdown 的开源工具。
 
 ```python
-# 参考文档：
+# 官方文档：
 https://opendatalab.github.io/MinerU/zh/
+https://mineru.net/apiManage/docs
 ```
 
 ## 1. 本地部署
@@ -13,25 +14,43 @@ https://opendatalab.github.io/MinerU/zh/
 
 ```python
 # 创建新项目:在当前目录下：mineru_local：
-uv init mineru_local  --python 3.11
+uv init mineru_local_121  --python 3.11
 # uv init  # 创建新项目:在当前目录下
 
 # 指定 Python 版本 创建venv 
 uv venv --python 3.11
 
+# 配置 pyproject.toml
+[tool.uv.sources]
+# 强制从nvidia源安装
+torch = {index = "pytorch-cuda"}
+torchvision = {index = "pytorch-cuda"}
+torchaudio = {index = "pytorch-cuda"}
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple"
+
 # 安装依赖包
 # ===================== 环境安装命令（适配BGE-M3+Milvus，GPU/CPU版区分）=====================
 # 【优先推荐-GPU版】安装CUDA 12.8版PyTorch（含torchvision/torchaudio，NVIDIA显卡GPU加速必备）
-uv add torch torchvision torchaudio --default-index https://download.pytorch.org/whl/cu128
-
-uv remove torch torchvision torchaudio
-
+# uv add torch torchvision torchaudio --default-index https://download.pytorch.org/whl/cu128
+# uv remove torch torchvision torchaudio
 uv add torch torchvision torchaudio --default-index https://download.pytorch.org/whl/cu124
+
 # 【备用-CPU版】无NVIDIA显卡（AMD/Intel集显）请用此命令，直接安装CPU版PyTorch
 # uv add torch torchvision torchaudio
 
+uv add -U "transformers"
+uv add -U "shapely"
+
 # 安装MinerU  -U 参数的作用：它告诉安装器：不仅安装这个包，还要把它以及它的依赖升级到满足条件的最新版本。
 uv add -U "mineru[all]" --default-index https://mirrors.aliyun.com/pypi/simple
+# uv add -U "mineru"
 
 # 查看是否安转成功
 mineru --version
@@ -40,7 +59,56 @@ mineru --version
 注意事项：
 1、pytorch最后安装，避免miner CPU版本的torch 替换 GPU版本
 
+uv add torch torchvision torchaudio "transformers" "mineru[all]"
+
 """
+
+
+"""
+    工程环境
+"""
+conda create -n py311 python=3.11
+conda activate py311
+python -m venv kb311
+.\Scripts\activate
+
+"""
+    pytorch
+"""
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+pip uninstall torch torchvision torchaudio -y
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 (5090)
+pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 (5090)
+cuda开发工具：https://developer.nvidia.com/cuda-12-4-0-download-archive
+
+nvidia-smi
+检查pytorch状态：python -c "import torch; print('CUDA Available:', torch.cuda.is_available())"
+
+测试：
+import torch
+print(torch.cuda.is_available())  # 如果输出 True，说明成功认出显卡！
+print(torch.version.cuda)         # 这会显示你安装的 PyTorch 自带的 CUDA 版本（比如 12.1）
+
+"""
+    mineru
+"""
+
+pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple
+pip install uv -i https://mirrors.aliyun.com/pypi/simple
+uv pip install -U "mineru[all]" -i https://mirrors.aliyun.com/pypi/simple
+测试： mineru --version
+
+"""
+    mineru模型
+"""
+模型缓存：$env:MODELSCOPE_CACHE="D:\aigc\modelscope_cache\models"
+下模型：mineru-models-download
+桌面客户端：https://mineru.net/
+测试：mineru -p xxx.pdf -o output --backend pipeline
+
+mineru -p D:\docs\hak180产品安全手册.pdf -o output --backend pipeline
 ```
 
 ### 1.3 下载模型
@@ -214,66 +282,3 @@ PDF 页面 → 渲染为高清图片 → OriCls 检测方向 → 旋转摆正
 所有提取结果（文本 + LaTeX + 表格 + 图片引用）
     └── ReadingOrder → 按正确的阅读顺序排列 → 拼接为最终 Markdown
 ```
-
-## 4. 使用CUDA解析模型
-
-### 安装pytorch
-
-查看cuda版本
-
-```bash
-nvidia-smi
-```
-
-配置pyproject.tmol锁定版本
-
-```toml
-[project]
-name = "pdf-demo3"
-version = "0.1.0"
-description = "Add your description here"
-requires-python = ">=3.11"
-dependencies = [
-    "torch>=2.11.0",
-    "torchvision>=0.26.0",
-    "torchaudio>=2.11.0",
-]
-
-[tool.uv.sources]
-# 强制从 NVIDIA 源安装
-torch = { index = "pytorch-cuda" }
-torchvision = { index = "pytorch-cuda" }
-torchaudio = { index = "pytorch-cuda" }
-
-[[tool.uv.index]]
-name = "pytorch-cuda"
-url = "https://download.pytorch.org/whl/cu128"
-explicit = true
-```
-
-安装 pytorch
-
-```bash
-uv add torch torchvision torchaudio
-
-#uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-```
-
-检查CUDA是否可用
-
-```bash
-python -c "import torch; print(torch.cuda.is_available())"
-```
-
-可能需要安装cuda toolkit：
-
-官网：[CUDA Toolkit - Free Tools and Training | NVIDIA Developer](https://developer.nvidia.com/cuda/toolkit)
-
-
-
-# MinerU本地模型使用
-
-```bash
-mineru -p F:/XXX.pdf -o F:/output --backend pipeline
-```
-

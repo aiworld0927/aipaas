@@ -1,0 +1,58 @@
+<mxfile host="Electron" modified="2026-08-24T11:02:01.873Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/21.6.8 Chrome/114.0.5735.289 Electron/25.5.0 Safari/537.36" etag="YS_P7Mxu1S38JTtNki5C" version="21.6.8" type="device">
+  <diagram name="第 1 页" id="sJGrcNIZ8rOpEwYZqjAr">
+    <mxGraphModel dx="675" dy="394" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3400" pageHeight="3379" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-14" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="530" y="450" width="150" height="270" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-16" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="450" width="250" height="270" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-3" value="MongoDB&lt;br&gt;存消息记录" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="810" y="475" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-4" value="Milvus&lt;br&gt;存切片的内容" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="810" y="535" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-5" value="Minio&lt;br&gt;存文档和图片" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="810" y="595" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-6" value="neo4j&lt;br&gt;知识图谱" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="810" y="655" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-7" value="BGE-M3&lt;br&gt;嵌入模型" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="560" y="463" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-8" value="BGE-Reranker&lt;br&gt;重排模型" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="560" y="513" width="90" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-9" value="Mineru&lt;br&gt;PDF转md" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="563" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-10" value="Vlm&lt;br&gt;视觉模型" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="613" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-11" value="llm&lt;br&gt;大语言模型" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="560" y="663" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-12" value="kb-import&lt;br&gt;导入功能" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="920" y="475" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-13" value="kb-query&lt;br&gt;查询功能" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="920" y="535" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-15" value="GPU部署" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="570" y="408" width="70" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-17" value="CPU部署" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="800" y="408" width="70" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="1UK0mk18sAwm1uq1cIbi-18" value="Docker一键部署" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="900" y="408" width="110" height="30" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
