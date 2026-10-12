@@ -98,10 +98,13 @@ def generate_embeddings(texts):
         logger.error(f"文本向量生成失败：{str(e)}", exc_info=True)
         raise  # 不吞异常，向上传递让调用方做重试/降级处理
 
-
 """
 核心设计亮点&适配说明：
-1. 模型原生归一化：开启normalize_embeddings = True，自动对稠密+稀疏向量做L2归一化，完美适配Milvus IP内积检索（单位化后IP等价于余弦，计算更快）；
+1. normalize_embeddings=True 的价值：
+    - 检索更稳定 ：不同文本长短、词频差异不会把分数拉偏。
+    - IP 可近似 cosine ：向量都归一化后， Inner Product 和余弦相似度等价，Milvus 用 IP 检索就很合适。
+    - dense/sparse 都统一标尺 ：混合检索时两路分数更容易做融合，不容易一边压死另一边。
+    - 减少异常高分 ：防止“模长大”的向量仅靠长度拿高分。
 2. 彻底解决NumPy类型做key问题：sparse_indices加.tolist()，将np.int64转为Python原生int，满足字典key的可哈希要求，无报错风险；
 3. 稀疏值适配序列化：sparse_data加.tolist()，将np.float32转为Python原生float，支持JSON写入/接口返回/Milvus入库等所有场景；
 4. 单例模式优化：模型仅初始化一次，避免重复加载耗时耗资源，提升批量处理效率；
@@ -109,7 +112,6 @@ def generate_embeddings(texts):
 6. 分级日志覆盖：从模型初始化、向量生成到异常报错，全流程日志记录，便于生产环境问题排查；
 7. 入参合法性校验：防止空列表/非列表入参导致的内部报错，提升工具类健壮性。
 """
-
 if __name__ == '__main__':
     embedding_client = get_bge_m3_ef()
     result = generate_embeddings(["格式匹配业务调用：返回dense嵌套列表、sparse字典列表，"])
