@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from app.core.logger import logger
-from app.core.logger import node_log
+from app.core.log import logger
+from app.core.log import node_log
 from tests.langgraph.state import get_default_state
 
 @node_log("node_entry")

@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 
-from app.core.logger import logger
+from app.core.log import logger
 from clients.minio_utils import get_minio_client
 from conf.minio_config import minio_config
 from rag.import_processor.main_graph import KBImportWorkflow

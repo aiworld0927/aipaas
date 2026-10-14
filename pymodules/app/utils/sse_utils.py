@@ -3,7 +3,7 @@ import queue
 import asyncio
 from typing import Dict, Any, Optional, AsyncGenerator
 from fastapi import Request
-from app.core.logger import logger
+from app.core.log import logger
 
 
 class SSEEvent:

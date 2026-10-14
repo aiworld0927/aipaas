@@ -80,7 +80,7 @@ from langchain_core.embeddings import Embeddings
 # 项目内部依赖
 from app.agents.query_process.main_graph import query_app  # 查询流程入口(query_app.invoke)
 from app.agents.query_process.state import create_default_query_state  # 查询状态构造器
-from app.core.logger import logger  # 统一日志
+from app.core.log import logger  # 统一日志
 from app.lm.embedding_utils import generate_embeddings  # 嵌入模型工具(BGE-M3)
 from app.lm.lm_utils import get_llm_client  # 大模型客户端工具
 

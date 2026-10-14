@@ -7,7 +7,7 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Optional
 
-from core.logger import logger
+from core.log import logger
 from app.rag.import_processor.exceptions import ImportProcessError
 from app.utils.task_utils import add_done_task, add_running_task
 

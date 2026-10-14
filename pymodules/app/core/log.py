@@ -10,13 +10,52 @@
 6. 开箱即用：项目所有模块直接导入logger即可使用
 7. 位置终极精准：穿透loguru内部+工具类自身，完美显示业务模块实际调用位置
 """
+import asyncio
 import inspect
 import sys
 
-from loguru import logger
+from loguru import logger as _loguru_logger
 
-from app.conf.logger_config import *
 from core.context import request_id_ctx_var
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+
+# -------------------------- 第一步：加载.env配置文件 --------------------------
+load_dotenv()
+
+# -------------------------- 第二步：读取.env配置（带默认值，防止配置缺失） --------------------------
+LOG_CONSOLE_ENABLE = os.getenv("LOG_CONSOLE_ENABLE", "True").lower() == "true"
+LOG_CONSOLE_LEVEL = os.getenv("LOG_CONSOLE_LEVEL", "INFO").upper()
+LOG_FILE_ENABLE = os.getenv("LOG_FILE_ENABLE", "True").lower() == "true"
+LOG_FILE_LEVEL = os.getenv("LOG_FILE_LEVEL", "INFO").upper()
+LOG_FILE_RETENTION = os.getenv("LOG_FILE_RETENTION", "7 days")
+
+
+# -------------------------- 第三步：定义日志路径（自动推导项目根） --------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LOG_DIR = PROJECT_ROOT / "logs"
+LOG_FILE_NAME = "app_{time:YYYYMMDD}.log"
+LOG_FILE_PATH = LOG_DIR / LOG_FILE_NAME
+
+
+# -------------------------- 第四步：定义日志格式（彩色、结构化、易读） --------------------------
+LOG_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name: <20}</cyan>:<cyan>{function: <15}</cyan>:<cyan>{line: <4}</cyan> - "
+    "<level>{message}</level>"
+)
+# 配置日志格式
+LOG_FORMAT_REQUEST_ID = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level: <8}</level> | "
+    "<magenta>request_id - {extra[request_id]}</magenta> | "
+    "<cyan>{name: <20}</cyan>:<cyan>{function: <15}</cyan>:<cyan>{line: <4}</cyan> - "
+    "<level>{message}</level>"
+)
 
 
 # -------------------------- 第五步：初始化日志配置（核心方法） --------------------------
@@ -30,11 +69,11 @@ def init_logger():
     :return: 配置完成的loguru logger实例
     """
     # 1. 移除loguru默认的控制台输出
-    logger.remove()
+    _loguru_logger.remove()
 
     # 2. 配置控制台输出（若.env开启）
     if LOG_CONSOLE_ENABLE:
-        logger.add(
+        _loguru_logger.add(
             sink=sys.stdout,
             level=LOG_CONSOLE_LEVEL,
             format=LOG_FORMAT_REQUEST_ID, # 替换 LOG_FORMAT
@@ -45,7 +84,7 @@ def init_logger():
     # 3. 配置文件输出（若.env开启）
     if LOG_FILE_ENABLE:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
-        logger.add(
+        _loguru_logger.add(
             sink=LOG_FILE_PATH,
             level=LOG_FILE_LEVEL,
             format=LOG_FORMAT,
@@ -57,7 +96,7 @@ def init_logger():
             diagnose=True
         )
 
-    return logger
+    return _loguru_logger
 
 # -------------------------- 第六步：初始化并终极修正全局logger --------------------------
 base_logger = init_logger()
@@ -71,7 +110,7 @@ def fix_log_position(record):
     """遍历调用栈，跳过loguru内部帧+工具类自身帧，提取业务代码实际调用位置"""
     for frame in inspect.stack():
         # 终极过滤：排除loguru内部 + 排除工具类logger.py自身，直接定位业务模块
-        if ("_logger.py" in frame.filename or frame.function == "_log") or "logger.py" in frame.filename:
+        if ("_logger.py" in frame.filename or frame.function == "_log") or "log.py" in frame.filename:
             continue
         # 更新日志字段为业务代码实际位置
         record.update(
@@ -82,9 +121,9 @@ def fix_log_position(record):
         break
 
 # 应用终极修复，导出全局可用的logger
-logger = base_logger.patch(fix_log_position)
 # 给日志打补丁，使其支持注入request_id
-logger = logger.patch(inject_request_id)
+# logger = base_logger.patch(fix_log_position).patch(inject_request_id)
+logger = base_logger.patch(inject_request_id)
 
 
 # 配置日志格式
@@ -115,6 +154,30 @@ logger = logger.patch(inject_request_id)
 
 # -------------------------- 测试代码（验证修复效果） --------------------------
 if __name__ == '__main__':
+    """
+    # 官方文档：
+    https://loguru.readthedocs.io/en/stable/api.html
+    """
+    async def print_log(request:str):
+        # 打印日志
+        logger.info(f"{request}")
+    async def test1():
+        # 接收到请求
+        request_id = request_id_ctx_var.set("request_1")
+        # 模拟处理
+        await asyncio.sleep(1)
+        # 打印日志
+        logger.info(f"{request_id}")
+    async def test2():
+        # 接收到请求
+        request_id = request_id_ctx_var.set("request_2")
+        # 模拟处理
+        await asyncio.sleep(1)
+        # 打印日志
+        logger.info(f"{request_id}")
+    async def main():
+        await asyncio.gather(test1(), test2(), return_exceptions=True)
+    asyncio.run(main())
     logger.info("【测试】logger.py内部调用（仅测试，业务模块调用会显示正确文件名）")
     print(f"日志文件输出路径：{LOG_FILE_PATH}")
     logger.error("【测试】logger.py内部调用（仅测试，业务模块调用会显示正确文件名）")

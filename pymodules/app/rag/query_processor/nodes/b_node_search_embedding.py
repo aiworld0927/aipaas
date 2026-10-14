@@ -4,7 +4,7 @@ from conf.milvus_config import milvus_config
 from lm.embedding_utils import generate_embeddings
 from rag.base import BaseNode
 
-from app.core.logger import logger
+from app.core.log import logger
 from rag.query_processor.state import QueryGraphState
 
 

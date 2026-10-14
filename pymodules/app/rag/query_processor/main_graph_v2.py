@@ -12,7 +12,7 @@ from app.rag.query_processor.nodes.d_node_web_search_mcp import NodeWebSearchMcp
 from app.rag.query_processor.nodes.e_node_rrf import NodeRrf
 from app.rag.query_processor.nodes.f_node_rerank import NodeRerank
 from app.rag.query_processor.nodes.g_node_answer_output import NodeAnswerOutput
-from app.core.logger import logger
+from app.core.log import logger
 
 # 初始化环境变量（类加载前执行，保证全局生效）
 load_dotenv()

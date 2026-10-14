@@ -6,7 +6,7 @@ from lm.embedding_utils import generate_embeddings
 from lm.lm_utils import get_llm_client
 from rag.base import BaseNode
 from rag.query_processor.state import QueryGraphState
-from app.core.logger import logger
+from app.core.log import logger
 
 
 class NodeSearchEmbeddingHyde(BaseNode):

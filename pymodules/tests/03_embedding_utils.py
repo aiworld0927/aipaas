@@ -2,7 +2,7 @@ import json
 from typing import List
 
 from pymilvus.model.hybrid import BGEM3EmbeddingFunction
-from app.core.logger import logger
+from app.core.log import logger
 from app.conf.embedding_config import embedding_config
 
 _bge_m3_bf = None

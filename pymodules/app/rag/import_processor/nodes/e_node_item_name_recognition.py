@@ -13,7 +13,7 @@ from lm.lm_utils import get_llm_client
 from rag.base import BaseNode
 from rag.import_processor.exceptions import StateFieldError
 from rag.import_processor.state import ImportGraphState
-from app.core.logger import logger
+from app.core.log import logger
 
 
 

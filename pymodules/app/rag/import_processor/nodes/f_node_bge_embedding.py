@@ -5,7 +5,7 @@ from lm.embedding_utils import generate_embeddings
 from rag.base import BaseNode
 from rag.import_processor.exceptions import StateFieldError
 from rag.import_processor.state import ImportGraphState
-from app.core.logger import logger
+from app.core.log import logger
 
 class NodeBGEEmbedding(BaseNode):
     """

@@ -4,7 +4,7 @@ from typing import List, Tuple, Dict, Any
 
 from rag.base import BaseNode
 from rag.query_processor.state import QueryGraphState
-from app.core.logger import logger
+from app.core.log import logger
 
 
 class NodeRrf(BaseNode):

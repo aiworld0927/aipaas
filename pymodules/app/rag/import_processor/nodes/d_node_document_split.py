@@ -5,7 +5,7 @@ from typing import Tuple, List, Dict
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from core.logger import logger
+from core.log import logger
 from rag.base import BaseNode
 from rag.import_processor.exceptions import StateFieldError
 from rag.import_processor.state import ImportGraphState

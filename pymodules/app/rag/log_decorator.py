@@ -2,7 +2,7 @@ from functools import wraps
 import time
 from typing import Mapping
 
-from core.logger import logger
+from core.log import logger
 from app.utils.task_utils import add_running_task, add_done_task
 
 

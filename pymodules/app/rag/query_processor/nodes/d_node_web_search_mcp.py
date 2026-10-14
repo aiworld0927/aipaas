@@ -7,7 +7,7 @@ from agents.mcp import MCPServerStreamableHttp
 from conf.bailian_mcp_config import mcp_config
 from rag.base import BaseNode
 from rag.query_processor.state import QueryGraphState
-from app.core.logger import logger
+from app.core.log import logger
 
 
 class NodeWebSearchMcp(BaseNode):

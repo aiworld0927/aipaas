@@ -16,7 +16,7 @@ from rag.query_processor.state import create_query_state
 from app.utils.sse_utils import create_sse_queue, SSEEvent, push_to_session, sse_generator
 from app.utils.task_utils import update_task_status, TASK_STATUS_PROCESSING, get_task_result, TASK_STATUS_COMPLETED, \
     TASK_STATUS_FAILED, clear_task, get_done_task_list
-from app.core.logger import logger
+from app.core.log import logger
 # 1. 创建应用
 app = FastAPI(
     title="金融标准知识库-查询API",

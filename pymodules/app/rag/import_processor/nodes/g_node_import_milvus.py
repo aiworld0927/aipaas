@@ -7,7 +7,7 @@ from conf.milvus_config import milvus_config
 from rag.base import BaseNode
 from rag.import_processor.exceptions import StateFieldError, MilvusError
 from rag.import_processor.state import ImportGraphState
-from app.core.logger import logger
+from app.core.log import logger
 
 
 class NodeImportMilvus(BaseNode):

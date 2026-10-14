@@ -2,7 +2,7 @@
 import logging
 import time
 from typing import Deque
-from app.core.logger import logger  # 复用项目全局logger
+from app.core.log import logger  # 复用项目全局logger
 
 
 def apply_api_rate_limit(
