@@ -117,3 +117,5 @@ logs/
 pymodules/output_files
 pymodules/output_files/
 pymodules/logs
+pymodules/.idea
+pymodules/.venv

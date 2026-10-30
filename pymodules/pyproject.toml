@@ -38,14 +38,49 @@ name = "tsinghua"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
+[project.optional-dependencies]
+gpu124 = []
+gpu128 = []
+cpu = []
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "gpu124" },
+        { extra = "gpu128" },
+    ],
+]
 
 [tool.uv.sources]
-# torch torchvision torchaudio 强制从nvidia源安装
-torch = {index = "pytorch-cuda"}
-torchvision = {index = "pytorch-cuda"}
-torchaudio = {index = "pytorch-cuda"}
+# uv sync --extra gpu128 强制从指定的源安装,不传参数，回退到 PyPI默认源。
+torch = [
+    { index = "pytorch-cuda128", marker = "extra == 'gpu128'" },
+    { index = "pytorch-cuda124", marker = "extra != 'gpu128' and extra == 'gpu124'" },
+    { index = "cpu", marker = "extra != 'gpu128' and extra != 'gpu124' and extra == 'cpu'" },
+]
+torchvision = [
+    { index = "pytorch-cuda128", marker = "extra == 'gpu128'" },
+    { index = "pytorch-cuda124", marker = "extra != 'gpu128' and extra == 'gpu124'" },
+    { index = "cpu", marker = "extra != 'gpu128' and extra != 'gpu124' and extra == 'cpu'" },
+]
+torchaudio = [
+    { index = "pytorch-cuda128", marker = "extra == 'gpu128'" },
+    { index = "pytorch-cuda124", marker = "extra != 'gpu128' and extra == 'gpu124'" },
+    { index = "cpu", marker = "extra != 'gpu128' and extra != 'gpu124' and extra == 'cpu'" },
+]
 
 [[tool.uv.index]]
-name = "pytorch-cuda"
+name = "cpu"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cuda124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cuda128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
