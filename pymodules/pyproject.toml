@@ -23,9 +23,6 @@ dependencies = [
     "pymongo>=4.18.2",
     "python-dotenv>=1.2.4",
     "ragas>=0.4.3",
-    "torch>=2.11.0",
-    "torchaudio>=2.11.0",
-    "torchvision>=0.26.0",
     "transformers>=5.18.0",
 ]
 
@@ -39,9 +36,21 @@ url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
 [project.optional-dependencies]
-gpu124 = []
-gpu128 = []
-cpu = []
+gpu124 = [
+    "torch>=2.11.0",
+    "torchaudio>=2.11.0",
+    "torchvision>=0.26.0",
+]
+gpu128 = [
+    "torch>=2.11.0",
+    "torchaudio>=2.11.0",
+    "torchvision>=0.26.0",
+]
+cpu = [
+    "torch>=2.11.0",
+    "torchaudio>=2.11.0",
+    "torchvision>=0.26.0",
+]
 
 [tool.uv]
 conflicts = [
