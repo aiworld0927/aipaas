@@ -23,6 +23,9 @@ dependencies = [
     "pymongo>=4.18.2",
     "python-dotenv>=1.2.4",
     "ragas>=0.4.3",
+    "torch==2.11.0",
+    "torchaudio==2.11.0",
+    "torchvision==0.26.0",
     "transformers>=5.18.0",
 ]
 
@@ -36,20 +39,22 @@ url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
 [project.optional-dependencies]
+# extras 作为 torch 构建变体的切换器,版本与基础依赖统一锚定 2.11.0
+# 执行一次 uv sync --extra <变体> 后,裸 uv run/uv sync 会保留已安装的构建
 gpu124 = [
-    "torch>=2.11.0",
-    "torchaudio>=2.11.0",
-    "torchvision>=0.26.0",
+    "torch==2.11.0",
+    "torchaudio==2.11.0",
+    "torchvision==0.26.0",
 ]
 gpu128 = [
-    "torch>=2.11.0",
-    "torchaudio>=2.11.0",
-    "torchvision>=0.26.0",
+    "torch==2.11.0",
+    "torchaudio==2.11.0",
+    "torchvision==0.26.0",
 ]
 cpu = [
-    "torch>=2.11.0",
-    "torchaudio>=2.11.0",
-    "torchvision>=0.26.0",
+    "torch==2.11.0",
+    "torchaudio==2.11.0",
+    "torchvision==0.26.0",
 ]
 
 [tool.uv]
@@ -62,31 +67,36 @@ conflicts = [
 ]
 
 [tool.uv.sources]
-# uv sync --extra gpu128 强制从指定的源安装,不传参数，回退到 PyPI默认源。
+# 默认(无 extra、Windows/Linux)从 cu128 源安装 GPU 版;macOS 回退 PyPI
+# --extra cpu / gpu124 显式切换到对应构建;--extra gpu128 与默认行为一致
 torch = [
-    { index = "pytorch-cuda128", marker = "extra == 'gpu128'" },
-    { index = "pytorch-cuda124", marker = "extra != 'gpu128' and extra == 'gpu124'" },
-    { index = "cpu", marker = "extra != 'gpu128' and extra != 'gpu124' and extra == 'cpu'" },
+    { index = "cpu", extra = "cpu" },
+    { index = "pytorch-cuda126", extra = "gpu124" },
+    { index = "pytorch-cuda128", extra = "gpu128" },
+    { index = "pytorch-cuda128", marker = "(sys_platform == 'linux' or sys_platform == 'win32') and extra != 'cpu' and extra != 'gpu124' and extra != 'gpu128'" },
 ]
 torchvision = [
-    { index = "pytorch-cuda128", marker = "extra == 'gpu128'" },
-    { index = "pytorch-cuda124", marker = "extra != 'gpu128' and extra == 'gpu124'" },
-    { index = "cpu", marker = "extra != 'gpu128' and extra != 'gpu124' and extra == 'cpu'" },
+    { index = "cpu", extra = "cpu" },
+    { index = "pytorch-cuda126", extra = "gpu124" },
+    { index = "pytorch-cuda128", extra = "gpu128" },
+    { index = "pytorch-cuda128", marker = "(sys_platform == 'linux' or sys_platform == 'win32') and extra != 'cpu' and extra != 'gpu124' and extra != 'gpu128'" },
 ]
 torchaudio = [
-    { index = "pytorch-cuda128", marker = "extra == 'gpu128'" },
-    { index = "pytorch-cuda124", marker = "extra != 'gpu128' and extra == 'gpu124'" },
-    { index = "cpu", marker = "extra != 'gpu128' and extra != 'gpu124' and extra == 'cpu'" },
+    { index = "cpu", extra = "cpu" },
+    { index = "pytorch-cuda126", extra = "gpu124" },
+    { index = "pytorch-cuda128", extra = "gpu128" },
+    { index = "pytorch-cuda128", marker = "(sys_platform == 'linux' or sys_platform == 'win32') and extra != 'cpu' and extra != 'gpu124' and extra != 'gpu128'" },
 ]
 
 [[tool.uv.index]]
 name = "cpu"
-url = "https://download.pytorch.org/whl/cu124"
+url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cuda124"
-url = "https://download.pytorch.org/whl/cu124"
+# PyTorch 已不再发布 cu124 构建(torch>=2.11 无 cu124),此处实际指向 cu126
+name = "pytorch-cuda126"
+url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [[tool.uv.index]]
