@@ -1,0 +1,79 @@
+# ===========================================================================
+# AIPaaS pymodules FastAPI 服务镜像
+# ---------------------------------------------------------------------------
+# 构建时选择 torch 依赖分组（CPU / CUDA 12.8 GPU）：
+#     # CPU 版（默认，体积小，无 nvidia-* 运行时）
+#     docker build -t aipaas-pymodules:cpu .
+#
+#     # GPU 版（CUDA 12.8 构建，镜像大 ~8GB，需 GPU 机器运行）
+#     docker build --build-arg TORCH_GROUP=gpu -t aipaas-pymodules:gpu .
+#
+# 运行：
+#     docker run -d -p 8000:8000 \
+#         --env-file .env \
+#         -v /host/path/models:/app/models \
+#         aipaas-pymodules:cpu
+# ===========================================================================
+
+# ---- 基础镜像：3.12-slim 体积小，匹配项目 requires-python = ">=3.12" ----
+FROM python:3.12-slim
+
+# ---- 构建参数 ----
+# 控制 uv sync 安装哪一组 torch：cpu | gpu（默认 cpu，无 GPU 的机器用这一组）
+ARG TORCH_GROUP=cpu
+
+# ---- 环境变量 ----
+# 避免 Python 输出被缓冲；项目环境（pyproject.toml）用 uv 管理依赖
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    # 统一把模型缓存/数据放到 /app 下，方便 -v 挂载
+    MODELSCOPE_CACHE=/app/models/modelscope_cache \
+    HF_HOME=/app/models/huggingface
+
+# ---- 系统依赖 ----
+# curl: healthcheck
+# ca-certificates: HTTPS 请求（MinIO、Milvus、ModelScope 等）
+# git: transformers / FlagEmbedding 从 huggingface 拉模型时可能需要
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- 安装 uv（官方一键脚本，写入 ~/.local/bin） ----
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# ---- 工作目录 ----
+WORKDIR /app
+
+# ---- 步骤 1：锁依赖（最大化缓存）----
+# 只先复制 pyproject.toml / uv.lock / .python-version，
+# 这三个文件不变 → 依赖层直接命中缓存，后续改 app/*.py 不会触发重装
+COPY pyproject.toml uv.lock .python-version* ./
+
+# uv sync 要求 git / project metadata 目录存在但内容可为空；
+# 创建一个空的 app 目录占位，避免 sync 时报缺少包目录
+RUN mkdir -p app
+
+# 仅同步依赖（--frozen 强制以 uv.lock 为准，防止 build 时偷偷升级）
+# --group ${TORCH_GROUP} 选择 gpu 或 cpu 分组，镜像构建完成后 torch 版本即固定
+RUN uv sync --group ${TORCH_GROUP} --frozen --no-dev
+
+# ---- 步骤 2：复制源码（改动代码仅触发本层重建）----
+COPY app ./app
+COPY conf ./conf
+COPY prompts ./prompts
+
+# ---- 运行时 ----
+EXPOSE 8000
+
+# 简单健康检查：uvicorn 在 FastAPI 根路由返回 {"message": "..."}
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:8000/ || exit 1
+
+# 生产启动：去掉 reload，绑定 0.0.0.0；--no-sync 保证运行期 uv 不再动依赖
+# 入口：app.apis.aipaas_main:app（FastAPI 实例）
+CMD ["uv", "run", "--no-sync", "uvicorn", \
+     "app.apis.aipaas_main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000"]

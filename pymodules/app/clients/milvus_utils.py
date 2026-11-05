@@ -1,8 +1,7 @@
-import os
 from pymilvus import MilvusClient, AnnSearchRequest, WeightedRanker, DataType
 from app.conf.milvus_config import milvus_config
 from app.core.log import logger
-from app.lm.embedding_utils import generate_embeddings
+from app.clients.lm.embedding_utils import generate_embeddings
 
 # 全局Milvus客户端实例，实现单例复用
 _milvus_client = None

@@ -16,7 +16,7 @@ import sys
 
 from loguru import logger as _loguru_logger
 
-from core.context import request_id_ctx_var
+from app.core.context import request_id_ctx_var
 
 import os
 from pathlib import Path

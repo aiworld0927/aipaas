@@ -113,9 +113,9 @@ logs/
 .temp/
 .tmp/
 
-
 pymodules/output_files
 pymodules/output_files/
 pymodules/logs
 pymodules/.idea
 pymodules/.venv
+pymodules/.env

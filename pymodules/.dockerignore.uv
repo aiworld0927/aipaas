@@ -1,0 +1,41 @@
+# ==== Python / uv ====
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.cache/
+
+# ==== 本地开发配置 / IDE ====
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ==== 日志 / 临时文件 ====
+logs/
+*.log
+tmp/
+temp/
+
+# ==== 测试 / 评估（非运行时）====
+tests/
+eval/
+eval_result*.csv
+qa.csv
+
+# ==== 敏感配置：生产部署时用 --env-file 传入，不要打进去 ====
+.env
+.env.*
+!.env.example
+
+# ==== 模型缓存（容器运行时通过 -v 挂载 /app/models）====
+**/models/
+**/.hf-cache/
+
+# ==== Docker 自身 ====
+Dockerfile
+.dockerignore
+docker-compose*.yml
