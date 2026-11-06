@@ -7,23 +7,50 @@ include:
   - ./docker-compose-base.yml
 
 services:
-  # Python预处理服务（适配Nacos）
-  python-service:
+  # Python 文档导入服务（独立部署单元，端口 8000）
+  svc-ingest:
     build:
-      context: ../backend/finrag4j-python
-      dockerfile: Dockerfile
-    container_name: ${PYTHON_CONTAINER_NAME:-finrag4j-python}
+      context: ../pymodules
+      dockerfile: apps/ingest/Dockerfile
+    image: aipaas-svc-ingest:latest
+    container_name: svc-ingest
     env_file: .env
     environment:
       - NACOS_HOST=nacos
       - NACOS_PORT=${NACOS_PORT:-8080}
       - NACOS_NAMESPACE=${NACOS_NAMESPACE:-public}
     ports:
-      - "${PYTHON_SERVICE_PORT:-8001}:8001"
+      - "${INGEST_PORT:-8000}:8000"
     networks:
       - finrag4j-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PYTHON_SERVICE_PORT:-8001}/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${INGEST_PORT:-8000}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    depends_on:
+      nacos:
+        condition: service_healthy
+
+  # Python 用户查询服务（独立部署单元，端口 8001）
+  svc-query:
+    build:
+      context: ../pymodules
+      dockerfile: apps/query/Dockerfile
+    image: aipaas-svc-query:latest
+    container_name: svc-query
+    env_file: .env
+    environment:
+      - NACOS_HOST=nacos
+      - NACOS_PORT=${NACOS_PORT:-8080}
+      - NACOS_NAMESPACE=${NACOS_NAMESPACE:-public}
+    ports:
+      - "${QUERY_PORT:-8001}:8001"
+    networks:
+      - finrag4j-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${QUERY_PORT:-8001}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -35,8 +62,8 @@ services:
   # Gateway 网关服务
   gateway:
     build:
-      context: ../backend
-      dockerfile: finrag4j-gateway/Dockerfile
+      context: ../javaplat
+      dockerfile: gateway/Dockerfile
     container_name: ${GATEWAY_CONTAINER_NAME:-finrag4j-gateway}
     env_file: .env
     environment:
@@ -63,8 +90,8 @@ services:
   # Auth 认证服务
   auth-service:
     build:
-      context: ../backend
-      dockerfile: finrag4j-auth/Dockerfile
+      context: ../javaplat
+      dockerfile: svc-document/Dockerfile
     container_name: ${AUTH_CONTAINER_NAME:-finrag4j-auth}
     env_file: .env
     environment:
@@ -96,8 +123,8 @@ services:
   # Document 文档服务
   document-service:
     build:
-      context: ../backend
-      dockerfile: finrag4j-document/Dockerfile
+      context: ../javaplat
+      dockerfile: svc-document/Dockerfile
     container_name: ${DOCUMENT_CONTAINER_NAME:-finrag4j-document}
     env_file: .env
     environment:
@@ -110,7 +137,7 @@ services:
       - REDIS_PORT=${REDIS_PORT:-6379}
       - MINIO_ENDPOINT=http://minio:9000
       - ROCKETMQ_HOST=rocketmq-namesrv
-      - PYTHON_SERVICE_URL=http://python-service:8001
+      - PYTHON_SERVICE_URL=http://svc-ingest:8000
     ports:
       - "${DOCUMENT_PORT:-9082}:8082"
     networks:
@@ -130,14 +157,14 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      python-service:
+      svc-ingest:
         condition: service_healthy
 
   # Search 检索服务
   search-service:
     build:
-      context: ../backend
-      dockerfile: finrag4j-search/Dockerfile
+      context: ../javaplat
+      dockerfile: svc-search/Dockerfile
     container_name: ${SEARCH_CONTAINER_NAME:-finrag4j-search}
     env_file: .env
     environment:
@@ -169,8 +196,8 @@ services:
   # Agent 服务
   agent-service:
     build:
-      context: ../backend
-      dockerfile: finrag4j-agent/Dockerfile
+      context: ../javaplat
+      dockerfile: svc-document/Dockerfile
     container_name: ${AGENT_CONTAINER_NAME:-finrag4j-agent}
     env_file: .env
     environment:
@@ -203,7 +230,7 @@ services:
   # 前端服务
   frontend:
     build:
-      context: ../frontend
+      context: ../web
       dockerfile: Dockerfile
     container_name: ${FRONTEND_CONTAINER_NAME:-finrag4j-frontend}
     env_file: .env

@@ -1,97 +1,23 @@
 [project]
-name = "pymodules"
+name = "aipaas-monorepo"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "AIPaaS Python Monorepo（workspace 根，不直接安装依赖）"
 requires-python = ">=3.12"
-# 通用依赖：GPU / CPU 机器都要装的部分。
-# torch / torchvision / torchaudio 不写在这里，而是按机器类型放到 gpu、cpu 两个分组里，
-# 由 uv sync --group gpu / --group cpu 二选一同步，详见 docs/02_项目环境搭建.md。
-dependencies = [
-    "dashscope>=1.27.7",
-    "fastapi>=0.142.2",
-    # flagembedding 见下方分组：它强依赖 torch，必须与 torch 同组
-    "grandalf>=0.8",
-    "langchain>=1.4.3",
-    "langchain-openai>=1.6.7",
-    "langchain-text-splitters>=1.1.3",
-    "langgraph>=1.2.12",
-    "loguru>=0.7.3",
-    "mcp<2",
-    "minio>=7.2.20",
-    "modelscope>=1.40.1",
-    "numpy>=2.5.3",
-    "openai-agents==0.23.1",
-    "pymilvus[model]>=3.0.2",
-    "pymongo>=4.18.2",
-    "python-dotenv>=1.2.4",
-    "ragas>=0.4.3",
-    "transformers>=5.18.0",
+# 根包自己不声明 dependencies，所有依赖都在成员 pyproject.toml 里
+
+# ---------------------------------------------------------------------------
+# uv workspace 声明
+# ---------------------------------------------------------------------------
+[tool.uv.workspace]
+members = [
+    "apps/ingest",
+    "apps/query",
+    "libs/common",
 ]
 
 # ---------------------------------------------------------------------------
-# 机器环境分组（互斥，一次只同步其中一个）
-#   gpu：有 NVIDIA 显卡的机器（CUDA 12.8 构建）
-#   cpu：只有 CPU 的机器（纯 CPU 构建，体积小、无 CUDA 运行时）
-# 版本固定为本地版本号（+cu128 / +cpu），保证两台机器上解析出的是不同 wheel，
-# 且都由 uv.lock 锁定，同步完成后开发期间不会再变动。
-#
-# flagembedding 必须放在分组里：它（经 accelerate / peft / sentence-transformers）
-# 强依赖 torch。若留在 [project].dependencies，默认依赖树会另外解析一个 PyPI 版
-# torch，uv run 时会把你同步好的 CPU/GPU 版 torch 覆盖掉。
+# 公共源索引（成员 pyproject.toml 未单独声明时继承这里的配置）
 # ---------------------------------------------------------------------------
-[dependency-groups]
-gpu = [
-    "torch==2.11.0+cu128",
-    "torchvision==0.26.0+cu128",
-    "torchaudio==2.11.0+cu128",
-    "flagembedding>=1.4.2",
-]
-cpu = [
-    "torch==2.11.0+cpu",
-    "torchvision==0.26.0+cpu",
-    "torchaudio==2.11.0+cpu",
-    "flagembedding>=1.4.2",
-]
-
-[tool.uv]
-# uv sync --group gpu  # GPU环境
-# uv sync --group cpu  # CPU环境
-# 声明 cpu / gpu 两组互斥：uv lock 会生成两套独立解析分支，
-# 同步时同时勾选两组会直接报错，避免装出 CPU+GPU 混杂的环境。
-conflicts = [
-    [{ group = "cpu" }, { group = "gpu" }],
-]
-
-# 让三个 torch 相关包在各自分组内走对应的 PyTorch 官方索引，
-# 用 group 限定作用域，因此同一份配置在两台机器上都能用。
-[tool.uv.sources]
-torch = [
-    { index = "pytorch-cpu", group = "cpu" },
-    { index = "pytorch-cuda128", group = "gpu" },
-]
-torchvision = [
-    { index = "pytorch-cpu", group = "cpu" },
-    { index = "pytorch-cuda128", group = "gpu" },
-]
-torchaudio = [
-    { index = "pytorch-cpu", group = "cpu" },
-    { index = "pytorch-cuda128", group = "gpu" },
-]
-
-# PyTorch 官方索引：explicit = true 表示只服务于 tool.uv.sources 里显式指定的包，
-# 不会把它当成通用源去解析其它依赖。
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
-
-[[tool.uv.index]]
-name = "pytorch-cuda128"
-url = "https://download.pytorch.org/whl/cu128"
-explicit = true
-
-# 项目下配置环境变量(更推荐)
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple"
 

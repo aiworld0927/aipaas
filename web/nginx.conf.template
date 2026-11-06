@@ -1,0 +1,63 @@
+# ===========================================================================
+# AIPaaS 前端 nginx 配置（SPA + API 反代）
+# ---------------------------------------------------------------------------
+# 这是一份 template，容器启动时由 envsubst 把
+# ${QUERY_API_UPSTREAM} / ${IMPORT_API_UPSTREAM} 替换成运行时环境变量的值。
+# 其他 nginx 内置变量（$uri, $args, $http_* 等）不会被碰。
+#
+# 注意：upstream 必须写成「变量 + resolver」的形式。
+# 若直接写 proxy_pass http://aipaas.aiworld.com/，nginx 会在【启动时】
+# 解析该域名，DNS 不可用就会报
+#   [emerg] host not found in upstream "xxx"
+# 并直接退出容器。改用变量后解析推迟到【请求时】，容器可以先正常启动。
+# ===========================================================================
+
+server {
+    listen       80;
+    server_name  _;
+
+    # Docker 内置 DNS（bridge / compose 自定义网络下固定为 127.0.0.11）。
+    # 配合下面 proxy_pass 里的变量，实现运行时解析。
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver_timeout 5s;
+
+    # SPA 单页应用路由：任何未命中的路径都返回 index.html，
+    # 让前端 react-router 在浏览器端处理
+    location / {
+        root   /usr/share/nginx/html;
+        index  index.html index.htm;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # /query-api 反代到后端查询服务
+    # （对应 vite.config.js 里 dev proxy 的 /query-api → 8001，需去掉前缀）
+    location /query-api/ {
+        set $query_upstream ${QUERY_API_UPSTREAM};
+        rewrite ^/query-api/(.*)$ /$1 break;
+        proxy_pass         $query_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $proxy_host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # /import-api 反代到后端导入服务
+    # （对应 vite.config.js 里 dev proxy 的 /import-api → 8000，需去掉前缀）
+    location /import-api/ {
+        set $import_upstream ${IMPORT_API_UPSTREAM};
+        rewrite ^/import-api/(.*)$ /$1 break;
+        proxy_pass         $import_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $proxy_host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # 健康检查端点
+    location = /health {
+        access_log off;
+        return 200 "ok\n";
+    }
+}
