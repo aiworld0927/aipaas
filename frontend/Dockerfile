@@ -54,5 +54,5 @@ EXPOSE 80
 CMD ["/bin/sh", "-c", \
      "envsubst '${QUERY_API_UPSTREAM} ${IMPORT_API_UPSTREAM}' \
       < /etc/nginx/nginx.conf.template \
-      > /etc/nginx/nginx.conf \
+      > /etc/nginx/conf.d/default.conf \
       && nginx -g 'daemon off;'"]
