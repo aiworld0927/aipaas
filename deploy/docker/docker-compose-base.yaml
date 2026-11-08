@@ -1,0 +1,138 @@
+services:
+  # 一次性初始化容器：预创建数据卷目录并将属主统一为执行 docker-compose 的用户（跑完即退出）
+  # 避免 docker daemon 以 root 自动创建目录导致容器内非 root 进程无写权限
+  init-volumes:
+    container_name: aipaas-init-volumes
+    image: alpine
+    user: root
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes:/volumes
+    command: sh -c "mkdir -p /volumes/etcd /volumes/minio /volumes/milvus-data /volumes/attu-data /volumes/mongo/data /volumes/mongo/config && chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} /volumes"
+    restart: "no"
+
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.25
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    depends_on:
+      init-volumes:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    container_name: milvus-minio
+    #image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    depends_on:
+      init-volumes:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus:
+    container_name: milvus-standalone
+    restart: always
+    image: milvusdb/milvus:v3.0.1
+    # uid 跟随执行用户（数据属主与宿主机用户一致）；
+    # gid 必须保留 999(milvus)，镜像内二进制和库仅对 milvus 组开放 r-x 权限
+    user: "${HOST_UID:-1000}:999"
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+    - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MQ_TYPE: woodpecker
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus-data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      init-volumes:
+        condition: service_completed_successfully
+      etcd:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  attu:
+    container_name: attu
+    image: zilliz/attu:v3.0.0
+    ports:
+      - "3000:3000"
+    environment:
+      - MILVUS_ADDRESS=milvus:19530
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/attu-data:/data
+    depends_on:
+      init-volumes:
+        condition: service_completed_successfully
+      milvus:
+        condition: service_started
+
+  mongodb:
+    # 官方MongoDB镜像
+    image: amd64/mongo:8.0
+    # 容器名称
+    container_name: mongodb
+    # 以执行用户身份运行，保证数据目录属主与宿主机用户一致
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # 重启策略：开机自启
+    restart: always
+    # 环境变量（配置用户名密码）
+    environment:
+      # 管理员用户名（自行修改）
+      MONGO_INITDB_ROOT_USERNAME: admin
+      # 管理员密码（务必修改为强密码）
+      MONGO_INITDB_ROOT_PASSWORD: 123456
+      # 初始化数据库名称
+      MONGO_INITDB_DATABASE: admin
+    # 端口映射：主机端口:容器端口
+    ports:
+      - "27017:27017"
+    # 数据持久化（容器删除数据不丢失）
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongo/data:/data/db
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongo/config:/data/configdb
+    # 关键配置：允许所有IP访问
+    command: mongod --bind_ip 0.0.0.0
+    depends_on:
+      init-volumes:
+        condition: service_completed_successfully
+  
+networks:
+  default:
+    name: milvus
+volumes:
+  milvus-data:
+  attu-data:

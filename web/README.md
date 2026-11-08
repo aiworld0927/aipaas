@@ -5,20 +5,44 @@
 ## 快速开始
 
 ```bash
-cd frontend
+cd web
 npm install
 npm run dev      # 开发：http://localhost:5173
 npm run build    # 构建：产物在 dist/
 npm run preview  # 本地预览构建产物
 ```
 
+## Docker 构建与运行
+
+```bash
+# 构建（在仓库根目录执行）
+cd web && docker build -t aipaas-frontend:v1.0 .
+
+# 运行（upstream 指向宿主机上的后端服务）
+docker run -d --name aipaas-frontend \
+    -p 80:80 \
+    -e QUERY_API_UPSTREAM="http://aipaas.aiworld.com:8001" \
+    -e IMPORT_API_UPSTREAM="http://aipaas.aiworld.com:8000" \
+    aipaas-frontend:v1.0
+```
+
+说明：
+
+- `QUERY_API_UPSTREAM` / `IMPORT_API_UPSTREAM` 是容器启动时由 `envsubst` 注入 nginx 的反代目标，**必须用双引号包裹**；反引号会被 shell 优先执行，直接报命令找不到。
+- 若前端与后端处于同一个 docker-compose 网络，可直接填写服务名，例如 `http://python-service:8001`。
+- 访问 `http://<宿主机IP>/`，探活接口 `http://<宿主机IP>/health` 应返回 `ok`。
+- nginx 采用「变量 + resolver」写法，upstream 域名在**请求时**解析，DNS 暂时不可用也不会导致容器启动失败。
+- 镜像为多阶段构建：`node:20-alpine` 编译出 `dist/`，`nginx:alpine` 仅承载静态产物与自定义配置。
+
 ## 工程目录结构
 
 ```
-frontend/
+web/                              # 前端工程根目录
 ├── index.html                  # SPA 入口
 ├── package.json
 ├── vite.config.js              # Vite 配置（含 /query-api、/import-api 开发代理）
+├── Dockerfile                  # 多阶段构建（node 构建 → nginx 运行）
+├── nginx.conf.template         # nginx 模板，运行时 envsubst 注入反代目标
 ├── .env.example                # 环境变量示例（API 地址）
 └── src/
     ├── main.jsx                # React 挂载入口
