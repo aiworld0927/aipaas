@@ -10,9 +10,13 @@ requires-python = ">=3.12"
 # ---------------------------------------------------------------------------
 [tool.uv.workspace]
 members = [
-    "apps/ingest",
-    "apps/query",
-    "libs/common",
+    "apps/ingest-worker",
+    "apps/query-worker",
+    "packages/common",
+    "packages/llm",
+    "packages/retrieval",
+    "packages/storage",
+    "packages/pipeline",
 ]
 
 # ---------------------------------------------------------------------------

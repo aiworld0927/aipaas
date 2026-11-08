@@ -1,0 +1,58 @@
+[project]
+name = "svc-query"
+version = "0.1.0"
+description = "AIPaaS 用户查询服务（LangGraph + DashScope + MCP + SSE）"
+requires-python = ">=3.12"
+dependencies = [
+    # 共享库（workspace 引用）
+    "aipaas-common",
+    "aipaas-llm",
+    "aipaas-retrieval",
+    "aipaas-storage",
+    "aipaas-pipeline",
+    # Web 框架
+    "fastapi>=0.142.2",
+    "uvicorn>=0.30.0",
+    # LangGraph 编排核心
+    "langgraph>=1.2.12",
+    "langchain>=1.4.3",
+    "langchain-openai>=1.6.7",
+    "langchain-text-splitters>=1.1.3",
+    # LLM 接入
+    "dashscope>=1.27.7",
+    "mcp<2",
+    "openai-agents==0.23.1",
+    "ragas>=0.4.3",
+    # 模型相关（CPU 版，GPU 机部署时切换为 cu128 源）
+    "torch==2.11.0+cpu",
+    "torchvision==0.26.0+cpu",
+    "torchaudio==2.11.0+cpu",
+    "flagembedding>=1.4.2",
+    "modelscope>=1.40.1",
+    "transformers>=5.18.0",
+    "numpy>=2.5.3",
+]
+
+[tool.uv.sources]
+aipaas-common = { workspace = true }
+aipaas-llm = { workspace = true }
+aipaas-retrieval = { workspace = true }
+aipaas-storage = { workspace = true }
+aipaas-pipeline = { workspace = true }
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["query_worker"]
+
+

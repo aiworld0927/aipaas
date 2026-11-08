@@ -14,11 +14,13 @@ npm run preview  # 本地预览构建产物
 
 ## Docker 构建与运行
 
+### 构建与启动
+
 ```bash
 # 构建（在仓库根目录执行）
 cd web && docker build -t aipaas-frontend:v1.0 .
 
-# 运行（upstream 指向宿主机上的后端服务）
+# 运行（本机开发机快速验证，upstream 指向后端服务）
 docker run -d --name aipaas-frontend \
     -p 80:80 \
     -e QUERY_API_UPSTREAM="http://aipaas.aiworld.com:8001" \
@@ -26,13 +28,36 @@ docker run -d --name aipaas-frontend \
     aipaas-frontend:v1.0
 ```
 
-说明：
-
 - `QUERY_API_UPSTREAM` / `IMPORT_API_UPSTREAM` 是容器启动时由 `envsubst` 注入 nginx 的反代目标，**必须用双引号包裹**；反引号会被 shell 优先执行，直接报命令找不到。
-- 若前端与后端处于同一个 docker-compose 网络，可直接填写服务名，例如 `http://python-service:8001`。
 - 访问 `http://<宿主机IP>/`，探活接口 `http://<宿主机IP>/health` 应返回 `ok`。
-- nginx 采用「变量 + resolver」写法，upstream 域名在**请求时**解析，DNS 暂时不可用也不会导致容器启动失败。
-- 镜像为多阶段构建：`node:20-alpine` 编译出 `dist/`，`nginx:alpine` 仅承载静态产物与自定义配置。
+
+### 关键设计
+
+- **多阶段构建**：build 阶段 `node:20-alpine` 执行 `npm ci` + `vite build`，runtime 阶段 `nginx:alpine` 只拷贝 `dist/` → 最终镜像约 20MB（build 阶段约 500MB）
+- **缓存友好**：先 COPY `package.json + package-lock.json` 执行 `npm ci`，再 COPY 源码 → 修改 `src/**` 不会触发依赖重装
+- **反代与 dev 对齐**：nginx 的 `/query-api`、`/import-api` 与 `vite.config.js` 的 dev proxy 完全一致，切换到生产无需改前端代码
+- **运行时注入后端地址**：`nginx.conf.template` 用 `${QUERY_API_UPSTREAM}` / `${IMPORT_API_UPSTREAM}` 占位，容器启动时 `envsubst` 替换 → 构建期不需要知道后端地址，运行期通过 `-e` 或 docker-compose 传入
+- **请求时解析 DNS**：upstream 采用「变量 + resolver」写法，域名在请求时解析，DNS 暂时不可用也不会导致容器启动失败
+
+### 与后端的对应关系
+
+| 前端路径 | 开发代理（Vite） | 生产反代变量 | 说明 |
+| --- | --- | --- | --- |
+| `/query-api/` | `http://127.0.0.1:8001` | `QUERY_API_UPSTREAM` | 查询服务 |
+| `/import-api/` | `http://127.0.0.1:8000` | `IMPORT_API_UPSTREAM` | 导入服务（pymodules 的 ingest） |
+
+### docker-compose 中配置
+
+```yaml
+frontend:
+  image: aipaas-frontend:v1.0
+  environment:
+    QUERY_API_UPSTREAM: http://python-query:8001
+    IMPORT_API_UPSTREAM: http://python-ingest:8000
+  ports: ["80:80"]
+```
+
+注意：两个后端服务名和端口需按实际部署调整。本项目 pymodules 中查询服务监听 `8001`、导入服务监听 `8000`，请确认 `QUERY_API_UPSTREAM` / `IMPORT_API_UPSTREAM` 分别指向正确服务。
 
 ## 工程目录结构
 
