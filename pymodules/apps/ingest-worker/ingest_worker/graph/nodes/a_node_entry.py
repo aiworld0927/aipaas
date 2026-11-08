@@ -14,7 +14,7 @@ class NodeEntry(BaseNode):
 
     name = "node_entry"
 
-    def process(self, state: ImportGraphState):
+    def process(self, state):
         """
         1.接收状态: 获取 `import_file_path`。
         2.判断类型: 检查文件后缀是 `.pdf` 还是 `.md`。

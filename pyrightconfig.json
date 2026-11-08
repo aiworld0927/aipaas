@@ -1,0 +1,21 @@
+{
+  "include": ["pymodules"],
+  "exclude": [
+    "**/.venv",
+    "**/__pycache__",
+    "pymodules/apps/apis",
+    "pymodules/apps/eval-runner"
+  ],
+  "venvPath": "pymodules",
+  "venv": ".venv",
+  "extraPaths": [
+    "pymodules/packages/common",
+    "pymodules/packages/llm",
+    "pymodules/packages/retrieval",
+    "pymodules/packages/storage",
+    "pymodules/packages/pipeline",
+    "pymodules/apps/ingest-worker",
+    "pymodules/apps/query-worker"
+  ],
+  "pythonVersion": "3.12"
+}
