@@ -96,13 +96,12 @@ output/
 *.tgz
 
 # Demo data
-inputs/*.pdf
-inputs/*.docx
-inputs/*.xlsx
-inputs/*.txt
-inputs/*.json
-inputs/*.xml
-inputs/data
+#inputs/*.pdf
+#inputs/*.docx
+#inputs/*.xlsx
+#inputs/*.txt
+#inputs/*.json
+#inputs/*.xml
 # Logs
 logs/
 *.log

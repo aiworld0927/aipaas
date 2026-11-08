@@ -40,7 +40,7 @@ GRAPH_DEFAULT_STATE: ImportGraphState = {
     "task_id": "",
     "is_pdf_read_enabled": False,
     "is_md_read_enabled": False,
-    "file_dir": PROJECT_ROOT/"data"/"outputs",
+    "file_dir": str(PROJECT_ROOT/"data"/"outputs"),
     "import_file_path": "",
     "pdf_path": "",
     "md_path": "",
@@ -51,7 +51,7 @@ GRAPH_DEFAULT_STATE: ImportGraphState = {
 }
 
 
-def create_default_state(**overrides) -> ImportGraphState:
+def get_default_ingest_state(**overrides) -> ImportGraphState:
     """
     创建默认状态，支持覆盖
     Args:
@@ -59,12 +59,13 @@ def create_default_state(**overrides) -> ImportGraphState:
     Returns:
         新的状态实例
     Examples:
-        >>> state = create_default_state(task_id="task_001", local_file_path="doc.pdf")
+        >>> state = get_default_ingest_state(task_id="task_001", local_file_path="doc.pdf")
     """
-    state = copy.deepcopy(GRAPH_DEFAULT_STATE)
+    state:ImportGraphState = copy.deepcopy(GRAPH_DEFAULT_STATE)
     state.update(overrides)
     return state
 
+
 if __name__ == '__main__':
-    state = create_default_state(task_id="task_001", import_file_path="D:\\doc\\hak180产品安全手册.pdf")
+    state = get_default_ingest_state(task_id="task_001", import_file_path="D:\\doc\\hak180产品安全手册.pdf")
     print(state)

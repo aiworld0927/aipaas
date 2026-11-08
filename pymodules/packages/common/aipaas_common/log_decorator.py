@@ -2,7 +2,7 @@ from functools import wraps
 import time
 from typing import Mapping
 
-from core.log import logger
+from aipaas_common.core.log import logger
 from aipaas_common.utils.task_utils import add_running_task, add_done_task
 
 
