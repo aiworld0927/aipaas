@@ -28,24 +28,13 @@ class KBQueryWorkflowV2:
         """初始化工作流：创建状态图、注册节点、定义路由规则"""
         # 1. 初始化LangGraph状态图
         self.workflow = StateGraph(QueryGraphState)
-        # 2. 初始化所有业务节点（实例属性，支持多实例隔离）
-        # self._init_nodes()
-        # 3. 注册节点到工作流
+        # 2. 注册节点到工作流
         self._register_nodes()
-        # 4. 设置入口和路由规则
+        # 3. 设置入口和路由规则
         self._setup_routes()
-        # 5. 编译工作流（懒加载，首次执行时编译）
+        # 4. 编译工作流（懒加载，首次执行时编译）
         self._compiled_app: Optional[object] = None
 
-    # def _init_nodes(self):
-    #     """初始化所有业务节点（私有方法，封装节点创建逻辑）"""
-    #     self.node_item_name_confirm = NodeItemNameConfirm()
-    #     self.node_search_embedding = NodeSearchEmbedding()
-    #     self.node_search_embedding_hyde = NodeSearchEmbeddingHyde()
-    #     self.node_web_search_mcp = NodeWebSearchMcp()
-    #     self.node_rrf = NodeRrf()
-    #     self.node_rerank = NodeRerank()
-    #     self.node_answer_output = NodeAnswerOutput()
 
     def _register_nodes(self):
         """注册所有节点到工作流（私有方法，统一管理节点注册）"""
@@ -58,7 +47,7 @@ class KBQueryWorkflowV2:
         self.workflow.add_node("node_rerank", node_rerank)  # 重排
         self.workflow.add_node("node_answer_output", node_answer_output)  # 生成
 
-    def _route_after_item_name_confirm(state: QueryGraphState) -> str:
+    def _route_after_item_name_confirm(self,state: QueryGraphState) -> str:
         """主体名称确认后的条件路由函数"""
         if state.get("answer"):
             """
@@ -86,9 +75,9 @@ class KBQueryWorkflowV2:
 
         # 2、注册条件路由边
         self.workflow.add_conditional_edges(
-            "node_item_name_confirm",
-            self._route_after_item_name_confirm,
-            {
+            source="node_item_name_confirm",
+            path=self._route_after_item_name_confirm,
+            path_map={
                 "node_answer_output": "node_answer_output",
                 "node_search_embedding": "node_search_embedding",
                 "node_search_embedding_hyde": "node_search_embedding_hyde",

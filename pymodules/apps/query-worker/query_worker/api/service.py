@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse, StreamingResponse
 
+from aipaas_common.core.context import request_id_ctx_var
 from aipaas_storage.mongo_history_utils import clear_history, get_recent_messages
 from query_worker.graph.main_v2 import KBQueryWorkflowV2
 from query_worker.graph.state import create_default_query_state
@@ -61,6 +62,8 @@ async def query(background_tasks: BackgroundTasks, request: QueryRequest):
     :param request:
     :return:
     """
+    request_id_ctx_var.set(uuid.uuid4())
+
     user_query = request.query.strip()
     session_id = request.session_id if request.session_id else str(uuid.uuid4())
     # 处理是不是流式返回结果

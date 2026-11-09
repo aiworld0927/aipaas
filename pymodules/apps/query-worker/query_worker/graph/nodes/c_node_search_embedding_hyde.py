@@ -1,12 +1,12 @@
 # processor/query_processor/nodes/node_search_embedding_hyde.py
 from aipaas_common.conf.milvus_config import milvus_config
 from aipaas_common.core.load_prompt import load_prompt
+from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_llm.lm.embedding_utils import generate_embeddings
 from aipaas_llm.lm.lm_utils import get_llm_client
 from aipaas_retrieval.milvus_utils import hybrid_search, get_milvus_client, create_hybrid_search_requests
 from query_worker.graph.state import QueryGraphState
-
 
 @node_log("node_search_embedding_hyde")
 def node_search_embedding_hyde( state: QueryGraphState) -> QueryGraphState:
@@ -139,7 +139,6 @@ def _step_2_search_embedding_hyde(
 
 if __name__ == "__main__":
     import json
-    from aipaas_common.core.log import logger
     from query_worker.graph.state import create_default_query_state
 
     # 初始化图状态
