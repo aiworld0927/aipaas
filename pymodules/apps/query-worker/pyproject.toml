@@ -10,7 +10,7 @@ dependencies = [
     "aipaas-retrieval",
     "aipaas-storage",
     "aipaas-pipeline",
-    "aipaas-mcp-agent==0.1.0",
+    "aipaas-mcp-agent1==0.1.0",  # MCP 客户端（v1: mcp<2, openai-agents<0.20.0）
     # Web 框架
     "fastapi>=0.142.2",
     "uvicorn>=0.30.0",
@@ -38,6 +38,7 @@ aipaas-llm = { workspace = true }
 aipaas-retrieval = { workspace = true }
 aipaas-storage = { workspace = true }
 aipaas-pipeline = { workspace = true }
+aipaas-mcp-agent1 = { workspace = true }
 torch = { index = "pytorch-cpu" }
 torchvision = { index = "pytorch-cpu" }
 torchaudio = { index = "pytorch-cpu" }

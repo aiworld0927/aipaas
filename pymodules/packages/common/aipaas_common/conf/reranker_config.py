@@ -29,3 +29,5 @@ reranker_config = RerankerConfig(
     text_rerank_model = os.getenv("TEXT_RERANK_MODEL",""),
     text_rerank_instruct = os.getenv("TEXT_RERANK_INSTRUCT","")
 )
+if __name__ == '__main__':
+    print(reranker_config)

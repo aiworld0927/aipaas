@@ -9,8 +9,6 @@ dependencies = [
     "langchain-openai>=1.6.7",
     "langchain-huggingface",
     "dashscope>=1.27.7",
-    "mcp<2",
-    "openai-agents==0.23.1",
     "FlagEmbedding>=1.4.2",
     "pymilvus[model]>=3.0.2",
 ]

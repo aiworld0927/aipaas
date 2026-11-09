@@ -8,7 +8,6 @@ from aipaas_common.conf.reranker_config import reranker_config
 _reranker_model = None
 
 def get_reranker_model():
-
     global _reranker_model  
     if _reranker_model is None:
         _reranker_model= FlagReranker(

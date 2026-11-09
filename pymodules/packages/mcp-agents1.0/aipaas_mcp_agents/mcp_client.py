@@ -19,7 +19,7 @@ async def call_web_search_mcp(rewritten_query:str,max_retries:int=3):
             name="search_mcp",
             params={
                 "url":"https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp",
-                "headers":{"Authorization":f"Bearer {mcp_config.bailian_api_key}"},
+                "headers":{"Authorization":f"Bearer {mcp_config.api_key}"},
                 "timeout":300,
                 "sse_read_timeout":300,
             },

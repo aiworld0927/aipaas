@@ -2,7 +2,7 @@
 name = "aipaas-monorepo"
 version = "0.1.0"
 description = "AIPaaS Python Monorepo（workspace 根，不直接安装依赖）"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 # 根包自己不声明 dependencies，所有依赖都在成员 pyproject.toml 里
 
 # ---------------------------------------------------------------------------
@@ -17,7 +17,12 @@ members = [
     "packages/retrieval",
     "packages/storage",
     "packages/pipeline",
+    "packages/mcp-agents1.0",
 ]
+# 说明：packages/mcp-agents2.0 不在 workspace 中
+#   mcp-agents1.0: mcp>=1.19.0,<2 + openai-agents<0.20.0（query-worker 使用）
+#   mcp-agents2.0: mcp>=2,<3 + openai-agents==0.23.1（暂未被任何成员依赖，独立管理）
+#   aipaas-llm 已移除 mcp/openai-agents 依赖，MCP 客户端统一由 mcp-agents 包提供
 
 # ---------------------------------------------------------------------------
 # 公共源索引（成员 pyproject.toml 未单独声明时继承这里的配置）
