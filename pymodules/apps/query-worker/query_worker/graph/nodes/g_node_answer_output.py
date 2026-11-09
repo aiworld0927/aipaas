@@ -14,7 +14,7 @@ from query_worker.graph.state import QueryGraphState
 
 
 @node_log("node_answer_output")
-def node_answer_output( state: QueryGraphState) -> QueryGraphState:
+def node_answer_output(state: QueryGraphState) -> QueryGraphState:
     """节点功能: 答案输出：流程: 检查已有答案 → 构建提示词 → LLM 生成 → 写入历史 → 发送结束事件
     1 判断state 中的answer是否已经存在，如果存在直接输出answer中的答案，注意判断是否需要流式输出需要则流式输出
     2 根据state中的问题、重新问题、历史对话、提问商品（item_names）、 重排内容 组织prompt 并调用llm 生成答案
@@ -40,7 +40,6 @@ def node_answer_output( state: QueryGraphState) -> QueryGraphState:
 
         # 阶段三：  如果没有answer则 调用大模型输出答案
         _step_3_generate_response(state, prompt)
-
 
         # 提取图片URL（用于历史记录和前端展示）
     image_urls = _extract_images_from_docs(state.get("reranked_docs") or [])
@@ -68,26 +67,26 @@ def node_answer_output( state: QueryGraphState) -> QueryGraphState:
     return state
 
 
-def _step_1_check_answer( state) -> bool:
-  """
-  阶段一：检查 state 中是否已有 answer。
-  - 若已存在：按需推送流式 delta（用于 SSE），并返回 True
-  - 若不存在：返回 False
-  """
-  answer = state.get("answer")
-  is_stream = state.get("is_stream" )
-  if answer:
-    if is_stream:
-      logger.info("---Step 1: 发现已有答案，执行流式推送---")
-      push_to_session(state["session_id"], SSEEvent.DELTA, {"delta": answer})
+def _step_1_check_answer(state) -> bool:
+    """
+    阶段一：检查 state 中是否已有 answer。
+    - 若已存在：按需推送流式 delta（用于 SSE），并返回 True
+    - 若不存在：返回 False
+    """
+    answer = state.get("answer")
+    is_stream = state.get("is_stream")
+    if answer:
+        if is_stream:
+            logger.info("---Step 1: 发现已有答案，执行流式推送---")
+            push_to_session(state["session_id"], SSEEvent.DELTA, {"delta": answer})
+        else:
+            set_task_result(state["session_id"], "answer", answer)
+        return True
     else:
-      set_task_result(state["session_id"], "answer", answer)
-    return True
-  else:
-    return False
+        return False
 
-def _step_2_construct_prompt( state: QueryGraphState) -> str:
 
+def _step_2_construct_prompt(state: QueryGraphState) -> str:
     """
     阶段二：构建 Prompt
     根据state中的问题、重新问题、历史对话、提问商品（item_names）、 重排内容 组装 LLM 提示词
@@ -123,7 +122,8 @@ def _step_2_construct_prompt( state: QueryGraphState) -> str:
     # logger.info(f"组装后的提示词为：{prompt}")
     return prompt
 
-def _format_reranked_docs( reranked_docs: List[Dict], char_budget: int) -> Tuple[str, int]:
+
+def _format_reranked_docs(reranked_docs: List[Dict], char_budget: int) -> Tuple[str, int]:
     """格式化重排序文档，带字符预算控制"""
     formatted_lines = []
     used_chars = 0
@@ -167,7 +167,8 @@ def _format_reranked_docs( reranked_docs: List[Dict], char_budget: int) -> Tuple
 
     return "\n\n".join(formatted_lines), char_budget - used_chars
 
-def _format_chat_history( chat_history: List[Dict], char_budget: int) -> Tuple[str, int]:
+
+def _format_chat_history(chat_history: List[Dict], char_budget: int) -> Tuple[str, int]:
     """格式化历史对话"""
     formatted_lines = []
     used_chars = 0
@@ -190,7 +191,8 @@ def _format_chat_history( chat_history: List[Dict], char_budget: int) -> Tuple[s
 
     return "\n".join(formatted_lines), char_budget - used_chars
 
-def _step_3_generate_response( state: QueryGraphState, prompt: str) -> QueryGraphState:
+
+def _step_3_generate_response(state: QueryGraphState, prompt: str) -> QueryGraphState:
     """
     阶段三：生成回答
     调用llm生成答案，支持流式输出
@@ -241,7 +243,8 @@ def _step_3_generate_response( state: QueryGraphState, prompt: str) -> QueryGrap
 
     return state
 
-def _extract_images_from_docs( docs):
+
+def _extract_images_from_docs(docs):
     """
     辅助方法：从文档列表中提取图片URL
 
@@ -257,7 +260,7 @@ def _extract_images_from_docs( docs):
     :return: 图片 URL 字符串列表
     """
     images = []
-    seen = set() # 用于去重，避免同一张图片重复出现
+    seen = set()  # 用于去重，避免同一张图片重复出现
     if not docs:
         return []
     # ---------------------------------------------------------
@@ -306,7 +309,8 @@ def _extract_images_from_docs( docs):
     logger.info(f"图片提取完成，共找到 {len(images)} 张唯一图片: {images}")
     return images
 
-def _step_4_write_history(seld, state: QueryGraphState, image_urls = None) -> QueryGraphState:
+
+def _step_4_write_history(state: QueryGraphState, image_urls=None) -> QueryGraphState:
     """
     阶段四：把本轮答案写入 MongoDB history。
     利用 utils/mongo_history_utils.py 中的 save_chat_messages 方法。
@@ -396,7 +400,6 @@ if __name__ == "__main__":
     }
 
     # 运行节点
-    node_answer_output = NodeAnswerOutput()
     result = node_answer_output(mock_state)
 
     # 1. 验证 Prompt 构建

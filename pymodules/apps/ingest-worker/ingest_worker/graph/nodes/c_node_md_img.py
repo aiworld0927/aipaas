@@ -150,8 +150,7 @@ def _find_image_in_md(md_content: str, image_file: str, context_len: int = 100) 
     # 4、返回上下文元组
     return pre_text, post_text
 
-def _step_3_generate_summaries(doc_stem: str, target_images: List[Tuple[str, str, Tuple[str, str]]]) -> Dict[
-    str, str]:
+def _step_3_generate_summaries(doc_stem: str, target_images: List[Tuple[str, str, Tuple[str, str]]]) -> Dict[str, str]:
     """
     步骤3：批量为待处理图片生成内容摘要，带API速率限制防止触发大模型限流
     :param doc_stem: 文档文件名（不含后缀），作为大模型prompt上下文
@@ -165,13 +164,12 @@ def _step_3_generate_summaries(doc_stem: str, target_images: List[Tuple[str, str
     request_deque = deque()
 
     # 2、循环处理图片
-    for img_file, image_path, context in target_images:
+    for index,(img_file, image_path, context) in enumerate(target_images):
         # 2.1、速率限制
         apply_api_rate_limit(request_deque, max_requests=10)
-
         # 2.2、调用大模型生成图片摘要
         summaries[img_file] = _summarize_image(image_path, root_folder=doc_stem, image_content=context)
-
+        logger.info(f"图片处理进度:{index} / {len(target_images)}: 当前处理：{img_file}")
     return summaries
 
 def _summarize_image(image_path: str, root_folder: str, image_content: Tuple[str, str]) -> str:
@@ -371,7 +369,8 @@ def _step_5_backup_new_md_file(origin_md_path: str, md_content: str) -> str:
 if __name__ == "__main__":
     import json
     from ingest_worker.graph.state import create_default_ingest_state
-    md_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\H3CLA2608室内无线网关用户手册.md"
+    from aipaas_common.utils.path_util import PROJECT_ROOT
+    md_path = str(PROJECT_ROOT / "data" / "outputs" / "hak180使用说明书/hak180使用说明书.md")
     with open(md_path, "r", encoding="utf-8") as f:
         md_content = f.read()
     init_state = {

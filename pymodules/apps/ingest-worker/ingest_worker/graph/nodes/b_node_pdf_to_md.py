@@ -114,7 +114,7 @@ def _step_2_upload_and_poll(pdf_path_obj: Path):
 
     start_time = time.time()  # 记录开始时间
     timeout_seconds = 600  # 最大超时时间
-    poll_interval = 3  # 轮询间隔时间
+    poll_interval = 5  # 轮询间隔时间
     logger.info(f"【任务轮询】最大超时：{timeout_seconds}s，batch_id：{batch_id}")
 
     # 4. 根据batch_id轮询任务状态直到成功"done"
@@ -220,7 +220,8 @@ if __name__ == "__main__":
     from aipaas_common.utils.path_util import PROJECT_ROOT
     from ingest_worker.graph.state import create_default_ingest_state
     from ingest_worker.graph.nodes.a_node_entry import node_entry
-    init_state = create_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "H3CLA2608室内无线网关用户手册.pdf")})
+    # init_state = create_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "H3CLA2608室内无线网关用户手册.pdf")})
+    init_state = create_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "hak180使用说明书.pdf")})
     node_entry_state = node_entry(init_state)
 
     result = node_pdf_to_md(node_entry_state)

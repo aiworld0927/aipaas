@@ -85,7 +85,7 @@ if __name__ == "__main__":
     init_state = {
         "original_query": "H3CLA2608室内无线网关怎么使用？",
         "rewritten_query": "H3CLA2608室内无线网关怎么使用？",
-        "item_names": ["H3CLA2608-GM/GU室内无线网关"],
+        "item_names": ["H3CLA2608室内无线网关"],
     }
     init_state = create_default_query_state(**init_state)
     # 执行节点的单元测试

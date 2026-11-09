@@ -49,6 +49,7 @@ if __name__ == "__main__":
     from aipaas_common.core.log import logger
     from aipaas_common.utils.path_util import PROJECT_ROOT
     from ingest_worker.graph.state import create_default_ingest_state
-    init_state = create_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "H3CLA2608室内无线网关用户手册.pdf")})
+    # init_state = create_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "H3CLA2608室内无线网关用户手册.pdf")})
+    init_state = create_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "hak180使用说明书.pdf")})
     result = node_entry(init_state)
     logger.info(json.dumps(result, ensure_ascii=False, indent=4))

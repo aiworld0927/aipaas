@@ -26,8 +26,8 @@ reranker_config = RerankerConfig(
 
     # 在线rerank模型
     text_rerank_api_key = os.getenv("OPENAI_API_KEY",""),
-    text_rerank_model = os.getenv("TEXT_RERANK_MODEL",""),
-    text_rerank_instruct = os.getenv("TEXT_RERANK_INSTRUCT","")
+    text_rerank_model = os.getenv("TEXT_RERANK_MODEL","qwen3-rerank"),
+    text_rerank_instruct = os.getenv("TEXT_RERANK_INSTRUCT","针对给定的查询，检索能够解答该查询的相关段落")
 )
 if __name__ == '__main__':
     print(reranker_config)
