@@ -57,7 +57,7 @@ class KBQueryWorkflowV2:
         self.workflow.add_node("node_rerank", self.node_rerank) # 重排
         self.workflow.add_node("node_answer_output", self.node_answer_output) # 生成
 
-    def _route_after_item_name_confirm(self, state: QueryGraphState) -> str:
+    def _route_after_item_name_confirm( state: QueryGraphState) -> str:
         """主体名称确认后的条件路由函数"""
         if state.get("answer"):
             """
@@ -113,7 +113,7 @@ class KBQueryWorkflowV2:
             self._compiled_app = self.workflow.compile()
         return self._compiled_app
 
-    def run(self, initial_state: QueryGraphState, stream: bool = False) -> QueryGraphState:
+    def run( initial_state: QueryGraphState, stream: bool = False) -> QueryGraphState:
         """
         统一执行入口，支持切换invoke/stream
         :param initial_state:  初始状态对象

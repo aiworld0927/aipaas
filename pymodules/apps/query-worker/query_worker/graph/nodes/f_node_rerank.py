@@ -17,7 +17,7 @@ class NodeRerank(BaseNode):
     # 覆盖基类的 name 属性，标识节点名称
     name: str = "node_rerank"
 
-    def process(self, state: QueryGraphState) -> QueryGraphState:
+    def process( state: QueryGraphState) -> QueryGraphState:
         """
         执行重排序
         流程: 合并多源文档 → Reranker 计算相关性 → 断崖检测动态截断
@@ -41,7 +41,7 @@ class NodeRerank(BaseNode):
         return state
 
 
-    def _step_1_merge_multi_source_docs(self, state: QueryGraphState) -> List[Dict[str, Any]]:
+    def _step_1_merge_multi_source_docs( state: QueryGraphState) -> List[Dict[str, Any]]:
         """合并本地 RRF 结果和网络搜索结果为统一格式"""
 
         final_docs = []
@@ -72,7 +72,7 @@ class NodeRerank(BaseNode):
 
         return final_docs
 
-    def _step_2_rerank_merged_docs(self, state: QueryGraphState, merged_multi_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _step_2_rerank_merged_docs( state: QueryGraphState, merged_multi_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """使用 Reranker 模型对文档进行精排"""
 
         try:
@@ -109,7 +109,7 @@ class NodeRerank(BaseNode):
             logger.error(f"Rerank 重排序失败: {str(e)}")
             return [{**merged_multi_docs, "score": None}]
 
-    def _step_3_cliff_cutoff(self, ranked_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _step_3_cliff_cutoff( ranked_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """断崖检测截断：相邻得分差距超过阈值时截断。"""
         if not ranked_docs:
             return []

@@ -78,7 +78,7 @@ class TaskQueue:
             if not os.path.exists(dirname):
                 os.makedirs(dirname)
 
-    def enqueue(self, type_, user, exp_name, run_id, params, task_name=None):
+    def enqueue( type_, user, exp_name, run_id, params, task_name=None):
         '添加排队任务'
         self.tasks.put((type_, user, exp_name, run_id, params, task_name))
         logger.info(f"--enqueue new task {type_} user:{user}")
@@ -165,7 +165,7 @@ class TaskQueue:
             logger.info(f"dequeue task, {exp_name}:{run_id}")
 
 
-    def _start_gm_task(self, cont_info, user, exp_name, run_id, params):
+    def _start_gm_task( cont_info, user, exp_name, run_id, params):
         cont_name, ip_addr, ctl_port, svc_port = cont_info
         l_conf = {k: _conf[k] for k in ('fileserver_url', 'db_conn_str', 'CONT_IDENTITY')}
         logger.info("gm task train in container: {}", cont_name)
@@ -181,7 +181,7 @@ class TaskQueue:
             db.train_finish(cont_name, 'gm task failed')
             self.notify_queue.put('cont-return')
 
-    def _start_nni_task(self, cont_info, user, exp_name, run_id, jo):
+    def _start_nni_task( cont_info, user, exp_name, run_id, jo):
         task_name = jo['task_name']  # 任务标识id， 预先定义封装的代码组合， 按照分类配置到数据库中
         node_id = jo['node_id']  # 此处用run_id (对应ssh连接中的 node_id）
         params = jo['params']

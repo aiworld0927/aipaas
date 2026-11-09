@@ -7,7 +7,7 @@ import time
 from loguru import logger
 
 # class JUItem:
-#     def __init__(self, name, uri, ip, port, static_uri=None, static_path=None):
+#     def __init__( name, uri, ip, port, static_uri=None, static_path=None):
 #         self.name = name
 #         self.uri = uri
 #         self.ip = ip
@@ -16,7 +16,7 @@ from loguru import logger
 #         self.static_path = static_path
 
 class NG_PX:
-    def __init__(self, prefix):
+    def __init__( prefix):
         self.prefix = prefix
         self.list_file = f"{prefix}/conf/ju.json"
         self.conf_file = f"{prefix}/conf/nginx.conf"
@@ -32,7 +32,7 @@ class NG_PX:
         with open(self.list_file, 'w', encoding='utf8') as fo:
             json.dump(self.ju_list, fo)
 
-    def add_ng_loc(self, cont_name, uri, ip, port, static_uri=None, static_path=None, conf_change_now=True):
+    def add_ng_loc( cont_name, uri, ip, port, static_uri=None, static_path=None, conf_change_now=True):
         '添加转发配置， 部署位置/data/.app/ng_pyserv(/pyserv/ng_home/), 配置与现有的共存， 列表文件 $prefix/conf/ju.json'
         self.ju_list[cont_name] = [uri, ip, port, static_uri, static_path, time.time()]
 
@@ -40,7 +40,7 @@ class NG_PX:
         if conf_change_now:
             self.reload_ng()
 
-    def rmv_ng_loc(self, cont_name):
+    def rmv_ng_loc( cont_name):
         if cont_name not in self.ju_list:
             return
         del self.ju_list[cont_name]
@@ -128,7 +128,7 @@ location {uri}/ {{
         s = subprocess.check_output(args, shell=False)
         print("reload nginx return", str(s))
 
-    def add_errorLog_ng_loc(self, cont_name, uri, run_id, node_id):
+    def add_errorLog_ng_loc( cont_name, uri, run_id, node_id):
         '添加转发配置， 部署位置 /pyserv/ng_home/, 配置与现有的共存， 列表文件 $prefix/conf/ju.json'
         self.ju_list[cont_name] = [uri, run_id, node_id]
         self._save_list()

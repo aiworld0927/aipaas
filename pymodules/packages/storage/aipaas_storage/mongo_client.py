@@ -6,7 +6,7 @@ from aipaas_common.conf.mongo_config import MongoConfig, mongo_config
 
 
 class MongoClientManager:
-    def __init__(self,mongo_config:MongoConfig):
+    def __init__(mongo_config:MongoConfig):
         self.mongo_config = mongo_config
         self.client:Optional[AsyncMongoClient] = None
 

@@ -44,7 +44,7 @@ def apply_api_rate_limit(
     logger.debug(f"API请求时间戳已记录，当前{window_seconds}秒窗口内请求数：{len(request_times)}")
 
     def _apply_api_rate_limit(
-            self,
+            
             request_times: Deque[float],
             max_requests: int,
             window_seconds: int = 60

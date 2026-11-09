@@ -63,7 +63,7 @@ class KBQueryWorkflow:
         # lambda x:x 含义：接收 state 并原样返回，是最轻便的 “无逻辑传递” 方式；
         # 普通函数替换：定义 def 函数名(state): return state 即可完全等价，优势是易扩展、易调试；
 
-    def _route_after_item_name_confirm(self, state: QueryGraphState) -> str:
+    def _route_after_item_name_confirm( state: QueryGraphState) -> str:
         """主体名称确认后的条件路由函数"""
         if state.get("answer"):
             """
@@ -121,7 +121,7 @@ class KBQueryWorkflow:
             self._compiled_app = self.workflow.compile()
         return self._compiled_app
 
-    def run(self, initial_state: QueryGraphState, stream: bool = False) -> QueryGraphState:
+    def run( initial_state: QueryGraphState, stream: bool = False) -> QueryGraphState:
         """
         统一执行入口，支持切换invoke/stream
         :param initial_state:  初始状态对象

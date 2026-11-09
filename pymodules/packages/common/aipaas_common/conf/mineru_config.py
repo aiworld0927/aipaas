@@ -16,5 +16,5 @@ class MineruConfig:
 
 mineru_config = MineruConfig(
     api_token = os.getenv("MINERU_API_TOKEN",""),
-    base_url= os.getenv("MINERU_BASE_URL",""),
+    base_url= os.getenv("MINERU_BASE_URL","https://mineru.net/api/v4"),
 )

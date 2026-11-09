@@ -6,7 +6,7 @@ from aipaas_common.conf.app_config import ESConfig, app_config
 
 
 class ESClientManager:
-    def __init__(self, es_config: ESConfig):
+    def __init__( es_config: ESConfig):
         self.es_config = es_config
         self.client: Optional[AsyncElasticsearch] = None
 
@@ -27,7 +27,7 @@ class ESClientManager:
             self.init()
         return self.client
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__( exc_type, exc_val, exc_tb):
         print(f"exiting elasticsearch conf:{self._get_url()}")
         await self.close()
         return False  # 不抑制异常

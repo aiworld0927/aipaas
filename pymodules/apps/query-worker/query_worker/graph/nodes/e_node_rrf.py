@@ -16,7 +16,7 @@ class NodeRrf(BaseNode):
     # 覆盖基类的 name 属性，标识节点名称
     name: str = "node_rrf"
 
-    def process(self, state: QueryGraphState) -> QueryGraphState:
+    def process( state: QueryGraphState) -> QueryGraphState:
         # 1. 获取各路搜索的结果（排除网络搜索: reranK节点做）
         embedding_search_list = [
             doc.get('entity') for doc in (state.get('embedding_chunks') or []) if isinstance(doc, dict)
@@ -44,7 +44,7 @@ class NodeRrf(BaseNode):
         return state
 
 
-    def _rrf_merge(self, rrf_inputs, k: int = 60, max_results: int = None) -> List[Tuple[Dict[str, Any], float]]:
+    def _rrf_merge( rrf_inputs, k: int = 60, max_results: int = None) -> List[Tuple[Dict[str, Any], float]]:
         """
         利用 RRF 公式计算每一个文档的总得分
         :param rrf_inputs:  列表，每个元素是(各路的搜索结果列表, 权重)的元组

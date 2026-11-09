@@ -8,7 +8,7 @@ from aipaas_common.conf.app_config import QdrantConfig, app_config
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 class QdrantClientManager:
-    def __init__(self, qdrant_config: QdrantConfig):
+    def __init__( qdrant_config: QdrantConfig):
         self.qdrant_config = qdrant_config
         self.client: Optional[AsyncQdrantClient] = None
 
@@ -28,7 +28,7 @@ class QdrantClientManager:
             self.init()
         return self.client
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__( exc_type, exc_val, exc_tb):
         print(f"exiting qdrant conf:{self._get_url()}")
         await self.close()
         return False  # 不抑制异常

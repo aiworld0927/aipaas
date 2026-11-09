@@ -14,14 +14,14 @@ from loguru import logger
 
 
 class Proc:
-    def __init__(self, stdin, stdout, stderr):
+    def __init__( stdin, stdout, stderr):
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
 
 
 class NodeCmd:
-    def __init__(self, homedir, conninfo, user_name=None, run_env=None):
+    def __init__( homedir, conninfo, user_name=None, run_env=None):
         self.conninfo = conninfo
         self.ssh = None
         self.home = homedir
@@ -71,7 +71,7 @@ class NodeCmd:
 
         return True
 
-    def _exec_(self, cmd, ln_limit=-1, outs=None, remove_str=None, out_remove_fistline=0):
+    def _exec_( cmd, ln_limit=-1, outs=None, remove_str=None, out_remove_fistline=0):
         proc = self.proc
         proc.stdin.write(cmd + '\n')
         logger.debug('====exec: {}', cmd)
@@ -97,7 +97,7 @@ class NodeCmd:
         else:
             return "".join(outs)
 
-    def _save_text_to_file(self, text, fpath):
+    def _save_text_to_file( text, fpath):
         logger.debug("_save_text_to_file {} {}", fpath, text)
         proc = self.proc
         proc.stdin.write(f"cat <<EOF >{fpath}\n")
@@ -111,7 +111,7 @@ class NodeCmd:
             outs.append(ln)
         return "".join(outs)
 
-    def source_act(self, name):
+    def source_act( name):
         out = self._exec_('source activate %s && export PS1=%s\\\\n' % (name, self._until_))
         return out
 
@@ -192,7 +192,7 @@ class PLTask:
     流水线任务处理相关功能实现,  从manager到流水线执行容器的操作
     '''
 
-    def __init__(self, local_conf, cont_addr, exp_name, run_id, user_name=None):
+    def __init__( local_conf, cont_addr, exp_name, run_id, user_name=None):
         self._conf = local_conf
         self.user_name = user_name
         self.exp_name = exp_name
@@ -221,14 +221,14 @@ class PLTask:
         # logger.info("pyenv return {}", out)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__( exc_type, exc_val, exc_tb):
         logger.info("--with exit--")
         self.close()
 
     def close(self):
         self.nt.disconnect()
 
-    def start_jupyter(self, node_id):
+    def start_jupyter( node_id):
         '在容器中 启动图形化建模的训练过程'
         nt = self.nt
         app_dir = '.app'
@@ -278,7 +278,7 @@ class PLTask:
                      "args": f"jupyter notebook stop 8178".split()}
         nt._save_text_to_file(json.dumps(start_cmd), f"/tmp/.app/once_proc/{time.time()}.json")
 
-    def prepare_env(self, container_name, params):
+    def prepare_env( container_name, params):
         '''启动流水线编辑, 分配容器完成后, 从文件服务器上恢复数据到容器中
         计算容器中的路径: f"/data/xx/{exp_name}_{run_id}"
         文件服务器上的路径:  /data/.models/${username}/PL_${exp_name}_${run_id}
@@ -327,7 +327,7 @@ class PLTask:
         # 需要再延迟检查 服务是否可用 /pl/ping
         return True
 
-    def tmp_duplicate(self, params):
+    def tmp_duplicate( params):
         '''
         流水线模板导出为新的流水线后，由于self.home目录下的.local文件夹重新生成
         缺少原本流水线的私有依赖包，由此会出现流水线运行缺包的情况，因此使用此功能在流水线初次导出的时候，
@@ -365,7 +365,7 @@ class PLTask:
 
         return True
 
-    def run_task(self, flow_doc, container_name=None, run_to=None, open_nb=False):
+    def run_task( flow_doc, container_name=None, run_to=None, open_nb=False):
         '在容器中 启动图形化建模的训练过程'
         nt = self.nt
         tmp_dir = '.app'

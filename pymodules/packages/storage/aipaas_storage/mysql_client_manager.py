@@ -9,7 +9,7 @@ from aipaas_common.conf.app_config import DBConfig, app_config
 
 class MySQLClientManager:
 
-    def __init__(self,db_config:DBConfig):
+    def __init__(db_config:DBConfig):
         self.db_config = db_config
         self.engine:Optional[AsyncEngine] = None
         self.session_factory = None
@@ -37,7 +37,7 @@ class MySQLClientManager:
         self._session = self.session_factory()
         return self._session
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__( exc_type, exc_val, exc_tb):
         print(f"exiting db conf:{self._get_url()}")
         try:
             if self._session is not None:

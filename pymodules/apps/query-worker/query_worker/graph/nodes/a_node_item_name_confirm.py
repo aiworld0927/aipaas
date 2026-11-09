@@ -23,7 +23,7 @@ class NodeItemNameConfirm(BaseNode):
     # 覆盖基类的 name 属性，标识节点名称
     name: str = "node_item_name_confirm"
 
-    def process(self, state: QueryGraphState) -> QueryGraphState:
+    def process( state: QueryGraphState) -> QueryGraphState:
         """
         必要参数：session_id、original_query
         更新参数：history、rewritten_query、item_names、answer
@@ -71,7 +71,7 @@ class NodeItemNameConfirm(BaseNode):
         return state
 
 
-    def _step_1_validate_param(self, state: QueryGraphState) -> Tuple[str, str]:
+    def _step_1_validate_param( state: QueryGraphState) -> Tuple[str, str]:
 
         session_id = state.get("session_id")
         original_query = state.get("original_query")
@@ -83,7 +83,7 @@ class NodeItemNameConfirm(BaseNode):
         return session_id, original_query
 
 
-    def _step_4_extract_info(self, query, history) -> Dict:
+    def _step_4_extract_info( query, history) -> Dict:
         """
         利用LLM从当前问题以及历史会话中提取出主要询问的商品名称item_names（可多个，JSON列表形式）
         若商品名不够明确则返回空列表，同时根据上下文重新改写问题，保证问题独立完整
@@ -156,7 +156,7 @@ class NodeItemNameConfirm(BaseNode):
             return {"item_names": [], "rewritten_query": query}
 
 
-    def _step_5_vectorize_and_query(self, item_names) -> List[Dict]:
+    def _step_5_vectorize_and_query( item_names) -> List[Dict]:
         """
            把分析出的item_names逐个向量化（BGEM3模型），并在Milvus向量数据库(kb_item_names)中执行混合搜索，获取匹配评分
            :param item_names: 列表[字符串] - 步骤4中 提取的商品名列表（如["苹果15", "华为P60"]）
@@ -252,7 +252,7 @@ class NodeItemNameConfirm(BaseNode):
         return results
 
 
-    def _step_6_align_item_names(self, query_results) -> Dict:
+    def _step_6_align_item_names( query_results) -> Dict:
         """
         6 根据Milvus搜索评分，逐个对齐step4提取的item_names，生成「确认商品名」和「候选商品名」
         对齐规则（优先级a>b>c>d）：
@@ -332,7 +332,7 @@ class NodeItemNameConfirm(BaseNode):
         }
 
 
-    def _step_7_check_confirmation(self, state, align_result, history):
+    def _step_7_check_confirmation( state, align_result, history):
         """
         7 检查step6对齐后的商品名状态，分3种分支更新state，并同步更新历史消息的商品名关联
         :param state: 字典 - 原始会话状态，包含session_id/original_query等核心字段
@@ -382,7 +382,7 @@ class NodeItemNameConfirm(BaseNode):
         return state
 
 
-    def _step_8_write_history(self, state, session_id, rewritten_query, message_id):
+    def _step_8_write_history( state, session_id, rewritten_query, message_id):
         """
          8 把本次处理的核心信息（用户问题、助手答案、商品名、改写查询）写入MongoDB的会话历史
          包含2个核心操作：1. 写入助手答案（若有）；2. 更新用户原始问题的关联信息

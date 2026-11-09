@@ -30,7 +30,7 @@ T = TypeVar("T")  # 泛型状态类型
 
 class ImportProcessError(Exception):
     """流程基类异常（公共库版本）"""
-    def __init__(self, message='', node_name='', cause=None):
+    def __init__( message='', node_name='', cause=None):
         self.node_name = node_name
         self.cause = cause
         super().__init__(message)
@@ -46,7 +46,7 @@ class BaseNode(ABC):
         class MyNode(BaseNode):
             name = "my_node"
 
-            def process(self, state):
+            def process( state):
                 # 实现具体逻辑
                 return state
 
@@ -66,7 +66,7 @@ class BaseNode(ABC):
         # self.config = config or get_config()
         self.logger = logger
 
-    def __call__(self, state: T) -> T:
+    def __call__( state: T) -> T:
         """
         节点执行入口
         LangGraph 调用节点时会调用此方法。
@@ -98,7 +98,7 @@ class BaseNode(ABC):
             raise ImportProcessError(message=str(e), node_name=self.name, cause=e)
 
     @abstractmethod
-    def process(self, state: T) -> T:
+    def process( state: T) -> T:
         """
         节点核心处理逻辑
         子类必须实现此方法。
@@ -109,7 +109,7 @@ class BaseNode(ABC):
         """
         pass
 
-    def log_step(self, step_name: str, message: str = ""):
+    def log_step( step_name: str, message: str = ""):
         """
         记录步骤日志
         Args:

@@ -26,7 +26,7 @@ kubernetes_path = "D:/coding/gitee/aipaas/pymodules/conf/admin.conf"
 class K8sClient:
     """Kubernetes 操作工具类，封装常用资源操作。"""
 
-    def __init__(self,kubeconfig_path: Optional[str] = None, context: Optional[str] = None, pool_size: Optional[int] = None,):
+    def __init__(kubeconfig_path: Optional[str] = None, context: Optional[str] = None, pool_size: Optional[int] = None,):
         """
         初始化客户端。
 
@@ -50,7 +50,7 @@ class K8sClient:
 
 
 
-    def _load_config(self, kubeconfig_path: Optional[str], context: Optional[str]):
+    def _load_config( kubeconfig_path: Optional[str], context: Optional[str]):
         """加载认证配置：优先尝试集群内配置，失败则回退到 kubeconfig。"""
         try:
             config.load_incluster_config()
@@ -69,13 +69,13 @@ class K8sClient:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__( exc_type, exc_val, exc_tb):
         self.close()
 
     # ==================== Pod 操作 ====================
 
     def list_pods(
-            self, namespace: str = "default", label_selector: Optional[str] = None
+             namespace: str = "default", label_selector: Optional[str] = None
     ) -> List[client.V1Pod]:
         """
         列出指定命名空间下的 Pod。
@@ -88,11 +88,11 @@ class K8sClient:
             namespace, label_selector=label_selector
         ).items
 
-    def get_pod(self, name: str, namespace: str = "default") -> client.V1Pod:
+    def get_pod( name: str, namespace: str = "default") -> client.V1Pod:
         """获取单个 Pod 详情。"""
         return self.core_v1.read_namespaced_pod(name, namespace)
 
-    def delete_pod(self, name: str, namespace: str = "default", grace_period: int = 30):
+    def delete_pod( name: str, namespace: str = "default", grace_period: int = 30):
         """
         删除 Pod。
 
@@ -103,7 +103,7 @@ class K8sClient:
         )
 
     def get_pod_logs(
-            self,
+            
             name: str,
             namespace: str = "default",
             container: Optional[str] = None,
@@ -126,7 +126,7 @@ class K8sClient:
         )
 
     def exec_in_pod(
-            self,
+            
             name: str,
             command: List[str],
             namespace: str = "default",
@@ -152,20 +152,20 @@ class K8sClient:
 
     # ==================== Deployment 操作 ====================
 
-    def list_deployments(self, namespace: str = "default") -> List[client.V1Deployment]:
+    def list_deployments( namespace: str = "default") -> List[client.V1Deployment]:
         """列出命名空间下所有 Deployment。"""
         return self.apps_v1.list_namespaced_deployment(namespace).items
 
-    def get_deployment(self, name: str, namespace: str = "default") -> client.V1Deployment:
+    def get_deployment( name: str, namespace: str = "default") -> client.V1Deployment:
         """获取 Deployment 详情。"""
         return self.apps_v1.read_namespaced_deployment(name, namespace)
 
-    def scale_deployment(self, name: str, replicas: int, namespace: str = "default"):
+    def scale_deployment( name: str, replicas: int, namespace: str = "default"):
         """扩缩容 Deployment 副本数。"""
         body = {"spec": {"replicas": replicas}}
         return self.apps_v1.patch_namespaced_deployment_scale(name, namespace, body)
 
-    def restart_deployment(self, name: str, namespace: str = "default"):
+    def restart_deployment( name: str, namespace: str = "default"):
         """
         触发 Deployment 滚动重启（等价于 kubectl rollout restart）。
         通过 patch 注入 restartedAt 注解，使 Pod 模板变化从而触发滚动更新。
@@ -183,7 +183,7 @@ class K8sClient:
         return self.apps_v1.patch_namespaced_deployment(name, namespace, body)
 
     def update_deployment_image(
-            self, name: str, container_name: str, image: str, namespace: str = "default"
+             name: str, container_name: str, image: str, namespace: str = "default"
     ):
         """更新 Deployment 中指定容器的镜像，触发滚动更新。"""
         body = {
@@ -197,110 +197,110 @@ class K8sClient:
         }
         return self.apps_v1.patch_namespaced_deployment(name, namespace, body)
 
-    def create_deployment_from_dict(self, body: Dict[str, Any], namespace: str = "default"):
+    def create_deployment_from_dict( body: Dict[str, Any], namespace: str = "default"):
         """通过 dict（如 YAML 解析结果）创建 Deployment。"""
         return self.apps_v1.create_namespaced_deployment(namespace, body)
 
-    def delete_deployment(self, name: str, namespace: str = "default"):
+    def delete_deployment( name: str, namespace: str = "default"):
         """删除 Deployment。"""
         return self.apps_v1.delete_namespaced_deployment(name, namespace)
 
     # ==================== Service 操作 ====================
 
-    def list_services(self, namespace: str = "default") -> List[client.V1Service]:
+    def list_services( namespace: str = "default") -> List[client.V1Service]:
         """列出命名空间下所有 Service。"""
         return self.core_v1.list_namespaced_service(namespace).items
 
-    def get_service(self, name: str, namespace: str = "default") -> client.V1Service:
+    def get_service( name: str, namespace: str = "default") -> client.V1Service:
         """获取 Service 详情。"""
         return self.core_v1.read_namespaced_service(name, namespace)
 
-    def create_service(self, body: Dict[str, Any], namespace: str = "default"):
+    def create_service( body: Dict[str, Any], namespace: str = "default"):
         """通过 dict 创建 Service。"""
         return self.core_v1.create_namespaced_service(namespace, body)
 
-    def delete_service(self, name: str, namespace: str = "default"):
+    def delete_service( name: str, namespace: str = "default"):
         """删除 Service。"""
         return self.core_v1.delete_namespaced_service(name, namespace)
 
     # ==================== ConfigMap / Secret 操作 ====================
 
-    def list_configmaps(self, namespace: str = "default") -> List[client.V1ConfigMap]:
+    def list_configmaps( namespace: str = "default") -> List[client.V1ConfigMap]:
         """列出命名空间下所有 ConfigMap。"""
         return self.core_v1.list_namespaced_config_map(namespace).items
 
-    def get_configmap(self, name: str, namespace: str = "default") -> client.V1ConfigMap:
+    def get_configmap( name: str, namespace: str = "default") -> client.V1ConfigMap:
         """获取 ConfigMap 详情。"""
         return self.core_v1.read_namespaced_config_map(name, namespace)
 
-    def create_configmap(self, body: Dict[str, Any], namespace: str = "default"):
+    def create_configmap( body: Dict[str, Any], namespace: str = "default"):
         """通过 dict 创建 ConfigMap。"""
         return self.core_v1.create_namespaced_config_map(namespace, body)
 
-    def delete_configmap(self, name: str, namespace: str = "default"):
+    def delete_configmap( name: str, namespace: str = "default"):
         """删除 ConfigMap。"""
         return self.core_v1.delete_namespaced_config_map(name, namespace)
 
-    def list_secrets(self, namespace: str = "default") -> List[client.V1Secret]:
+    def list_secrets( namespace: str = "default") -> List[client.V1Secret]:
         """
         列出命名空间下所有 Secret。
         注意：返回对象的 data 字段为 base64 编码值，需自行解码。
         """
         return self.core_v1.list_namespaced_secret(namespace).items
 
-    def get_secret(self, name: str, namespace: str = "default") -> client.V1Secret:
+    def get_secret( name: str, namespace: str = "default") -> client.V1Secret:
         """获取 Secret 详情（data 为 base64 编码）。"""
         return self.core_v1.read_namespaced_secret(name, namespace)
 
     # ==================== StatefulSet / DaemonSet 操作 ====================
 
-    def list_statefulsets(self, namespace: str = "default") -> List[client.V1StatefulSet]:
+    def list_statefulsets( namespace: str = "default") -> List[client.V1StatefulSet]:
         """列出命名空间下所有 StatefulSet。"""
         return self.apps_v1.list_namespaced_stateful_set(namespace).items
 
-    def scale_statefulset(self, name: str, replicas: int, namespace: str = "default"):
+    def scale_statefulset( name: str, replicas: int, namespace: str = "default"):
         """扩缩容 StatefulSet 副本数。"""
         body = {"spec": {"replicas": replicas}}
         return self.apps_v1.patch_namespaced_stateful_set_scale(name, namespace, body)
 
-    def delete_statefulset(self, name: str, namespace: str = "default"):
+    def delete_statefulset( name: str, namespace: str = "default"):
         """删除 StatefulSet。"""
         return self.apps_v1.delete_namespaced_stateful_set(name, namespace)
 
-    def list_daemonsets(self, namespace: str = "default") -> List[client.V1DaemonSet]:
+    def list_daemonsets( namespace: str = "default") -> List[client.V1DaemonSet]:
         """列出命名空间下所有 DaemonSet。"""
         return self.apps_v1.list_namespaced_daemon_set(namespace).items
 
-    def delete_daemonset(self, name: str, namespace: str = "default"):
+    def delete_daemonset( name: str, namespace: str = "default"):
         """删除 DaemonSet。"""
         return self.apps_v1.delete_namespaced_daemon_set(name, namespace)
 
     # ==================== Job 操作 ====================
 
-    def create_job(self, body: Dict[str, Any], namespace: str = "default"):
+    def create_job( body: Dict[str, Any], namespace: str = "default"):
         """通过 dict 创建 Job。"""
         return self.batch_v1.create_namespaced_job(namespace, body)
 
     def list_jobs(
-            self, namespace: str = "default", label_selector: Optional[str] = None
+             namespace: str = "default", label_selector: Optional[str] = None
     ) -> List[client.V1Job]:
         """列出命名空间下所有 Job，可按标签过滤。"""
         return self.batch_v1.list_namespaced_job(
             namespace, label_selector=label_selector
         ).items
 
-    def get_job(self, name: str, namespace: str = "default"):
+    def get_job( name: str, namespace: str = "default"):
         """获取 Job 详情（含 spec 和 status）。"""
         return self.batch_v1.read_namespaced_job(name, namespace)
 
-    def get_job_status(self, name: str, namespace: str = "default"):
+    def get_job_status( name: str, namespace: str = "default"):
         """
         仅获取 Job 的 status 子资源，适合轮询场景，开销小于 read_namespaced_job。
         """
         return self.batch_v1.read_namespaced_job_status(name, namespace)
 
     def delete_job(
-            self, name: str, namespace: str = "default", propagation_policy: str = "Background"
+             name: str, namespace: str = "default", propagation_policy: str = "Background"
     ):
         """
         删除 Job。
@@ -313,7 +313,7 @@ class K8sClient:
         return self.batch_v1.delete_namespaced_job(name, namespace, body)
 
     def wait_job_complete(
-            self,
+            
             name: str,
             namespace: str = "default",
             poll_interval: int = 5,
@@ -337,30 +337,30 @@ class K8sClient:
 
     # ==================== CronJob 操作 ====================
 
-    def create_cronjob(self, body: Dict[str, Any], namespace: str = "default"):
+    def create_cronjob( body: Dict[str, Any], namespace: str = "default"):
         """通过 dict 创建 CronJob。"""
         return self.batch_v1.create_namespaced_cron_job(namespace, body)
 
-    def list_cronjobs(self, namespace: str = "default") -> List[client.V1CronJob]:
+    def list_cronjobs( namespace: str = "default") -> List[client.V1CronJob]:
         """列出命名空间下所有 CronJob。"""
         return self.batch_v1.list_namespaced_cron_job(namespace).items
 
-    def get_cronjob(self, name: str, namespace: str = "default"):
+    def get_cronjob( name: str, namespace: str = "default"):
         """获取 CronJob 详情。"""
         return self.batch_v1.read_namespaced_cron_job(name, namespace)
 
-    def patch_cronjob(self, name: str, body: Dict[str, Any], namespace: str = "default"):
+    def patch_cronjob( name: str, body: Dict[str, Any], namespace: str = "default"):
         """
         部分更新 CronJob，常用于修改 schedule 或 suspend 字段。
         """
         return self.batch_v1.patch_namespaced_cron_job(name, namespace, body)
 
-    def delete_cronjob(self, name: str, namespace: str = "default"):
+    def delete_cronjob( name: str, namespace: str = "default"):
         """删除 CronJob。"""
         return self.batch_v1.delete_namespaced_cron_job(name, namespace)
 
     def trigger_job_from_cronjob(
-            self, cronjob_name: str, job_name: str, namespace: str = "default"
+             cronjob_name: str, job_name: str, namespace: str = "default"
     ):
         """
         从已有 CronJob 手动触发一次 Job（等价于
@@ -395,12 +395,12 @@ class K8sClient:
         """列出集群所有节点。"""
         return self.core_v1.list_node().items
 
-    def label_node(self, name: str, labels: Dict[str, str]):
+    def label_node( name: str, labels: Dict[str, str]):
         """给节点打标签（合并式 patch，不覆盖已有标签）。"""
         body = {"metadata": {"labels": labels}}
         return self.core_v1.patch_node(name, body)
 
-    def cordon_node(self, name: str, unschedulable: bool = True):
+    def cordon_node( name: str, unschedulable: bool = True):
         """
         标记节点是否可调度（cordon/uncordon）。
 
@@ -409,7 +409,7 @@ class K8sClient:
         body = {"spec": {"unschedulable": unschedulable}}
         return self.core_v1.patch_node(name, body)
 
-    def drain_node(self, name: str):
+    def drain_node( name: str):
         """
         简化版节点驱逐：对节点上非 DaemonSet 管理的 Pod 调用 Eviction API。
 
@@ -440,13 +440,13 @@ class K8sClient:
     # ==================== PVC 操作 ====================
 
     def list_pvcs(
-            self, namespace: str = "default"
+             namespace: str = "default"
     ) -> List[client.V1PersistentVolumeClaim]:
         """列出命名空间下所有 PVC。"""
         return self.core_v1.list_namespaced_persistent_volume_claim(namespace).items
 
     def get_pvc(
-            self, name: str, namespace: str = "default"
+             name: str, namespace: str = "default"
     ) -> client.V1PersistentVolumeClaim:
         """获取 PVC 详情。"""
         return self.core_v1.read_namespaced_persistent_volume_claim(name, namespace)
@@ -457,17 +457,17 @@ class K8sClient:
         """列出所有命名空间名称。"""
         return [ns.metadata.name for ns in self.core_v1.list_namespace().items]
 
-    def create_namespace(self, name: str):
+    def create_namespace( name: str):
         """创建命名空间。"""
         body = client.V1Namespace(metadata=client.V1ObjectMeta(name=name))
         return self.core_v1.create_namespace(body)
 
-    def delete_namespace(self, name: str):
+    def delete_namespace( name: str):
         """删除命名空间（级联删除其下所有资源，谨慎使用）。"""
         return self.core_v1.delete_namespace(name)
 
     def get_events(
-            self, namespace: str = "default", field_selector: Optional[str] = None
+             namespace: str = "default", field_selector: Optional[str] = None
     ) -> List[client.CoreV1Event]:
         """
         获取命名空间事件，常用于排障。

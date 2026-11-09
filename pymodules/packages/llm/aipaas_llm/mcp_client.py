@@ -21,7 +21,7 @@ class _LegacyFallbackTransport(httpx2.AsyncBaseTransport):
     def __init__(self):
         self._transport = httpx2.AsyncHTTPTransport()
 
-    async def handle_async_request(self, request):
+    async def handle_async_request( request):
         response = await self._transport.handle_async_request(request)
         if response.status_code < 500:
             return response

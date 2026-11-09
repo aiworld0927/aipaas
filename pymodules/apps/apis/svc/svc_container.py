@@ -3669,20 +3669,20 @@ def get_configparam_by_modeltype():
 
 
 class Proc:
-    def __init__(self, stdin, stdout, stderr):
+    def __init__( stdin, stdout, stderr):
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
 
 
 class NNI_Task:
-    def __init__(self, local_conf, cont_addr, task_id, exp_name=None, user_name=None, node_id=None, dep_path=None):
+    def __init__( local_conf, cont_addr, task_id, exp_name=None, user_name=None, node_id=None, dep_path=None):
         self._conf = local_conf
         self.user_name = user_name
         self.exp_name = exp_name
         self.nt = self.__conn_cont(local_conf, cont_addr, task_id, node_id, exp_name, dep_path)
 
-    # def __init__(self, local_conf, cont_addr, exp_name, run_id, user_name=None, dep_path=None):
+    # def __init__( local_conf, cont_addr, exp_name, run_id, user_name=None, dep_path=None):
 
     # self.params = params
     # if task_name is None:
@@ -3693,7 +3693,7 @@ class NNI_Task:
     #     with open(f"{self.task_path}/define.json", "r", encoding="utf8") as fi:
     #         self.task_conf = json.load(fi)
 
-    def __conn_cont(self, _conf, cont_addr, task_id, node_id, exp_name, dep_path):
+    def __conn_cont( _conf, cont_addr, task_id, node_id, exp_name, dep_path):
         host, port = cont_addr.split(":", maxsplit=1)
         nt = NodeTask(wf_id='123', task_id=task_id, proc_id="2", node_id=node_id,
                       conninfo=dict(
@@ -3706,7 +3706,7 @@ class NNI_Task:
     def close(self):
         self.nt.disconnect()
 
-    def get_dataset(self, dataset):
+    def get_dataset( dataset):
         '在容器中下载指定数据集到， 其中的文件存放到 $LOG_DIR_C/data 目录下'
         if dataset is None:
             log.warning("dataset is None")
@@ -3752,14 +3752,14 @@ class NNI_Task:
             self.nt._exec_(f"mv ./data/{dname}/* ./data")
         return True
 
-    def save_data_to_file(self, data, remote_path):
+    def save_data_to_file( data, remote_path):
         fname = os.path.basename(remote_path)
         tmp_fname = f'/tmp/{fname}'
         with open(tmp_fname, 'w', encoding='utf-8') as fo:
             fo.write(data)
         self.nt._scp(tmp_fname, remote_path, is_upload=True, is_dir=False)
 
-    def start(self, task_name, params):
+    def start( task_name, params):
         '开启任务的进程'
         # params = self.params
         # t_conf = self.task_conf
@@ -3964,7 +3964,7 @@ class NNI_Task:
             logger.error(f"-- get trials failed: {x}")
             return None
 
-    def get_trials_log(self, ip_address, service_port, trial_id):
+    def get_trials_log( ip_address, service_port, trial_id):
         out = self.nt._exec_("curl http://{ip_address}:{service_port}/api/v1/nni/trial-log/{trial_id}/TRIAL_ERROR",
                              out_remove_fistline=True)
         try:
@@ -3974,7 +3974,7 @@ class NNI_Task:
             log.error("-- get trials failed: {}", x)
             return None
 
-    def stop_task(self, task_name):
+    def stop_task( task_name):
         '停止任务， 如果使用了pyenv， 需要先进行切换'
         nt = self.nt
         task_path = f"{self._conf['task_base']}/{task_name}"
@@ -3995,7 +3995,7 @@ class NNI_Task:
         else:
             log.info(out)
 
-    def model_export(self, nni_exp_id, nni_trial_id, model_id, model_ver):
+    def model_export( nni_exp_id, nni_trial_id, model_id, model_ver):
         '模型导出， 其中 nni_exp_id 可以为None， nni_trial_id 也可以为 None， 前者为None则选择当前环境中最新的exp ID， 后者为None时， 则选择最新完成的trial'
         nt = self.nt
         _exec = nt._exec_
@@ -4065,7 +4065,7 @@ class NNI_Task:
         print(out)
         print(nt._exec_(f"rm -rf {m_dir}"))
 
-    def model_deploy(self, model_id, model_ver=None):
+    def model_deploy( model_id, model_ver=None):
         '将指定的模型（之前导出的）部署到指定主机上，暂时启动为服务'
         # done 模型部署并启动服务
         log.info("--model_deploy %s %s", model_id, model_ver)
@@ -4126,7 +4126,7 @@ class NNI_Task:
         except Exception as x:
             log.error(f"register the port to nginx error: python /data/ng1/ng.py add {model_id} {port_number}")
 
-    def model_deploy_train_failed(self, model_id, run_id, model_ver=None):
+    def model_deploy_train_failed( model_id, run_id, model_ver=None):
         '将指定的模型（之前导出的）部署到指定主机上，暂时启动为服务'
         # done 模型部署并启动服务
         nt = self.nt
@@ -4169,7 +4169,7 @@ class NNI_Task:
             log.error(
                 f"register the error logs to nginx error: python /data/ng1/ng.py add_error_log {model_id} {run_id} {model_ver}")
 
-    def model_show_tensorboard(self, exp_name, run_id=None):
+    def model_show_tensorboard( exp_name, run_id=None):
         'start a tensorboard process in test container, to view the train scalar data'
         # through python /data/ng1/ng.py start-tb <path to tb data>
         # auto shutdown in 5 min
@@ -4233,7 +4233,7 @@ class NNI_Task:
 
 
 class NodeTask:
-    def __init__(self, wf_id, task_id, proc_id, node_id, conninfo, exp_name, user_name=None):
+    def __init__( wf_id, task_id, proc_id, node_id, conninfo, exp_name, user_name=None):
         self.wf_id = wf_id
         self.task_id = task_id
         self.proc_id = proc_id
@@ -4247,7 +4247,7 @@ class NodeTask:
         self.user_name = user_name
         self._until_ = '[_PS1_]'
 
-    def connect(self, wd=None, run_env=None):
+    def connect( wd=None, run_env=None):
         ssh = paramiko.SSHClient()
 
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -4307,7 +4307,7 @@ class NodeTask:
             for k, v in run_env.items():
                 self._exec_(f"export {k}=\"{v}\"")
 
-    def _exec_(self, cmd, ln_limit=-1, outs=None, remove_str=None, out_remove_fistline=False):
+    def _exec_( cmd, ln_limit=-1, outs=None, remove_str=None, out_remove_fistline=False):
         proc = self.proc
         proc.stdin.write(cmd + '\n')
         print('====', cmd)
@@ -4333,11 +4333,11 @@ class NodeTask:
         else:
             return "".join(outs)
 
-    def source_act(self, name):
+    def source_act( name):
         out = self._exec_('source activate %s && export PS1=%s\\\\n' % (name, self._until_))
         return out
 
-    def change_home(self, newhome):
+    def change_home( newhome):
         self.log_dir_c = newhome
         self._exec_(f"mkdir -p {self.log_dir_c}")
         self._exec_(f"cd {self.log_dir_c}")
@@ -4351,7 +4351,7 @@ class NodeTask:
         self.proc.stdout.close()
         self.ssh.close()
 
-    def install_dependency(self, dep, pypi_server=None):
+    def install_dependency( dep, pypi_server=None):
         '''
 - dependency
   - package\[\]  预定义的依赖包
@@ -4372,7 +4372,7 @@ class NodeTask:
         if 'pip' in dep:
             self.install_pip(dep['pip'], pypi_server)
 
-    def install_pip(self, pip_list, pypi_server):
+    def install_pip( pip_list, pypi_server):
         '''install pip packages'''
         if pypi_server is None or pypi_server == '':
             log.warning("install_pip but without pypi_server given")
@@ -4390,7 +4390,7 @@ class NodeTask:
         print(out)
         # print("stderr", self.proc.stderr.readline() )
 
-    def _scp(self, src, dst, is_upload=True, is_dir=True):
+    def _scp( src, dst, is_upload=True, is_dir=True):
         c = self.conninfo
         if is_upload:
             args = shlex.split(
@@ -4408,7 +4408,7 @@ class NodeTask:
         out = subprocess.check_output(args)
         print(out)
 
-    def install_pkg(self, name, target_path=''):
+    def install_pkg( name, target_path=''):
         'upload package.tar.gz and unpack it'
         print('begin to install package', name)
         print(self._exec_("pwd"))
@@ -4432,20 +4432,20 @@ class NodeTask:
 
         print(self._exec_("echo $PATH $LOGDIR_C"))
 
-    def install_file(self, path, target=''):
+    def install_file( path, target=''):
         fpath = f"{self.local_base_dir}/{self.wf_id}/{path}"
         if not os.path.exists(fpath):
             log.error("fpath: {} not exists", fpath)
             return
         self._scp(fpath, f"{self.log_dir_c}/{target}", is_upload=True)
 
-    def uninstall_files(self, files):
+    def uninstall_files( files):
         ff = []
         for p in files:
             ff.append(f"{self.log_dir_c}/{p['target_path']}/{p['path']}")
         self._exec_(f"rm -rf {' '.join(ff)}")
 
-    def uninstall_pkg(self, pkg):
+    def uninstall_pkg( pkg):
         for p in pkg:
             name, target_path = p['name'], p['target_path']
             uninstallfile = f"{self.local_base_dir}/{name}/uninstall.sh"
@@ -4455,7 +4455,7 @@ class NodeTask:
                     if ln.strip() != '':
                         self._exec_(ln.strip())
 
-    def uninstall_pip(self, pip_list):
+    def uninstall_pip( pip_list):
         self._exec_(f"rm -rf {self.log_dir_c}/.local/lib")
 
     def uninstall_dependency(self):
@@ -4467,7 +4467,7 @@ class NodeTask:
         if 'pip' in self._dep:
             self.uninstall_pip(self._dep['pip'])
 
-    def run_cmd(self, cmd):
+    def run_cmd( cmd):
         'run cmd in background'
         out = self._exec_(f"{cmd} 1>stdout 2>stderr &")
         # [1] 1078
@@ -4484,7 +4484,7 @@ class NodeTask:
           status: running not-run done failed
           exit-code: 0 or not-0
         '''
-        if not hasattr(self, 'job_idx') or self.job_idx is None:
+        if not hasattr( 'job_idx') or self.job_idx is None:
             return 'not-run', 0
         out = self._exec_("jobs")
         for ln in out.split('\n'):
@@ -4503,7 +4503,7 @@ class NodeTask:
         return 'not-run', 0
 
     def kill_cmd(self):
-        if hasattr(self, 'job_pid'):
+        if hasattr( 'job_pid'):
             self._exec_(f"kill -9 {self.job_pid}")
 
 

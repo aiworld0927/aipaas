@@ -18,7 +18,7 @@ class NodeSearchEmbeddingHyde(BaseNode):
     # 覆盖基类的 name 属性，标识节点名称
     name: str = "node_search_embedding_hyde"
 
-    def process(self, state: QueryGraphState) -> QueryGraphState:
+    def process( state: QueryGraphState) -> QueryGraphState:
         """
         HyDE (Hypothetical Document Embedding) 检索节点
         核心思想：通过LLM生成假设性答案（HyDE文档），将其向量化后用于检索，以解决短查询语义稀疏问题。
@@ -57,7 +57,7 @@ class NodeSearchEmbeddingHyde(BaseNode):
             logger.exception(f"假设性文档向量搜索失败: {e}")
             return {}
 
-    def _step_1_create_hyde_doc(self, rewritten_query: str) -> str:
+    def _step_1_create_hyde_doc( rewritten_query: str) -> str:
         """
         阶段1：利用大模型根据用户查询生成假设性文档（Hypothetical Document）。
         HyDE的核心在于：利用LLM生成一个“虚构但相关”的文档，用该文档的向量去检索真实的文档，
@@ -80,7 +80,7 @@ class NodeSearchEmbeddingHyde(BaseNode):
             raise e
 
     def _step_2_search_embedding_hyde(
-            self,
+            
             rewritten_query: str,
             hyde_doc: str,
             item_names=None

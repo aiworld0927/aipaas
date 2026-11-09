@@ -20,9 +20,9 @@ class LLMConfig:
     mcp_api_key: str
 
 lm_config = LLMConfig(
-    base_url=os.getenv("OPENAI_BASE_URL",""),
+    base_url=os.getenv("OPENAI_BASE_URL","https://dashscope.aliyuncs.com/compatible-mode/v1"),
     api_key=os.getenv("OPENAI_API_KEY",""),
-    vl_model=os.getenv("VL_MODEL",""),
+    vl_model=os.getenv("VL_MODEL","qwen3.6-flash"),
     llm_model=os.getenv("LLM_DEFAULT_MODEL",""),
     llm_temperature=float(os.getenv("LLM_DEFAULT_TEMPERATURE",0.0)),
     mcp_base_url=os.getenv("MCP_SERVER_BASE_URL",""),

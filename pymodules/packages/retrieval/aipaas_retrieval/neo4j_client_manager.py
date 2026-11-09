@@ -4,7 +4,7 @@ from aipaas_common.conf.app_config import Neo4jConfig, app_config
 
 
 class Neo4jClientManager:
-    def __init__(self,neo4j_config:Neo4jConfig):
+    def __init__(neo4j_config:Neo4jConfig):
         self.neo4j_config = neo4j_config
         self.driver = None
 

@@ -8,7 +8,7 @@
 class ImportProcessError(Exception):
     """导入流程基础异常"""
 
-    def __init__(self, message: str, node_name: str = "", cause: Exception = None):
+    def __init__( message: str, node_name: str = "", cause: Exception = None):
         self.node_name = node_name
         self.cause = cause
         super().__init__(message)
@@ -23,19 +23,16 @@ class ImportProcessError(Exception):
         return " ".join(parts)
 
 
-
 class StateFieldError(ImportProcessError):
-    """状态字段错误。
-
+    """状态字段错误
     从 state 中获取必需字段缺失、为空或类型不符时抛出。
-
     Attributes:
         field_name: 缺失或无效的字段名称。
         expected_type: 期望的字段类型（可选）。
     """
 
     def __init__(
-            self,
+            
             node_name: str = "",
             field_name: str = "",
             expected_type: type = None,

@@ -9,7 +9,7 @@ from rag.import_processor.exceptions import ImportProcessError
 class NodeTest(BaseNode):
     name = "test_node"  # 覆盖基类的 name
 
-    def process(self, state: Dict) -> Dict:
+    def process( state: Dict) -> Dict:
         """
         实现具体的 process 逻辑。
         这里我们简单地修改状态，添加一个键值对，并记录一个步骤日志。

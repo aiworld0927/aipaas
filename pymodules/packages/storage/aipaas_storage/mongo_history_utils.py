@@ -247,7 +247,7 @@ class CustomJSONEncoder(json.JSONEncoder):
     """
     自定义 JSON 编码器，支持 MongoDB ObjectId 等特殊类型
     """
-    def default(self, obj: Any) -> Any:
+    def default( obj: Any) -> Any:
         if isinstance(obj, ObjectId):
             return str(obj)
         return super().default(obj)

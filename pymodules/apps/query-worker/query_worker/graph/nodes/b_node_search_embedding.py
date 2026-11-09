@@ -15,7 +15,7 @@ class NodeSearchEmbedding(BaseNode):
     # 覆盖基类的 name 属性，标识节点名称
     name: str = "node_search_embedding"
 
-    def process(self, state: QueryGraphState) -> QueryGraphState:
+    def process( state: QueryGraphState) -> QueryGraphState:
         """
         核心节点函数：基于已确认商品名+改写后的用户问题，执行Milvus向量数据库混合检索
         流程：用户问题向量化 → 构造带商品名过滤的混合搜索请求 → 执行稠密+稀疏混合检索 → 返回检索结果

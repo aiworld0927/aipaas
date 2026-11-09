@@ -18,7 +18,7 @@ class NodeWebSearchMcp(BaseNode):
     # 覆盖基类的 name 属性，标识节点名称
     name: str = "node_web_search_mcp"
 
-    def process(self, state: QueryGraphState) -> QueryGraphState:
+    def process( state: QueryGraphState) -> QueryGraphState:
 
         query = state.get("rewritten_query", "")
         docs = []
@@ -45,7 +45,7 @@ class NodeWebSearchMcp(BaseNode):
         return {}
 
 
-    async def _mcp_call(self, query):
+    async def _mcp_call( query):
 
         search_mcp = MCPServerStreamableHttp(
             name="search_mcp",

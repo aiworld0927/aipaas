@@ -22,7 +22,7 @@ class NodeAnswerOutput(BaseNode):
     # 覆盖基类的 name 属性，标识节点名称
     name: str = "node_answer_output"
 
-    def process(self, state: QueryGraphState) -> QueryGraphState:
+    def process( state: QueryGraphState) -> QueryGraphState:
         """
         1 判断state 中的answer是否已经存在，如果存在直接输出answer中的答案，注意判断是否需要流式输出需要则流式输出
         2 根据state中的问题、重新问题、历史对话、提问商品（item_names）、 重排内容 组织prompt 并调用llm 生成答案
@@ -76,7 +76,7 @@ class NodeAnswerOutput(BaseNode):
         return state
 
 
-    def _step_1_check_answer(self, state) -> bool:
+    def _step_1_check_answer( state) -> bool:
       """
       阶段一：检查 state 中是否已有 answer。
       - 若已存在：按需推送流式 delta（用于 SSE），并返回 True
@@ -94,7 +94,7 @@ class NodeAnswerOutput(BaseNode):
       else:
         return False
 
-    def _step_2_construct_prompt(self, state: QueryGraphState) -> str:
+    def _step_2_construct_prompt( state: QueryGraphState) -> str:
 
         """
         阶段二：构建 Prompt
@@ -131,7 +131,7 @@ class NodeAnswerOutput(BaseNode):
         # logger.info(f"组装后的提示词为：{prompt}")
         return prompt
 
-    def _format_reranked_docs(self, reranked_docs: List[Dict], char_budget: int) -> Tuple[str, int]:
+    def _format_reranked_docs( reranked_docs: List[Dict], char_budget: int) -> Tuple[str, int]:
         """格式化重排序文档，带字符预算控制"""
         formatted_lines = []
         used_chars = 0
@@ -175,7 +175,7 @@ class NodeAnswerOutput(BaseNode):
 
         return "\n\n".join(formatted_lines), char_budget - used_chars
 
-    def _format_chat_history(self, chat_history: List[Dict], char_budget: int) -> Tuple[str, int]:
+    def _format_chat_history( chat_history: List[Dict], char_budget: int) -> Tuple[str, int]:
         """格式化历史对话"""
         formatted_lines = []
         used_chars = 0
@@ -198,7 +198,7 @@ class NodeAnswerOutput(BaseNode):
 
         return "\n".join(formatted_lines), char_budget - used_chars
 
-    def _step_3_generate_response(self, state: QueryGraphState, prompt: str) -> QueryGraphState:
+    def _step_3_generate_response( state: QueryGraphState, prompt: str) -> QueryGraphState:
         """
         阶段三：生成回答
         调用llm生成答案，支持流式输出
@@ -249,7 +249,7 @@ class NodeAnswerOutput(BaseNode):
 
         return state
 
-    def _extract_images_from_docs(self, docs):
+    def _extract_images_from_docs( docs):
         """
         辅助方法：从文档列表中提取图片URL
 

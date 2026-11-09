@@ -4,7 +4,7 @@ from aipaas_common.conf.app_config import EmbeddingConfig, app_config
 
 
 class EmbeddingClientManager:
-    def __init__(self, config: EmbeddingConfig):
+    def __init__( config: EmbeddingConfig):
         self.client: Optional[HuggingFaceEndpointEmbeddings] = None
         self.config = config
 

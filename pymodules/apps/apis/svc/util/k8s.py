@@ -11,7 +11,7 @@ from kubernetes.stream import stream
 
 
 class K8S:
-    def __init__(self, kubeconfig, namespace=None):
+    def __init__( kubeconfig, namespace=None):
         self.kubeconfig = kubeconfig
         if not namespace:
             with open(self.kubeconfig) as fi:
@@ -25,7 +25,7 @@ class K8S:
         self.appv1 = client.AppsV1Api(api)
         self.api_instance = client.AutoscalingV1Api(api)
 
-    def create_pvc(self, pvc_name: str, size_in_mb: int, storage_class_name="glusterfs-sc"):
+    def create_pvc( pvc_name: str, size_in_mb: int, storage_class_name="glusterfs-sc"):
         logger.info("create pvc name={} size={}Mi", pvc_name, size_in_mb)
         pvc = client.V1PersistentVolumeClaim(api_version="v1", kind="PersistentVolumeClaim",
                                              metadata=client.V1ObjectMeta(name=pvc_name, labels={"pvc": pvc_name}),
@@ -48,7 +48,7 @@ class K8S:
             return False
 
     # 创建service
-    def create_service(self, svc_name: str,
+    def create_service( svc_name: str,
                        Ports: list,
                        # 暴露端口, 格式: [ [name, protocol, port, node_port], ...], node_port为None时表明外部端口自动分配
                        selector: dict,  # 如何选择服务的目标, 如: {"app":"something"}
@@ -70,7 +70,7 @@ class K8S:
             logger.error("create service failed: {}", x)
             return False
 
-    def create_horizontal_pod_autoscaling(self,
+    def create_horizontal_pod_autoscaling(
                                           hpa_name: str,
                                           max_replicas: int,
                                           min_replicas: int,
@@ -110,7 +110,7 @@ class K8S:
             logger.error("create deployment {} failed {}", hpa_name, x)
         return False
 
-    def delete_all(self, dep_name=None, svc_name=None, pvc_name=None):
+    def delete_all( dep_name=None, svc_name=None, pvc_name=None):
         if dep_name == '' or svc_name == '' or pvc_name == '':
             logger.warning("fatal operations: dep[{}] svc[{}] pvc[{}] {}",
                            dep_name, svc_name, pvc_name, traceback.format_exc())
@@ -161,7 +161,7 @@ class K8S:
         #     except Exception as x:
         #         logger.error("delete svc %s failed, but Continue...%s" % (svc_name, x))
 
-    def create_deployment(self, dep_name: str, image: str,
+    def create_deployment( dep_name: str, image: str,
                           cpu: float,  # CPU limit, cores
                           memory: int,  # Memory limit, Mb
                           entrypoint: str,  # 启动程序
@@ -316,7 +316,7 @@ class K8S:
             logger.error("create deployment {} failed {}", dep_name, x)
         return False
 
-    def create_deployment_new(self, dep_name: str, image: str,
+    def create_deployment_new( dep_name: str, image: str,
                           cpu: float,  # CPU limit, cores
                           memory: int,  # Memory limit, Mb
                           entrypoint: str = None,  # 启动程序
@@ -502,7 +502,7 @@ class K8S:
             logger.error("create deployment {} failed {}", dep_name, x)
         return False
 
-    def specify_host(self, pod_spec, affinity):
+    def specify_host( pod_spec, affinity):
         node_selector_requirement = client.V1NodeSelectorRequirement(
             key="kubernetes.io/hostname",
             operator="In",
@@ -526,7 +526,7 @@ class K8S:
         )
         # pod_spec.affinity = [client.V1Affinity(required_during_scheduling_ignored_during_execution=)]
 
-    def _gpu_res_new(self, res_spec, pod_spec: client.V1PodSpec, container_name):
+    def _gpu_res_new( res_spec, pod_spec: client.V1PodSpec, container_name):
         '''向资源中设置gpu资源描述, 通过json格式在表 c_res_gpu.res_spe 中进行描述
 
         入参:
@@ -597,7 +597,7 @@ class K8S:
             pass
             client.V1Affinity()
 
-    def _gpu_res(self, gpu_id, res_spec, pod_spec: client.V1PodSpec, container_name):
+    def _gpu_res( gpu_id, res_spec, pod_spec: client.V1PodSpec, container_name):
         '''向资源中设置gpu资源描述, 通过json格式在表 c_res_gpu.res_spe 中进行描述
 
         入参:
@@ -681,7 +681,7 @@ class K8S:
             pass
             client.V1Affinity()
 
-    def query_pod(self, deployment, get_envs=False):
+    def query_pod( deployment, get_envs=False):
         '''查询pod的状态和地址端口等
         返回: pod_name, node_host, ready, total, ports=[[target_port, protocol, node_port],...]'''
         ret = self.corev1.list_namespaced_pod(namespace=self.namespace, label_selector=f"app={deployment}")
@@ -733,10 +733,10 @@ class K8S:
             return pod_name, node_host, ready, total, ports, envs
         return pod_name, node_host, ready, total, ports
 
-    def list_event(self, name):
+    def list_event( name):
         self.corev1.read_namespaced_event()
 
-    def query_pvc(self, name):
+    def query_pvc( name):
         '''查询PVC的情况, 返回名称和大小:
         phase, capacity, access_mode
         '''
@@ -759,7 +759,7 @@ class K8S:
                 access_modes = st.access_modes[0]
             return st.phase, capacity, access_modes
 
-    def query_pvc_obj(self, name):
+    def query_pvc_obj( name):
         '''查询PVC的情况, 返回obj:
         phase, capacity, access_mode
         '''
@@ -779,7 +779,7 @@ class K8S:
         logger.info("found deploy {}", len(res.items))
         return [(r.metadata.name, r.status.ready_replicas) for r in res.items]
 
-    def get_deploy(self, deployment):
+    def get_deploy( deployment):
         """ 获取"""
         ret = self.appv1.list_namespaced_deployment(namespace=self.namespace,
                                                     field_selector=f"metadata.name={deployment}")
@@ -796,7 +796,7 @@ class K8S:
                     ready = total - ret.items[0].status.unavailable_replicas
         return ready, total
 
-    def k8s_query_pod(self, dep_name):
+    def k8s_query_pod( dep_name):
         '''根据deployment的名称, 查询pod名称
 
         返回: pod-name, [(inner_port,node_addr),..]
@@ -817,7 +817,7 @@ class K8S:
             node_host = st.host_ip
             return pod_name, node_host
 
-    def query_svc(self, svc_name):
+    def query_svc( svc_name):
         v1 = self.corev1
         ret = v1.list_namespaced_service(namespace=self.namespace, field_selector=f"metadata.name={svc_name}")
         if len(ret.items) < 1:
@@ -828,7 +828,7 @@ class K8S:
             ports = [(p.target_port, p.node_port, p.protocol) for p in item.spec.ports]
         return ports
 
-    def del_svc(self, svc_name):
+    def del_svc( svc_name):
         try:
             resp = self.corev1.delete_namespaced_service(name=svc_name, namespace=self.namespace,
                                                          body=client.V1DeleteOptions())
@@ -836,7 +836,7 @@ class K8S:
         except Exception as x:
             return False
 
-    def create_svc(self, svc_name: str,
+    def create_svc( svc_name: str,
                    Ports: list,
                    # 暴露端口, 格式: [ [name, protocol, port, node_port], ...], node_port为None时表明外部端口自 动分配
                    selector: dict,  # 如何选择服务的目标, 如: {"app":"something"}
@@ -859,7 +859,7 @@ class K8S:
             print(self.namespace, svc_name, Ports, selector)
             return False
 
-    def query_deployment(self, deployment_name):
+    def query_deployment( deployment_name):
         '''
         根据pod name 查询对应deployment详细信息
         '''
@@ -867,7 +867,7 @@ class K8S:
         read_deployment = apps_v1.read_namespaced_deployment(name=deployment_name, namespace=self.namespace)
         return read_deployment
 
-    def patc_pvc(self, name, storage, k8s_storage_class):
+    def patc_pvc( name, storage, k8s_storage_class):
         logger.info("...entry _patc_pvc...")
         # try:
         #     storage_original[:-2]
@@ -894,7 +894,7 @@ class K8S:
         return True, ''
 
 
-    def patch_namespaced_deployment(self, deployment_name, deployment):
+    def patch_namespaced_deployment( deployment_name, deployment):
 
         '''
         修改deployment  cpu、mem资源（局部更新yaml）
@@ -902,7 +902,7 @@ class K8S:
         apps_v1 = self.appv1
         ret = apps_v1.patch_namespaced_deployment(name=deployment_name, namespace=self.namespace, body=deployment)
 
-    def read_namespaced_persistent_volume_claim(self, pvc_name):
+    def read_namespaced_persistent_volume_claim( pvc_name):
 
         '''
         根据pvc名称查询详细信息
@@ -911,25 +911,25 @@ class K8S:
         ret = corev1.read_namespaced_persistent_volume_claim(pvc_name, self.namespace)
         return ret
 
-    def patch_namespaced_persistent_volume_claim(self, pvc_name, persistent_volume_claim):
+    def patch_namespaced_persistent_volume_claim( pvc_name, persistent_volume_claim):
         '''
         扩容pvc资源
         '''
         corev1 = self.corev1
         r = corev1.patch_namespaced_persistent_volume_claim(pvc_name, self.namespace, persistent_volume_claim)
 
-    def get_scale(self, deploy):
+    def get_scale( deploy):
         ret = self.appv1.read_namespaced_deployment_scale(deploy, self.namespace)
         if ret.spec.replicas is None:
             return 0
         return ret.spec.replicas
 
-    def set_scale(self, deploy, scale):
+    def set_scale( deploy, scale):
         dep = self.appv1.read_namespaced_deployment_scale(deploy, self.namespace)
         dep.spec.replicas = scale
         self.appv1.patch_namespaced_deployment(deploy, self.namespace, dep)
 
-    def pod_exec(self, container_name, message):
+    def pod_exec( container_name, message):
         stdout = None
         pod_name, node_host = self.pod_k8s_query_pod(container_name)
         exec_command = [
@@ -967,7 +967,7 @@ class K8S:
             # node_host = st.host_ip
             # return pod_name, node_host
 
-    def update_res(self, deploy):
+    def update_res( deploy):
         dep = self.appv1.read_namespaced_deployment_scale(deploy, self.namespace)
         logger.log(f'dep {dep}')
 

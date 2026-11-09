@@ -8,14 +8,14 @@ from loguru import logger
 
 
 class DBPool:
-    def __init__(self, conn_param, max_conn=10, max_idle_min=10):
+    def __init__( conn_param, max_conn=10, max_idle_min=10):
         self.conn_param = {k: conn_param.get(k, None) for k in ['user', 'password', 'host', 'port', 'database']}
         self.dbqueue = queue.LifoQueue()
         self.dbs = queue.Queue()
         self.max_conn = max_conn
         self.max_idle = max_idle_min * 60  # 最多闲置 10 分钟
 
-    def __call__(self, **kwargs):
+    def __call__( **kwargs):
         # pymysql.connect(host='localhost',
         #                 user='user',
         #                 password='passwd',
@@ -53,7 +53,7 @@ class DBPool:
                 logger.info(f"db is {None},dbs.qsize is {self.dbs.qsize()}")
                 return None
 
-    def ret(self, db):
+    def ret( db):
         self.dbqueue.put([db, time.time()])
 
     def close(self):

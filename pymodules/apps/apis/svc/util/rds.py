@@ -24,7 +24,7 @@ class RedisHelper_(object):
     channel: 发送接送消息的频道
     """
 
-    def __init__(self,
+    def __init__(
                  redis_nodes,
                  channel,
                  password=None):
@@ -45,20 +45,20 @@ class RedisHelper_(object):
             return False
 
     # 发送消息
-    def public(self,key,value):
+    def public(key,value):
         if self.ping():
             self.__conn.rpush(key,value)
             return True
         else:
             return False
 
-    def set(self,key,value):
+    def set(key,value):
         self.__conn.set(key,value)
 
-    def get(self,key):
+    def get(key):
         return self.__conn.get(key)
 
-    def exists(self,key):
+    def exists(key):
         return self.__conn.exists(key)
 
 
@@ -67,7 +67,7 @@ class RedisHelper(object):
     Redis 操作封装
     """
 
-    def __init__(self, host, port=None, passwd=None):
+    def __init__( host, port=None, passwd=None):
         if port is None:  # host 为单个连接串: 1.1.1.1:3679:passwd
             f = host.split(':', maxsplit=2)
             host = f[0]
@@ -83,12 +83,12 @@ class RedisHelper(object):
         except Exception as x:
             logger.error("close redis failed {}, {}", str(x), traceback.format_exc())
 
-    def put_message(self, key, message):
+    def put_message( key, message):
         n = self.__conn.lpush(key, message)
         if n == 0:
             logger.warning("redis lpush to queue failed")
 
-    def get_message(self, key, timeout=5):
+    def get_message( key, timeout=5):
         t_end = time.time() + timeout
         while time.time() < t_end:
             m = self.__conn.rpop(key)
@@ -97,12 +97,12 @@ class RedisHelper(object):
                 continue
             return m.decode('utf8')
 
-    def get_message_nowait(self, key):
+    def get_message_nowait( key):
         return self.__conn.rpop(key)
 
 
 class DelayTask:
-    def __init__(self, task_name, params, delay_sec=10, timeout_secs=60, timeout_task_name=None):
+    def __init__( task_name, params, delay_sec=10, timeout_secs=60, timeout_task_name=None):
         t = time.time()
         self.task_name = task_name
         self.params = params
@@ -113,7 +113,7 @@ class DelayTask:
         return json.dumps([self.next_time, self.task_name, self.max_time, self.timeout_task_name, self.params])
     def to_list(self):
         return [self.next_time, self.task_name, self.max_time, self.timeout_task_name, self.params]
-    def delay(self, secs):
+    def delay( secs):
         self.next_time = time.time()+secs
 
     @staticmethod
@@ -134,7 +134,7 @@ class DelayTask:
 
 class Worker:
     # 子进程类, 需要在进程中创建数据库连接池和redis连接,
-    def __init__(self, _conf):
+    def __init__( _conf):
         self.conf = _conf # 完整的pyserv config 对象
         # self.k8s = None #
         # self.db = None  # 数据库 DAO 对象
@@ -146,7 +146,7 @@ class Worker:
 
         self.k8s = K8S(self.conf['k8s_config_file'])
 
-    def add_delayed_task(self, dt: DelayTask):
+    def add_delayed_task( dt: DelayTask):
         # print("put delayed message!!!", dt.task_name)
         self.__rd.put_message("delayed", dt.to_json())
 

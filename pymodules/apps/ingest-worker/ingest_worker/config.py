@@ -4,9 +4,10 @@
 集中管理所有配置项，支持环境变量覆盖
 """
 
+import os
 from dataclasses import dataclass, field
 from typing import Set, Optional
-import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -59,7 +60,6 @@ class ImportConfig:
         default_factory=lambda: os.getenv("ENTITY_NAME_COLLECTION", "")
     )
 
-
     # ==================== MinIO 配置 ====================
     minio_endpoint: str = field(
         default_factory=lambda: os.getenv("MINIO_ENDPOINT", "")
@@ -99,13 +99,15 @@ class ImportConfig:
 _config: Optional[ImportConfig] = None
 
 
-def get_config() -> ImportConfig:
+def get_ingest_config() -> ImportConfig:
     """获取配置单例:全局共享同一份配置"""
     global _config
     if _config is None:
         _config = ImportConfig.from_env()
     return _config
 
+config  = get_ingest_config()
+
 if __name__ == '__main__':
     from aipaas_common.core.log import logger
-    logger.info(get_config())
+    logger.info(get_ingest_config())

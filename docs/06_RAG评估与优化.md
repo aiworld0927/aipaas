@@ -367,7 +367,7 @@ return llm, embeddings, metrics
 ```python
 class ProjectBGEEmbeddings(Embeddings):
 
-def embed_documents(self, texts: List[str]) -> List[List[float]]:
+def embed_documents( texts: List[str]) -> List[List[float]]:
 
 if not texts:
 
@@ -375,7 +375,7 @@ return []
 
 return generate_embeddings(texts)["dense"]
 
-def embed_query(self, text: str) -> List[float]:
+def embed_query( text: str) -> List[float]:
 
 dense = self.embed_documents([text])
 

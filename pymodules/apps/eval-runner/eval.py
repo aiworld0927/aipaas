@@ -144,7 +144,7 @@ class BgeM3EmbeddingsAdapter(Embeddings):
         供 ragas 的 LangchainEmbeddingsWrapper 调用(评估指标计算需要嵌入模型)。
     """
 
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    def embed_documents( texts: List[str]) -> List[List[float]]:
         """
         作用:批量文本向量化
         :param texts: 文本列表
@@ -153,7 +153,7 @@ class BgeM3EmbeddingsAdapter(Embeddings):
         result = generate_embeddings(texts)
         return result["dense"]
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query( text: str) -> List[float]:
         """
         作用:单条查询文本向量化
         :param text: 查询文本

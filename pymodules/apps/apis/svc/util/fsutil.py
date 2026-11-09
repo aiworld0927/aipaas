@@ -22,9 +22,9 @@ def _raise_pywebhdfs_exception(resp_code, message=None):
 def myget(url, params=None, **kwargs):
     return requests.get(url, params, stream=True, **kwargs)
 class HDFSClient(PyWebHdfsClient):
-    def __init__(self, **kwargs):
-        PyWebHdfsClient.__init__(self, **kwargs)
-    def down_file(self, fpath, fout, **kwargs):
+    def __init__( **kwargs):
+        PyWebHdfsClient.__init__( **kwargs)
+    def down_file( fpath, fout, **kwargs):
         optional_args = kwargs
         response = self._resolve_host(requests.get, True,
                                       fpath, operations.OPEN,
@@ -48,7 +48,7 @@ class HDFSClient(PyWebHdfsClient):
         #return response.content
 
 class FSUtil_:
-    def __init__(self, addrs="iasp75:12003,iasp76:12003", user_name="mci"):
+    def __init__( addrs="iasp75:12003,iasp76:12003", user_name="mci"):
         for addr in addrs.split(","):
             host, port = addr.split(":", maxsplit=2)
             hdfs = HDFSClient(host=host, port=port, user_name=user_name)
@@ -60,14 +60,14 @@ class FSUtil_:
                 print("hdfs test failed!!!!")
         # self.hdfs = HDFSClient(host='iasp75', port='12003', user_name='mci')
 
-    def __test__addr(self, hdfs):
+    def __test__addr( hdfs):
         try:
             r = hdfs.get_file_dir_status("/")
             return True
         except Exception as e:
             print(repr(e))
         return False
-    def down_file(self, fpath, local_file=None):
+    def down_file( fpath, local_file=None):
         '从hdfs下载spark输出的文件, 以 part-0??? 格式的系列文件, 下载的时候直接聚合到一个文件中'
         # hdfs = PyWebHdfsClient(host='iasp76', port='12003', user_name='mci')
         hdfs = self.hdfs
@@ -99,14 +99,14 @@ class FSUtil_:
             hdfs.down_file(fpath, foutname)
         return foutname
 
-    def up_file(self, local_file, fpath):
+    def up_file( local_file, fpath):
         if fpath.endswith('/'):
             fpath = fpath + local_file[local_file.rfind('/') + 1:]
         with open(local_file, "rb") as file_data:
             self.hdfs.create_file(fpath, file_data, overwrite=True)
-    def up_file_data(self, data, fpath):
+    def up_file_data( data, fpath):
         self.hdfs.create_file(fpath, data, overwrite=True)
-    def tmpfile(self, prefix="tmp_"):
+    def tmpfile( prefix="tmp_"):
         return tmpfile(prefix)
 
 '''
@@ -131,10 +131,10 @@ import logging as log
 
 class FSUtil:
     _exec = "$HADOOP_HOME/bin/pyhdfs"
-    def __init__(self, addrs="iasp75:12003,iasp76:12003", user_name="mci"):
+    def __init__( addrs="iasp75:12003,iasp76:12003", user_name="mci"):
         pass
 
-    def down_file(self, fpath, local_file=None):
+    def down_file( fpath, local_file=None):
         '从hdfs下载spark输出的文件, 以 part-0??? 格式的系列文件, 下载的时候直接聚合到一个文件中'
         if local_file is None:
             local_file = fpath[fpath.rfind('/') + 1:]
@@ -149,7 +149,7 @@ class FSUtil:
             sp.check_output("%s get '%s' '%s'" % (FSUtil._exec, fpath, local_file), shell=True)
         return local_file
 
-    def up_file(self, local_file, fpath):
+    def up_file( local_file, fpath):
         if not os.path.exists(local_file):
             raise Exception("file:"+local_file + " not found!")
         if fpath[-1] == '/':
@@ -159,7 +159,7 @@ class FSUtil:
         out = sp.check_output("%s put %s %s" % (FSUtil._exec, local_file, fpath), shell=True)
         #print("HPut output: [%s]" % out)
 
-    def up_file_data(self, data, fpath):
+    def up_file_data( data, fpath):
         ftmp = self.tmpfile()
         if type(data) == bytes:
             with open(ftmp, "wb") as fo:
@@ -170,17 +170,17 @@ class FSUtil:
         self.up_file(ftmp, fpath)
         os.remove(ftmp)
 
-    def makedirs(self, fpath):
+    def makedirs( fpath):
         sp.check_output("%s mkdir -p %s" %(FSUtil._exec, fpath), shell=True)
 
-    def tmpfile(self, prefix="tmp_", orig_name=None):
+    def tmpfile( prefix="tmp_", orig_name=None):
         return tmpfile(prefix, orig_name=orig_name)
 
 # 用于with语法块的临时目录清理
 class pathclean:
-    def __init__(self, path): self.path = path
+    def __init__( path): self.path = path
     def __enter__(self): pass
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__( exc_type, exc_val, exc_tb):
         if os.path.isdir(self.path):
             import shutil
             shutil.rmtree(self.path, ignore_errors=True)
@@ -188,12 +188,12 @@ class pathclean:
             os.remove(self.path)
 
 class chdir:
-    def __init__(self, dstpath):
+    def __init__( dstpath):
         self.dstpath = dstpath
     def __enter__(self):
         self.curpath = os.getcwd()
         os.chdir(self.dstpath)
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__( exc_type, exc_val, exc_tb):
         os.chdir(self.curpath)
 
 # 解压.tar.gz 文件到指定路径,
@@ -227,9 +227,9 @@ def _param(path):
     return urllib.parse.urlencode({"path": path})
 
 class FSServ:
-    def __init__(self, baseurl):
+    def __init__( baseurl):
         self.baseurl = baseurl
-    def down(self, remote_path, local_path=None):
+    def down( remote_path, local_path=None):
         url = "%s/fs/download?%s" % (self.baseurl, _param(remote_path) )
         local_filename = remote_path.split('/')[-1]
         if local_path is not None:
@@ -248,7 +248,7 @@ class FSServ:
         print("return", r.status_code)
         return local_filename
 
-    def down_dir(self, remote_path, local_path=None):
+    def down_dir( remote_path, local_path=None):
         url = "%s/fs/rlist?%s" % (self.baseurl, _param(remote_path) )
         r = requests.get(url)
         if local_path is None:
@@ -262,7 +262,7 @@ class FSServ:
             print("---down_dir", fpath, lpath)
             self.down(fpath, lpath)
 
-    def upload(self, local_path, remote_path):
+    def upload( local_path, remote_path):
         '上传文件， 如果remote_path 以 / 结尾， 则其是目录， 否则就是完整的文件名'
         url = "%s/fs/upload?%s" % (self.baseurl, _param(remote_path) )
         filename = os.path.basename(local_path)
@@ -275,7 +275,7 @@ class FSServ:
         print(local_path, "upload to", remote_path, "return ", r.text)
         return r.status_code == 200
 
-    def upload_dir(self, local_path, remote_path):
+    def upload_dir( local_path, remote_path):
         if not os.path.isdir(local_path):
             return self.upload(local_path, remote_path)
         if local_path == os.path.basename(local_path):
@@ -288,7 +288,7 @@ class FSServ:
             for fname in files:
                 self.upload(os.path.join(root, fname), rpath)
         return True
-    def rm_dir(self, remote_path):
+    def rm_dir( remote_path):
         url = "%s/fs/rm?%s" % (self.baseurl, _param(remote_path))
         r = requests.get(url)
         return r.status_code == 200

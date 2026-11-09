@@ -647,7 +647,7 @@ def _patch_xlm_roberta_tokenizer() -> None:
     if hasattr(XLMRobertaTokenizer, "prepare_for_model"):
         return
 
-    def prepare_for_model(self, ids, pair_ids=None, **kwargs):
+    def prepare_for_model( ids, pair_ids=None, **kwargs):
         truncation = kwargs.get("truncation")
         max_length = kwargs.get("max_length")
         pair_ids = pair_ids or []
@@ -658,8 +658,8 @@ def _patch_xlm_roberta_tokenizer() -> None:
             if max_pair_length < len(pair_ids):
                 pair_ids = pair_ids[: max(0, max_pair_length)]
 
-        cls_token_id = getattr(self, "cls_token_id", None) or 0
-        sep_token_id = getattr(self, "sep_token_id", None) or 2
+        cls_token_id = getattr( "cls_token_id", None) or 0
+        sep_token_id = getattr( "sep_token_id", None) or 2
 
         if pair_ids:
             input_ids = [cls_token_id] + ids + [sep_token_id, sep_token_id] + pair_ids + [sep_token_id]

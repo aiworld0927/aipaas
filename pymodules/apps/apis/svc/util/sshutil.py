@@ -21,7 +21,7 @@ logger.add('logs/log_{time:YYYY-MM-DD}.log',
            retention="5 days")
 
 class RemoteClient:
-    def __init__(self, host, user, ssh_key_filepath, remote_path=None):
+    def __init__( host, user, ssh_key_filepath, remote_path=None):
         self.host = host
         self.user = user
         self.ssh_key_filepath = ssh_key_filepath
@@ -33,7 +33,7 @@ class RemoteClient:
     def __enter__(self):
         self.__connect()
         return self
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__( exc_type, exc_val, exc_tb):
         self.disconnect()
 
     def __get_ssh_key(self):
@@ -79,14 +79,14 @@ class RemoteClient:
             self.client.close()
             self.client = None
 
-    def execute(self, cmd):
+    def execute( cmd):
         if self.client is None:
             self.__connect()
         stdin, stdout, stderr = self.client.exec_command(cmd)
         stdout.channel.recv_exit_status()
         return stdout.read().decode('utf-8')
 
-    def execute_commands(self, commands):
+    def execute_commands( commands):
         """Execute multiple commands in succession."""
         if self.client is None:
             self.client = self.__connect()
@@ -97,7 +97,7 @@ class RemoteClient:
             for line in response:
                 logger.info(f'INPUT: {cmd} | OUTPUT: {line}')
 
-    def bulk_upload(self, files, remote_path=None):
+    def bulk_upload( files, remote_path=None):
         """Upload multiple files to a remote directory."""
         if self.client is None:
             self.__connect()
@@ -106,7 +106,7 @@ class RemoteClient:
         uploads = [self.upload_file(file, remote_path) for file in files]
         logger.info(f'Uploaded {len(uploads)} files to {remote_path} on {self.host}')
 
-    def upload_file(self, file, remote_path):
+    def upload_file( file, remote_path):
         if self.client is None:
             self.__connect()
         """Upload a single file to a remote directory."""
@@ -120,7 +120,7 @@ class RemoteClient:
         finally:
             return file
 
-    def download_file(self, file, local_path=None):
+    def download_file( file, local_path=None):
         """Download file from remote host."""
         if self.client is None:
             self.__connect()

@@ -12,13 +12,14 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 
-from aipaas_common.core.log import logger
-from aipaas_storage.minio_utils import get_minio_client
 from aipaas_common.conf.minio_config import minio_config
-from ingest_worker.graph.main import KBImportWorkflow
+from aipaas_common.core.log import logger
 from aipaas_common.utils.path_util import PROJECT_ROOT
-from aipaas_common.utils.task_utils import add_running_task, add_done_task, update_task_status, get_task_status, get_done_task_list, \
+from aipaas_common.utils.task_utils import add_running_task, add_done_task, update_task_status, get_task_status, \
+    get_done_task_list, \
     get_running_task_list
+from aipaas_storage.minio_utils import get_minio_client
+from ingest_worker.graph.main import KBImportWorkflow
 
 # 1. 创建应用
 # 标题和描述会在Swagger文档中展示
@@ -35,6 +36,7 @@ app.add_middleware(
     allow_methods=["*"],  # 允许的请求方法
     allow_headers=["*"],  # 允许的请求头
 )
+
 
 # 3. 静态页面路由：返回文件导入前端页面
 # 访问地址：http://localhost:8000/import.html
@@ -125,7 +127,7 @@ async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile
         logger.info(f"[{task_id}] 开始处理上传文件，文件名：{file.filename}，文件类型：{file.content_type}")
 
         # 2、构建该任务的本地独立目录：output/YYYYMMDD/TaskID，避免多文件重名冲突
-        local_dir_obj = data_dir / task_id # 完整local_dir
+        local_dir_obj = data_dir / task_id  # 完整local_dir
         local_dir_obj.mkdir(parents=True, exist_ok=True)
         # file = UploadFile(filename 文件名  .file 文件数据)
         # 上传文件的本地保存绝对路径
@@ -170,8 +172,8 @@ async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile
         background_tasks.add_task(
             run_graph_task,
             task_id=task_id,
-            file_dir = str(local_dir_obj),
-            import_file_path = import_file_path,
+            file_dir=str(local_dir_obj),
+            import_file_path=import_file_path,
         )
         logger.info(f"[{task_id}] 已将LangGraph全流程加入后台任务，任务已启动")
 
@@ -212,4 +214,4 @@ async def get_task_progress(task_id: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app=app,host="127.0.0.1",port=8000)
+    uvicorn.run(app=app, host="127.0.0.1", port=8000)
