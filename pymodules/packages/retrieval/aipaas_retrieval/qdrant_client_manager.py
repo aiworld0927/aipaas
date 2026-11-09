@@ -8,7 +8,7 @@ from aipaas_common.conf.app_config import QdrantConfig, app_config
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 class QdrantClientManager:
-    def __init__( qdrant_config: QdrantConfig):
+    def __init__(self, qdrant_config: QdrantConfig):
         self.qdrant_config = qdrant_config
         self.client: Optional[AsyncQdrantClient] = None
 

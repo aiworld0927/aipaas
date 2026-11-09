@@ -3,16 +3,16 @@ from typing import Optional
 from dotenv import load_dotenv
 from langgraph.constants import END
 from langgraph.graph import StateGraph
-from query_worker.graph.state import QueryGraphState, create_query_state
 
-from query_worker.graph.nodes.a_node_item_name_confirm import NodeItemNameConfirm
-from query_worker.graph.nodes.b_node_search_embedding import NodeSearchEmbedding
-from query_worker.graph.nodes.c_node_search_embedding_hyde import NodeSearchEmbeddingHyde
-from query_worker.graph.nodes.d_node_web_search_mcp import NodeWebSearchMcp
-from query_worker.graph.nodes.e_node_rrf import NodeRrf
-from query_worker.graph.nodes.f_node_rerank import NodeRerank
-from query_worker.graph.nodes.g_node_answer_output import NodeAnswerOutput
 from aipaas_common.core.log import logger
+from query_worker.graph.nodes.a_node_item_name_confirm import node_item_name_confirm
+from query_worker.graph.nodes.b_node_search_embedding import node_search_embedding
+from query_worker.graph.nodes.c_node_search_embedding_hyde import node_search_embedding_hyde
+from query_worker.graph.nodes.d_node_web_search_mcp import node_web_search_mcp
+from query_worker.graph.nodes.e_node_rrf import node_rrf
+from query_worker.graph.nodes.f_node_rerank import node_rerank
+from query_worker.graph.nodes.g_node_answer_output import node_answer_output
+from query_worker.graph.state import QueryGraphState, create_default_query_state
 
 # 初始化环境变量（类加载前执行，保证全局生效）
 load_dotenv()
@@ -23,12 +23,13 @@ class KBQueryWorkflowV2:
     知识库查询工作流类
     封装LangGraph工作流的构建、编译、执行逻辑，支持自定义配置和多实例运行
     """
+
     def __init__(self):
         """初始化工作流：创建状态图、注册节点、定义路由规则"""
         # 1. 初始化LangGraph状态图
         self.workflow = StateGraph(QueryGraphState)
         # 2. 初始化所有业务节点（实例属性，支持多实例隔离）
-        self._init_nodes()
+        # self._init_nodes()
         # 3. 注册节点到工作流
         self._register_nodes()
         # 4. 设置入口和路由规则
@@ -36,28 +37,28 @@ class KBQueryWorkflowV2:
         # 5. 编译工作流（懒加载，首次执行时编译）
         self._compiled_app: Optional[object] = None
 
-    def _init_nodes(self):
-        """初始化所有业务节点（私有方法，封装节点创建逻辑）"""
-        self.node_item_name_confirm = NodeItemNameConfirm()
-        self.node_search_embedding = NodeSearchEmbedding()
-        self.node_search_embedding_hyde = NodeSearchEmbeddingHyde()
-        self.node_web_search_mcp = NodeWebSearchMcp()
-        self.node_rrf = NodeRrf()
-        self.node_rerank = NodeRerank()
-        self.node_answer_output = NodeAnswerOutput()
+    # def _init_nodes(self):
+    #     """初始化所有业务节点（私有方法，封装节点创建逻辑）"""
+    #     self.node_item_name_confirm = NodeItemNameConfirm()
+    #     self.node_search_embedding = NodeSearchEmbedding()
+    #     self.node_search_embedding_hyde = NodeSearchEmbeddingHyde()
+    #     self.node_web_search_mcp = NodeWebSearchMcp()
+    #     self.node_rrf = NodeRrf()
+    #     self.node_rerank = NodeRerank()
+    #     self.node_answer_output = NodeAnswerOutput()
 
     def _register_nodes(self):
         """注册所有节点到工作流（私有方法，统一管理节点注册）"""
         # 节点标识与实例属性名保持一致，便于维护
-        self.workflow.add_node("node_item_name_confirm", self.node_item_name_confirm) # 确认主体
-        self.workflow.add_node("node_search_embedding", self.node_search_embedding) # 向量搜索
-        self.workflow.add_node("node_search_embedding_hyde", self.node_search_embedding_hyde) #假设性答案向量搜索
-        self.workflow.add_node("node_web_search_mcp", self.node_web_search_mcp) # 联网搜索
-        self.workflow.add_node("node_rrf", self.node_rrf) # 排序
-        self.workflow.add_node("node_rerank", self.node_rerank) # 重排
-        self.workflow.add_node("node_answer_output", self.node_answer_output) # 生成
+        self.workflow.add_node("node_item_name_confirm", node_item_name_confirm)  # 确认主体
+        self.workflow.add_node("node_search_embedding", node_search_embedding)  # 向量搜索
+        self.workflow.add_node("node_search_embedding_hyde", node_search_embedding_hyde)  # 假设性答案向量搜索
+        self.workflow.add_node("node_web_search_mcp", node_web_search_mcp)  # 联网搜索
+        self.workflow.add_node("node_rrf", node_rrf)  # 排序
+        self.workflow.add_node("node_rerank", node_rerank)  # 重排
+        self.workflow.add_node("node_answer_output", node_answer_output)  # 生成
 
-    def _route_after_item_name_confirm( state: QueryGraphState) -> str:
+    def _route_after_item_name_confirm(state: QueryGraphState) -> str:
         """主体名称确认后的条件路由函数"""
         if state.get("answer"):
             """
@@ -77,7 +78,6 @@ class KBQueryWorkflowV2:
 
         # 否则继续搜索流程
         return ["node_search_embedding", "node_search_embedding_hyde", "node_web_search_mcp"]
-
 
     def _setup_routes(self):
         """设置工作流路由规则"""
@@ -106,14 +106,13 @@ class KBQueryWorkflowV2:
         self.workflow.add_edge("node_rerank", "node_answer_output")
         self.workflow.add_edge("node_answer_output", END)
 
-
     def compile(self):
         """编译工作流（公开方法，支持手动触发编译）"""
         if not self._compiled_app:
             self._compiled_app = self.workflow.compile()
         return self._compiled_app
 
-    def run( initial_state: QueryGraphState, stream: bool = False) -> QueryGraphState:
+    def run(self, initial_state: QueryGraphState, stream: bool = False) -> QueryGraphState:
         """
         统一执行入口，支持切换invoke/stream
         :param initial_state:  初始状态对象
@@ -140,7 +139,7 @@ if __name__ == "__main__":
 
     # 定义初始状态
     init_state = {
-        "session_id":"222",
+        "session_id": "222",
         "original_query": "华为擎云B530如何使用？"
     }
 
@@ -148,7 +147,7 @@ if __name__ == "__main__":
     # final_state = workflow.run(init_state)
     # logger.info(final_state)
     # 流式输出
-    for chunk in workflow.run(create_query_state(**init_state), stream=True):
+    for chunk in workflow.run(create_default_query_state(**init_state), stream=True):
         logger.warning(chunk)
 
     # 打印编译后的图结构

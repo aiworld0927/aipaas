@@ -1,4 +1,3 @@
-import json
 import re
 from pathlib import Path
 from typing import Tuple, List, Dict
@@ -9,7 +8,6 @@ from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_common.utils.table_utils import protect_tables
 from ingest_worker.config import config
-from ingest_worker.graph.exceptions import StateFieldError
 from ingest_worker.graph.state import ImportGraphState
 
 @node_log("node_document_split")
@@ -60,11 +58,11 @@ def _step_1_get_inputs( state: ImportGraphState) -> Tuple[str, str]:
     # 1、非空校验
     file_title = state.get("file_title")
     if not file_title:
-        raise StateFieldError(field_name="file_title", message="文件标题不能为空", expected_type=str)
+        raise ValueError(f"file_title文件标题不能为空")
 
     md_content = state.get("md_content")
     if not md_content:
-        raise StateFieldError(field_name="md_content", message="文件内容不能为空", expected_type=str)
+        raise ValueError(f"md_content文件内容不能为空")
 
     # 2、基础标准化：统一换行符
     md_content = md_content.replace("\r\n", "\n").replace("\r", "\n")
@@ -352,7 +350,8 @@ def _step_6_backup( state: ImportGraphState, sections: List[Dict[str, str]]) -> 
 
 
 if __name__ == "__main__":
-    from ingest_worker.graph.state import get_default_ingest_state
+    import json
+    from ingest_worker.graph.state import create_default_ingest_state
     md_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\H3CLA2608室内无线网关用户手册_new.md"
     with open(md_path, "r", encoding="utf-8") as f:
         md_content = f.read()
@@ -361,7 +360,7 @@ if __name__ == "__main__":
         "md_content": md_content,
         "file_title": "H3CLA2608室内无线网关用户手册"
     }
-    init_state = get_default_ingest_state(**init_state)
+    init_state = create_default_ingest_state(**init_state)
     # 执行文档切分节点
     result = node_document_split(init_state)
 

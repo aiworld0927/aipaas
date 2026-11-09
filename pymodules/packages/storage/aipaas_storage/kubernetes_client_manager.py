@@ -26,7 +26,7 @@ kubernetes_path = "D:/coding/gitee/aipaas/pymodules/conf/admin.conf"
 class K8sClient:
     """Kubernetes 操作工具类，封装常用资源操作。"""
 
-    def __init__(kubeconfig_path: Optional[str] = None, context: Optional[str] = None, pool_size: Optional[int] = None,):
+    def __init__(self,kubeconfig_path: Optional[str] = None, context: Optional[str] = None, pool_size: Optional[int] = None,):
         """
         初始化客户端。
 
@@ -50,7 +50,7 @@ class K8sClient:
 
 
 
-    def _load_config( kubeconfig_path: Optional[str], context: Optional[str]):
+    def _load_config(self, kubeconfig_path: Optional[str], context: Optional[str]):
         """加载认证配置：优先尝试集群内配置，失败则回退到 kubeconfig。"""
         try:
             config.load_incluster_config()
@@ -69,7 +69,7 @@ class K8sClient:
     def __enter__(self):
         return self
 
-    def __exit__( exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
     # ==================== Pod 操作 ====================

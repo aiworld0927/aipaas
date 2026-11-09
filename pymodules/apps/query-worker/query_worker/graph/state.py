@@ -55,7 +55,7 @@ QUERY_DEFAULT_STATE: QueryGraphState = {
 }
 
 
-def create_query_state(**overrides) -> QueryGraphState:
+def create_default_query_state(**overrides) -> QueryGraphState:
     """
     创建默认状态，支持覆盖
     Args:

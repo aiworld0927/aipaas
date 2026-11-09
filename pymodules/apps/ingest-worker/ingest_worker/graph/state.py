@@ -51,7 +51,7 @@ GRAPH_DEFAULT_STATE: ImportGraphState = {
 }
 
 
-def get_default_ingest_state(**overrides) -> ImportGraphState:
+def create_default_ingest_state(**overrides) -> ImportGraphState:
     """
     创建默认状态，支持覆盖
     Args:
@@ -59,7 +59,7 @@ def get_default_ingest_state(**overrides) -> ImportGraphState:
     Returns:
         新的状态实例
     Examples:
-        state = get_default_ingest_state(task_id="task_001", local_file_path="doc.pdf")
+        state = create_default_ingest_state(task_id="task_001", local_file_path="doc.pdf")
     """
     state: ImportGraphState = copy.deepcopy(GRAPH_DEFAULT_STATE)
     state.update(overrides)
@@ -67,5 +67,5 @@ def get_default_ingest_state(**overrides) -> ImportGraphState:
 
 
 if __name__ == '__main__':
-    state = get_default_ingest_state(task_id="task_001", import_file_path="D:\\doc\\hak180产品安全手册.pdf")
+    state = create_default_ingest_state(task_id="task_001", import_file_path="D:\\doc\\hak180产品安全手册.pdf")
     print(state)

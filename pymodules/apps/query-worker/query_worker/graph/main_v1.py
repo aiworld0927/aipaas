@@ -4,13 +4,13 @@ from langgraph.constants import END
 from langgraph.graph import StateGraph
 from query_worker.graph.state import QueryGraphState
 
-from query_worker.graph.nodes.a_node_item_name_confirm import NodeItemNameConfirm
-from query_worker.graph.nodes.b_node_search_embedding import NodeSearchEmbedding
-from query_worker.graph.nodes.c_node_search_embedding_hyde import NodeSearchEmbeddingHyde
-from query_worker.graph.nodes.d_node_web_search_mcp import NodeWebSearchMcp
-from query_worker.graph.nodes.e_node_rrf import NodeRrf
-from query_worker.graph.nodes.f_node_rerank import NodeRerank
-from query_worker.graph.nodes.g_node_answer_output import NodeAnswerOutput
+from query_worker.graph.nodes.a_node_item_name_confirm import node_item_name_confirm
+from query_worker.graph.nodes.b_node_search_embedding import node_search_embedding
+from query_worker.graph.nodes.c_node_search_embedding_hyde import node_search_embedding_hyde
+from query_worker.graph.nodes.d_node_web_search_mcp import node_web_search_mcp
+from query_worker.graph.nodes.e_node_rrf import node_rrf
+from query_worker.graph.nodes.f_node_rerank import node_rerank
+from query_worker.graph.nodes.g_node_answer_output import node_answer_output
 from aipaas_common.core.log import logger
 
 # 初始化环境变量（类加载前执行，保证全局生效）
@@ -28,7 +28,7 @@ class KBQueryWorkflow:
         # 1. 初始化LangGraph状态图
         self.workflow = StateGraph(QueryGraphState)
         # 2. 初始化所有业务节点（实例属性，支持多实例隔离）
-        self._init_nodes()
+        # self._init_nodes()
         # 3. 注册节点到工作流
         self._register_nodes()
         # 4. 设置入口和路由规则
@@ -36,28 +36,28 @@ class KBQueryWorkflow:
         # 5. 编译工作流（懒加载，首次执行时编译）
         self._compiled_app = None
 
-    def _init_nodes(self):
-        """初始化所有业务节点（私有方法，封装节点创建逻辑）"""
-        self.node_item_name_confirm = NodeItemNameConfirm()
-        self.node_search_embedding = NodeSearchEmbedding()
-        self.node_search_embedding_hyde = NodeSearchEmbeddingHyde()
-        self.node_web_search_mcp = NodeWebSearchMcp()
-        self.node_rrf = NodeRrf()
-        self.node_rerank = NodeRerank()
-        self.node_answer_output = NodeAnswerOutput()
+    # def _init_nodes(self):
+    #     """初始化所有业务节点（私有方法，封装节点创建逻辑）"""
+    #     self.node_item_name_confirm = node_item_name_confirm
+    #     self.node_search_embedding = node_search_embedding
+    #     self.node_search_embedding_hyde = NodeSearchEmbeddingHyde()
+    #     self.node_web_search_mcp = NodeWebSearchMcp()
+    #     self.node_rrf = NodeRrf()
+    #     self.node_rerank = NodeRerank()
+    #     self.node_answer_output = NodeAnswerOutput()
 
     def _register_nodes(self):
         """注册所有节点到工作流（私有方法，统一管理节点注册）"""
         # 节点标识与实例属性名保持一致，便于维护
-        self.workflow.add_node("node_item_name_confirm", self.node_item_name_confirm)  # 确认主体
+        self.workflow.add_node("node_item_name_confirm", node_item_name_confirm)  # 确认主体
         self.workflow.add_node("node_multi_search", lambda x: x)  # 虚拟节点：多路搜索分叉点（状态不变）
-        self.workflow.add_node("node_search_embedding", self.node_search_embedding)  # 向量搜索
-        self.workflow.add_node("node_search_embedding_hyde", self.node_search_embedding_hyde)  # 假设性答案向量搜索
-        self.workflow.add_node("node_web_search_mcp", self.node_web_search_mcp)  # 联网搜索
+        self.workflow.add_node("node_search_embedding", node_search_embedding)  # 向量搜索
+        self.workflow.add_node("node_search_embedding_hyde", node_search_embedding_hyde)  # 假设性答案向量搜索
+        self.workflow.add_node("node_web_search_mcp", node_web_search_mcp)  # 联网搜索
         self.workflow.add_node("node_join", lambda x: {})  # 虚拟节点：多路搜索合并点
-        self.workflow.add_node("node_rrf", self.node_rrf)  # 排序
-        self.workflow.add_node("node_rerank", self.node_rerank)  # 重排
-        self.workflow.add_node("node_answer_output", self.node_answer_output)  # 生成
+        self.workflow.add_node("node_rrf", node_rrf)  # 排序
+        self.workflow.add_node("node_rerank", node_rerank)  # 重排
+        self.workflow.add_node("node_answer_output", node_answer_output)  # 生成
 
         # 虚拟节点的作用：作为流程的「分叉 / 合并中转站」，解决多分支流程的组织问题，本身无业务逻辑；
         # lambda x:x 含义：接收 state 并原样返回，是最轻便的 “无逻辑传递” 方式；
@@ -121,7 +121,7 @@ class KBQueryWorkflow:
             self._compiled_app = self.workflow.compile()
         return self._compiled_app
 
-    def run( initial_state: QueryGraphState, stream: bool = False) -> QueryGraphState:
+    def run(self,initial_state: QueryGraphState, stream: bool = False) -> QueryGraphState:
         """
         统一执行入口，支持切换invoke/stream
         :param initial_state:  初始状态对象

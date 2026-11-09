@@ -10,7 +10,7 @@ from ingest_worker.graph.nodes.d_node_document_split import node_document_split
 from ingest_worker.graph.nodes.e_node_item_name_recognition import node_item_name_recognition
 from ingest_worker.graph.nodes.f_node_bge_embedding import node_bge_embedding
 from ingest_worker.graph.nodes.g_node_import_milvus import node_import_milvus
-from ingest_worker.graph.state import ImportGraphState, get_default_ingest_state
+from ingest_worker.graph.state import ImportGraphState, create_default_ingest_state
 
 class KBImportWorkflow:
     """知识库导入工作流"""
@@ -105,9 +105,9 @@ class KBImportWorkflow:
 if __name__ == "__main__":
     from aipaas_common.core.log import logger
     from aipaas_common.utils.path_util import PROJECT_ROOT
-    from ingest_worker.graph.state import get_default_ingest_state
+    from ingest_worker.graph.state import create_default_ingest_state
     # 定义初始状态
-    init_state = get_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "H3CLA2608室内无线网关用户手册.pdf")})
+    init_state = create_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "H3CLA2608室内无线网关用户手册.pdf")})
 
     workflow = KBImportWorkflow()
 

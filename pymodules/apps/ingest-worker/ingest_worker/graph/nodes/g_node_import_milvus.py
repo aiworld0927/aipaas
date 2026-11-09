@@ -6,7 +6,6 @@ from aipaas_common.conf.milvus_config import milvus_config
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_retrieval.milvus_utils import get_milvus_client, escape_milvus_string
-from ingest_worker.graph.exceptions import StateFieldError, MilvusError
 from ingest_worker.graph.state import ImportGraphState
 
 @node_log("node_import_milvus")
@@ -66,19 +65,19 @@ def _step_1_check_input( state: Dict[str, Any]) -> tuple[List[Dict[str, Any]], i
     chunks = state.get("chunks")
 
     if not chunks:
-        raise StateFieldError(field_name="chunks", message="chunks不能为空", expected_type=list)
+        raise ValueError(f"chunks参数不能为空")
 
     if not isinstance(chunks, list):
-        raise StateFieldError(field_name="chunks", message="chunks数据类型不正确", expected_type=list)
+        raise ValueError(f"chunks数据类型不正确")
 
     # 校验2：切片包含dense_vector字段
     first_chunk = chunks[0]
     if 'dense_vector' not in first_chunk:
-        raise StateFieldError(field_name="chunks", message="错误: 数据中缺失dense_vector字段")
+        raise ValueError(f"chunks 错误: 数据中缺失dense_vector字段")
 
     # 校验3：切片包含 sparse_vector 字段
     if 'sparse_vector' not in first_chunk:
-        raise StateFieldError(field_name="chunks", message="错误: 数据中缺失sparse_vector字段")
+        raise ValueError(f"chunks 错误: 错误: 数据中缺失sparse_vector字段")
 
     # 提取向量维度
     vector_dimension = len(first_chunk['dense_vector'])
@@ -102,7 +101,7 @@ def _step_2_prepare_collection( vector_dimension: int):
     milvus_client = get_milvus_client()
     if not milvus_client:
         logger.error("Milvus 连接失败")
-        raise MilvusError("Milvus 连接失败")
+        raise ValueError("Milvus 连接失败")
 
     # 2. 集合不存在则创建
     collections_name = milvus_config.chunks_collection
@@ -176,7 +175,7 @@ def _clear_chunks_by_file_title( client, file_title):
             filter=f"file_title=='{file_title}'")
     except Exception as e:
         logger.error(f"Milvus 数据删除失败: {str(e)}")
-        raise MilvusError(f"Milvus 数据删除失败: {str(e)}")
+        raise ValueError(f"Milvus 数据删除失败: {str(e)}")
 
 def _step_4_insert_data( client, chunks_json_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
@@ -214,20 +213,26 @@ def _step_4_insert_data( client, chunks_json_data: List[Dict[str, Any]]) -> List
 
     return chunks_json_data
 
-#
-# if __name__ == "__main__":
-#     json_path = r"D:\output\hak180产品安全手册\state_vector.json"
-#     with open(json_path, "r", encoding="utf-8") as f:
-#         state_json = f.read()
-#
-#     state = json.loads(state_json)
-#
-#     init_state = {
-#         "chunks": state.get("chunks")
-#     }
-#
-#     # 执行核心处理流程
-#     node_import_milvus = NodeImportMilvus()
-#     result = node_import_milvus(init_state)
-#
-#     logger.info(json.dumps(result, ensure_ascii=False, indent=4))
+
+if __name__ == "__main__":
+    import json
+    from ingest_worker.graph.state import create_default_ingest_state
+    md_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\H3CLA2608室内无线网关用户手册_new.md"
+    embed_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\chunks_embed.json"
+    with open(embed_path, "r", encoding="utf-8") as f:
+        chunks_json = f.read()
+
+    chunks = json.loads(chunks_json)
+    init_state = {
+        "md_path": md_path,
+        "chunks": chunks,
+        "item_name": "H3CLA2608室内无线网关",
+        "file_title": "H3CLA2608室内无线网关用户手册"
+    }
+    init_state = create_default_ingest_state(**init_state)
+
+    # 执行核心处理流程
+    result = node_import_milvus(init_state)
+
+    logger.info(json.dumps(result, ensure_ascii=False, indent=4))
+

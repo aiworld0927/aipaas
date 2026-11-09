@@ -16,14 +16,28 @@ def node_log(node_name: str):
     def deco(func):
         @wraps(func)
         def wrapper(state, *args, **kwargs):
+            """节点执行入口
+            LangGraph 调用节点时会调用此方法。
+            提供统一的日志输出、任务追踪和异常处理。
+            Args:
+                state: 图状态字典
+            Returns:
+                更新后的状态字典
+            Raises:
+                ImportProcessError: 节点执行失败时抛出
+            """
             trace_id = _trace_id(state)
-            start_ts = time.time()
+            is_stream = state.get("is_stream",False)
             logger.info(f"[{node_name}] 节点开始，追踪ID={trace_id}")
+            start_ts = time.time()
             try:
                 # 1. 任务状态记录处理
-                add_running_task(trace_id, node_name,state.get('is_stream',False))
+                add_running_task(trace_id, node_name,is_stream=is_stream)
+                # 2. 执行节点
                 result = func(state, *args, **kwargs)
-                add_done_task(trace_id, node_name,state.get('is_stream',False))
+                # 3. 结束：记录节点完成状态
+                add_done_task(trace_id, node_name, is_stream=is_stream)
+
                 cost_ms = int((time.time() - start_ts) * 1000)
                 logger.info(f"[{node_name}] 节点完成，追踪ID={trace_id}，耗时={cost_ms}ms")
                 return result

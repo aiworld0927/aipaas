@@ -1,0 +1,20 @@
+[project]
+name = "aipaas-mcp-agent"
+version = "0.2.0"
+description = "AIPaaS LLM 接入层（MCP）"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "aipaas-common",
+    "mcp>=2,<3",
+    "openai-agents==0.23.1",
+]
+
+[tool.uv.sources]
+aipaas-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aipaas_mcp_agent"]

@@ -1,10 +1,10 @@
 import json
+from pathlib import Path
 from typing import List, Dict
 
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_llm.lm.embedding_utils import generate_embeddings
-from ingest_worker.graph.exceptions import StateFieldError
 from ingest_worker.graph.state import ImportGraphState
 
 @node_log("node_bge_embedding")
@@ -30,6 +30,9 @@ def node_bge_embedding(state: ImportGraphState) -> ImportGraphState:
 
     # 步骤3：更新全局状态，将带向量的chunks回传下游
     state['chunks'] = output_data
+
+    # 步骤4：过程数据暂存【性能优化可去掉】
+    _step_7_backup_chunk_item(state,output_data)
     return state
 
 def _step_1_validate_input( state: ImportGraphState) -> List[Dict]:
@@ -49,10 +52,10 @@ def _step_1_validate_input( state: ImportGraphState) -> List[Dict]:
     chunks = state.get("chunks")
 
     if not chunks:
-        raise StateFieldError(field_name="chunks", message="chunks不能为空", expected_type=list)
+        raise ValueError(f"chunks不能为空")
 
     if not isinstance(chunks, list):
-        raise StateFieldError(field_name="chunks", message="chunks数据类型不正确", expected_type=list)
+        raise ValueError(f"chunks数据类型不正确")
 
     return chunks
 
@@ -96,21 +99,34 @@ def _step_2_generate_embeddings( chunks: List[Dict[str, str]]) -> List[Dict[str,
     # 返回带向量的文本切片列表（供后续存入Milvus）
     return output_data
 
+def _step_7_backup_chunk_item(state, chunks):
+    """
+    作用:作用备份chunk_item
+    入参：file_title,chunks
+    出参：无
+    """
+    chunks_new_path = Path(state.get("md_path", "")).parent / "chunks_embed.json"
+    if chunks_new_path.parent.exists():
+        chunks_new_path.parent.mkdir(parents=True, exist_ok=True)
+    chunks_new_path.write_text(json.dumps(chunks,indent=4,ensure_ascii=False),encoding="utf-8")
+
 
 if __name__ == "__main__":
-    from ingest_worker.graph.state import get_default_ingest_state
 
-    md_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\chunks.json"
-    with open(md_path, "r", encoding="utf-8") as f:
+    from ingest_worker.graph.state import create_default_ingest_state
+    md_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\H3CLA2608室内无线网关用户手册_new.md"
+    chunk_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\chunks_new.json"
+    with open(chunk_path, "r", encoding="utf-8") as f:
         chunks_json = f.read()
 
     chunks = json.loads(chunks_json)
     init_state = {
+        "md_path": md_path,
         "chunks": chunks,
         "item_name": "H3CLA2608室内无线网关",
         "file_title": "H3CLA2608室内无线网关用户手册"
     }
-    init_state = get_default_ingest_state(**init_state)
+    init_state = create_default_ingest_state(**init_state)
 
     # 执行核心处理流程
     result = node_bge_embedding(init_state)

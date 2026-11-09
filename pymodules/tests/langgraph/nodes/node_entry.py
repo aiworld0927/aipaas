@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from app.core.log import logger
-from app.core.log import node_log
+from aipaas_common.core.log import logger
+from aipaas_common.log_decorator import node_log
 from tests.langgraph.state import get_default_state
 
 @node_log("node_entry")

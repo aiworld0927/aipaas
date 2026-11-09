@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import List, Dict, Tuple
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -13,7 +14,6 @@ from aipaas_llm.lm.embedding_utils import generate_embeddings
 from aipaas_llm.lm.lm_utils import get_llm_client
 from aipaas_retrieval.milvus_utils import get_milvus_client, escape_milvus_string
 from ingest_worker.config import config
-from ingest_worker.graph.exceptions import StateFieldError
 from ingest_worker.graph.state import ImportGraphState
 
 
@@ -53,6 +53,7 @@ def node_item_name_recognition(state: ImportGraphState) -> ImportGraphState:
     # 步骤6：将数据存入Milvus向量数据库
     _step_6_save_to_milvus(state, file_title, item_name, dense_vector, sparse_vector)
 
+    _step_7_backup_chunk_item(state,chunks)
     # 打印识别结果
     logger.info(f"--- 识别完成: {item_name} ---")
 
@@ -77,11 +78,11 @@ def _step_1_get_inputs(state: ImportGraphState) -> Tuple[str, List[Dict]]:
     chunks = state.get("chunks")
 
     if not file_title:
-        raise StateFieldError(field_name="file_title", message="文件标题不能为空", expected_type=str)
+        raise ValueError(f"file_title文件标题不能为空")
     if not chunks:
-        raise StateFieldError(field_name="chunks", message="chunks不能为空", expected_type=list)
+        raise ValueError(f"chunks不能为空")
     if not isinstance(chunks, list):
-        raise StateFieldError(field_name="chunks", message="chunks数据类型不正确", expected_type=list)
+        raise ValueError(f"chunks数据类型不正确")
 
     return file_title, chunks
 
@@ -369,19 +370,33 @@ def _create_item_name_collection(collection_name, milvus_client):
     )
 
 
-if __name__ == "__main__":
-    from ingest_worker.graph.state import get_default_ingest_state
+def _step_7_backup_chunk_item(state, chunks):
+    """
+    作用:作用备份chunk_item
+    入参：file_title,chunks
+    出参：无
+    """
+    chunks_new_path = Path(state.get("md_path", "D:/output")).parent / "chunks_new.json"
+    if chunks_new_path.parent.exists():
+        chunks_new_path.parent.mkdir(parents=True, exist_ok=True)
+    chunks_new_path.write_text(json.dumps(chunks,indent=4,ensure_ascii=False),encoding="utf-8")
 
-    md_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\chunks.json"
-    with open(md_path, "r", encoding="utf-8") as f:
+
+if __name__ == "__main__":
+    from ingest_worker.graph.state import create_default_ingest_state
+
+    md_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\H3CLA2608室内无线网关用户手册_new.md"
+    chunk_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\chunks.json"
+    with open(chunk_path, "r", encoding="utf-8") as f:
         chunks_json = f.read()
 
     chunks = json.loads(chunks_json)
     init_state = {
+        "md_path": md_path,
         "chunks": chunks,
         "file_title": "H3CLA2608室内无线网关用户手册"
     }
-    init_state = get_default_ingest_state(**init_state)
+    init_state = create_default_ingest_state(**init_state)
     # 执行核心处理流程
     result = node_item_name_recognition(init_state)
 

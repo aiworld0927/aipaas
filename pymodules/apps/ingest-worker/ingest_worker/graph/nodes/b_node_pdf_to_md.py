@@ -1,4 +1,3 @@
-import json
 import shutil
 import time
 import zipfile
@@ -197,6 +196,9 @@ def _step_3_download_and_extract(zip_url: str, output_dir_obj: Path, pdf_stem: s
 
     # 4、解压
     logger.info(f"【ZIP解压】开始解压ZIP包：{output_dir_obj} ...")
+    # 文件解压
+    # shutil.unpack_archive(zip_save_path, extract_target_dir) # 支持  zip、tar.gz 等 可做通用工具函数
+    # 性能、稳定性考虑推荐 zipfile：
     with zipfile.ZipFile(zip_save_path, "r") as zip_file_obj:
         zip_file_obj.extractall(extract_target_dir)
     logger.info(f"【ZIP解压】ZIP解压完成，解压目录：{extract_target_dir}")
@@ -214,10 +216,11 @@ def _step_3_download_and_extract(zip_url: str, output_dir_obj: Path, pdf_stem: s
 
 if __name__ == "__main__":
     # from aipaas_common.core.log import logger
+    import json
     from aipaas_common.utils.path_util import PROJECT_ROOT
-    from ingest_worker.graph.state import get_default_ingest_state
+    from ingest_worker.graph.state import create_default_ingest_state
     from ingest_worker.graph.nodes.a_node_entry import node_entry
-    init_state = get_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "H3CLA2608室内无线网关用户手册.pdf")})
+    init_state = create_default_ingest_state(**{"import_file_path": str(PROJECT_ROOT / "data" / "inputs" / "H3CLA2608室内无线网关用户手册.pdf")})
     node_entry_state = node_entry(init_state)
 
     result = node_pdf_to_md(node_entry_state)

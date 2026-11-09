@@ -1,6 +1,4 @@
 import base64
-import json
-import logging
 import mimetypes
 import os
 import re
@@ -371,7 +369,8 @@ def _step_5_backup_new_md_file(origin_md_path: str, md_content: str) -> str:
 
 
 if __name__ == "__main__":
-    from ingest_worker.graph.state import get_default_ingest_state
+    import json
+    from ingest_worker.graph.state import create_default_ingest_state
     md_path = r"D:\coding\gitee\aipaas\pymodules\data\outputs\H3CLA2608室内无线网关用户手册\H3CLA2608室内无线网关用户手册.md"
     with open(md_path, "r", encoding="utf-8") as f:
         md_content = f.read()
@@ -379,7 +378,7 @@ if __name__ == "__main__":
         "md_path": md_path,
         "md_content": md_content
     }
-    init_state = get_default_ingest_state(**init_state)
+    init_state = create_default_ingest_state(**init_state)
     # 执行核心处理流程
     result = node_md_img(init_state)
     logger.info(json.dumps(result, ensure_ascii=False, indent=4))

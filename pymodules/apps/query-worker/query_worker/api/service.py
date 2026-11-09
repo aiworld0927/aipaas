@@ -12,7 +12,7 @@ from starlette.responses import FileResponse, StreamingResponse
 
 from aipaas_storage.mongo_history_utils import clear_history, get_recent_messages
 from query_worker.graph.main_v2 import KBQueryWorkflowV2
-from query_worker.graph.state import create_query_state
+from query_worker.graph.state import create_default_query_state
 from aipaas_common.utils.sse_utils import create_sse_queue, SSEEvent, push_to_session, sse_generator
 from aipaas_common.utils.task_utils import update_task_status, TASK_STATUS_PROCESSING, get_task_result, TASK_STATUS_COMPLETED, \
     TASK_STATUS_FAILED, clear_task, get_done_task_list
@@ -104,7 +104,7 @@ def run_query_graph(session_id: str, user_query: str, is_stream: bool = True):
 
     try:
         workflow = KBQueryWorkflowV2()
-        state = create_query_state(**init_state)
+        state = create_default_query_state(**init_state)
         for chunk in workflow.run(state, stream=is_stream):
             logger.info(chunk)
         update_task_status(session_id, TASK_STATUS_COMPLETED, is_stream)
