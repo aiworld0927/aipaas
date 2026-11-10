@@ -1,0 +1,295 @@
+# =============================================================================
+# AIPaaS 应用层编排（引用基础中间件编排 docker-compose-base.yaml）
+# -----------------------------------------------------------------------------
+# 结构：
+#   docker-compose-base.yaml   —— 基础中间件：etcd / minio / milvus / attu / mongodb
+#   docker-compose.yaml（本文件）—— 平台中间件：postgres / redis / nacos / rocketmq
+#                                  应用服务：svc-ingest / svc-query / frontend
+#
+# 用法（在本文件所在目录执行）：
+#   cp .env.example .env                    # 生成环境变量配置
+#   docker compose up -d                    # 一键启动全部（含 base 中间件）
+#   docker compose up -d postgres redis     # 只启动指定服务
+#   docker compose ps                       # 查看状态
+#   docker compose logs -f svc-query        # 查看服务日志
+#   docker compose down                     # 停止全部
+#
+# 环境变量优先级：shell 已导出变量（如 source ../scripts/setup-env.sh）> .env 文件 > 本文件内默认值
+# =============================================================================
+
+include:
+  - docker-compose-base.yaml
+
+# ---------- 共享配置锚点 ----------
+x-logging: &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+      tag: "{{.Name}}/{{.ID}}"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+
+  # =========================================================================
+  # 层 0：一次性初始化 —— 预创建应用日志目录
+  # （base 中的 init-volumes 负责中间件数据目录，本服务负责应用日志目录）
+  # =========================================================================
+  init-app-dirs:
+    container_name: aipaas-init-app-dirs
+    image: alpine
+    user: root
+    volumes:
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs:/logs
+    command: >
+      sh -c "mkdir -p /logs/svc-ingest /logs/svc-query
+        && chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} /logs"
+    restart: "no"
+
+  # =========================================================================
+  # 层 1：平台中间件（postgres / redis / nacos / rocketmq）
+  # 数据使用命名卷，避免宿主机 bind mount 权限问题
+  # =========================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: aipaas-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nacos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nacos}
+      POSTGRES_DB: ${POSTGRES_DB:-nacos}
+      TZ: Asia/Shanghai
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nacos}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    <<: [*default-restart, *default-logging]
+
+  redis:
+    image: redis:7-alpine
+    container_name: aipaas-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    <<: [*default-restart, *default-logging]
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: aipaas-nacos
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: postgresql
+      # nacos 镜像约定：数据源参数复用 MYSQL_SERVICE_* 前缀
+      MYSQL_SERVICE_HOST: postgres
+      MYSQL_SERVICE_PORT: "5432"
+      MYSQL_SERVICE_DB_NAME: ${POSTGRES_DB:-nacos}
+      MYSQL_SERVICE_USER: ${POSTGRES_USER:-nacos}
+      MYSQL_SERVICE_PASSWORD: ${POSTGRES_PASSWORD:-nacos}
+      NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-true}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-serverIdentity}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-mySecureValue123}
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-VGhpc0lzTXlTZWNyZXRLZXlXaGljaFNob3VsZEJlMzJDaGFyYWN0ZXJzTGFyZ2U=}
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+    ports:
+      - "${NACOS_PORT:-8848}:8848"
+      - "${NACOS_PORT_GRPC:-9848}:9848"
+    volumes:
+      - nacos-data:/home/nacos/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    <<: [*default-restart, *default-logging]
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: aipaas-rocketmq-namesrv
+    command: sh mqnamesrv
+    environment:
+      JAVA_OPT: ${ROCKETMQ_NAMESRV_JAVA_OPT:--Xms128m -Xmx256m -Xmn64m}
+    ports:
+      - "${ROCKETMQ_NAMESRV_PORT:-9876}:9876"
+    volumes:
+      - rocketmq-namesrv-data:/home/rocketmq/store
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'exec 3<>/dev/tcp/localhost/9876' && echo ok || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    <<: [*default-restart, *default-logging]
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    container_name: aipaas-rocketmq-broker
+    command: sh mqbroker -n rocketmq-namesrv:9876
+    environment:
+      JAVA_OPT: ${ROCKETMQ_BROKER_JAVA_OPT:--Xms256m -Xmx512m -Xmn128m}
+    ports:
+      - "${ROCKETMQ_BROKER_PORT:-10911}:10911"
+      - "${ROCKETMQ_BROKER_PORT2:-10909}:10909"
+    volumes:
+      - rocketmq-broker-data:/home/rocketmq/store
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_healthy
+    <<: [*default-restart, *default-logging]
+
+  # =========================================================================
+  # 层 2：Python 服务（依赖 base 中的 milvus / minio / mongodb）
+  # =========================================================================
+
+  svc-ingest:
+    build:
+      context: ../../pymodules
+      dockerfile: apps/ingest-worker/Dockerfile
+    image: aipaas/svc-ingest:latest
+    container_name: aipaas-svc-ingest
+    env_file: .env
+    environment:
+      # Milvus（容器内用服务名；远程中间件时在 .env 中改为 IP 地址）
+      MILVUS_URL: ${MILVUS_URL:-http://milvus:19530}
+      CHUNKS_COLLECTION: ${CHUNKS_COLLECTION:-chunks}
+      # MinIO
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-aipaas}
+      # MongoDB（对应 base 中 mongodb 服务，账密与其 MONGO_INITDB_ROOT_* 一致）
+      MONGO_URL: ${MONGO_URL:-mongodb://admin:123456@mongodb:27017/?authSource=admin}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-aipaas}
+      # LLM（对应 setup-env.sh 中的 LLM_BASE_URL/LLM_API_KEY/LLM_MODEL_NAME）
+      OPENAI_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      OPENAI_API_KEY: ${LLM_API_KEY:-ollama}
+      MODEL: ${LLM_MODEL_NAME:-qwen2.5}
+      # 日志（文件名：ingest-worker_YYYYMMDD.log）
+      LOG_FILE_PREFIX: ingest-worker
+      LOG_FILE_ENABLE: "True"
+      LOG_FILE_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_CONSOLE_ENABLE: "True"
+      LOG_CONSOLE_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: Asia/Shanghai
+    ports:
+      - "${INGEST_PORT:-8000}:8000"
+    volumes:
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-ingest:/app/logs
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      init-app-dirs:
+        condition: service_completed_successfully
+      milvus:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+    <<: [*default-restart, *default-logging]
+
+  svc-query:
+    build:
+      context: ../../pymodules
+      dockerfile: apps/query-worker/Dockerfile
+    image: aipaas/svc-query:latest
+    container_name: aipaas-svc-query
+    env_file: .env
+    environment:
+      MILVUS_URL: ${MILVUS_URL:-http://milvus:19530}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MONGO_URL: ${MONGO_URL:-mongodb://admin:123456@mongodb:27017/?authSource=admin}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-aipaas}
+      OPENAI_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      OPENAI_API_KEY: ${LLM_API_KEY:-ollama}
+      MODEL: ${LLM_MODEL_NAME:-qwen2.5}
+      LOG_FILE_PREFIX: query-worker
+      LOG_FILE_ENABLE: "True"
+      LOG_FILE_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_CONSOLE_ENABLE: "True"
+      LOG_CONSOLE_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: Asia/Shanghai
+    ports:
+      - "${QUERY_PORT:-8001}:8001"
+    volumes:
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-query:/app/logs
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      init-app-dirs:
+        condition: service_completed_successfully
+      milvus:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    <<: [*default-restart, *default-logging]
+
+  # =========================================================================
+  # 层 3：前端（Nginx，反代 svc-query / svc-ingest）
+  # =========================================================================
+
+  frontend:
+    build:
+      context: ../../web
+      dockerfile: Dockerfile
+    image: aipaas/frontend:latest
+    container_name: aipaas-frontend
+    environment:
+      QUERY_API_UPSTREAM: http://svc-query:8001
+      IMPORT_API_UPSTREAM: http://svc-ingest:8000
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      svc-ingest:
+        condition: service_healthy
+      svc-query:
+        condition: service_healthy
+    <<: [*default-restart, *default-logging]
+
+# =============================================================================
+# 命名卷（postgres / redis / nacos / rocketmq 数据）
+# milvus / minio / mongo 等数据卷由 docker-compose-base.yaml 以 bind mount 方式管理
+# =============================================================================
+volumes:
+  pg-data:
+  redis-data:
+  nacos-data:
+  rocketmq-namesrv-data:
+  rocketmq-broker-data:
+
+# =============================================================================
+# 网络：与 base 共用同一默认网络（本文件优先级高于 include 的文件）
+# 服务间通过服务名互相访问（如 http://milvus:19530、http://minio:9000）
+# =============================================================================
+networks:
+  default:
+    name: aipaas-network

@@ -38,6 +38,13 @@ app.add_middleware(
 )
 
 
+# 健康检查端点（供 Docker healthcheck / 编排系统使用）
+@app.get("/health")
+async def health():
+    """检查服务是否正常，返回 200 表示服务可用"""
+    return {"status": "ok", "service": "svc-ingest"}
+
+
 # 3. 静态页面路由：返回文件导入前端页面
 # 访问地址：http://localhost:8000/import.html
 @app.get("/import.html")  # 对外访问地址

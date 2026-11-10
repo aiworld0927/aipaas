@@ -33,11 +33,13 @@ LOG_CONSOLE_LEVEL = os.getenv("LOG_CONSOLE_LEVEL", "INFO").upper()
 LOG_FILE_ENABLE = os.getenv("LOG_FILE_ENABLE", "True").lower() == "true"
 LOG_FILE_LEVEL = os.getenv("LOG_FILE_LEVEL", "INFO").upper()
 LOG_FILE_RETENTION = os.getenv("LOG_FILE_RETENTION", "7 days")
+# 日志文件名前缀，默认 app，各服务可通过环境变量覆盖为工程名称（如 ingest-worker / query-worker）
+LOG_FILE_PREFIX = os.getenv("LOG_FILE_PREFIX", "app")
 
 
 # -------------------------- 第三步：定义日志路径（自动推导项目根） --------------------------
 LOG_DIR = PROJECT_ROOT / "logs"
-LOG_FILE_NAME = "app_{time:YYYYMMDD}.log"
+LOG_FILE_NAME = f"{LOG_FILE_PREFIX}_{{time:YYYYMMDD}}.log"
 LOG_FILE_PATH = LOG_DIR / LOG_FILE_NAME
 
 
