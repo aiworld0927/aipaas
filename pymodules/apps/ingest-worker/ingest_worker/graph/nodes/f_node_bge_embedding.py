@@ -4,7 +4,7 @@ from typing import List, Dict
 
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
-from aipaas_llm.lm.embedding_utils import generate_embeddings
+from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 from ingest_worker.graph.state import ImportGraphState
 
 @node_log("node_bge_embedding")

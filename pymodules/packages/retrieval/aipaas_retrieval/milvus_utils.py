@@ -1,7 +1,7 @@
 from pymilvus import MilvusClient, AnnSearchRequest, WeightedRanker, DataType
 from aipaas_common.conf.milvus_config import milvus_config
 from aipaas_common.core.log import logger
-from aipaas_llm.lm.embedding_utils import generate_embeddings
+from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 
 # 全局Milvus客户端实例，实现单例复用
 _milvus_client = None

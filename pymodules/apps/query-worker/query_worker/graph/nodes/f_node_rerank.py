@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
-from aipaas_llm.lm.reranker_utils import rerank_documents
+from aipaas_llm.lm.reranker_http_utils import rerank_documents
 from query_worker.config import query_config
 from query_worker.graph.state import QueryGraphState
 

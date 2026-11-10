@@ -6,7 +6,7 @@ from aipaas_common.conf.milvus_config import milvus_config
 from aipaas_common.core.load_prompt import load_prompt
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
-from aipaas_llm.lm.embedding_utils import generate_embeddings
+from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 from aipaas_llm.lm.lm_utils import get_llm_client
 from aipaas_retrieval.milvus_utils import get_milvus_client, create_hybrid_search_requests, hybrid_search
 from aipaas_storage.mongo_history_utils import save_chat_message, get_recent_messages, update_message_item_names

@@ -1,6 +1,43 @@
+# =============================================================================
+# AIPaaS 基础中间件 & 推理引擎编排（被 docker-compose.yaml 通过 include 引用）
+# -----------------------------------------------------------------------------
+# 内容：
+#   核心组件（默认启动）      ：etcd / minio / milvus / mongodb
+#   可选组件（按 profile 启动，默认不启动）：
+#     attu      —— Milvus 可视化管理 UI
+#     nacos     —— postgres + nacos 配置中心
+#     redis     —— 缓存
+#     rocketmq  —— namesrv + broker 消息队列
+#     vllm      —— vLLM 推理引擎（Qwen3-0.6B，OpenAI 兼容接口，需 NVIDIA GPU）
+#
+# 通过 .env 中的 COMPOSE_PROFILES 控制加载哪些可选组件，例如：
+#   COMPOSE_PROFILES=                  # 只起核心组件（默认）
+#   COMPOSE_PROFILES=nacos,redis       # 追加 nacos + redis
+#   COMPOSE_PROFILES=vllm              # 只追加 vLLM
+#   COMPOSE_PROFILES=nacos,rocketmq,vllm
+# 也可命令行临时指定：docker compose --profile nacos up -d
+#
+# 数据目录: ${DOCKER_VOLUME_DIRECTORY}/volumes/xxx 本地目录挂载
+# 依赖关系: milvus -> etcd + minio, nacos -> postgres, rocketmq-broker -> rocketmq-namesrv
+# =============================================================================
+
+# ---------- 共享配置锚点 ----------
+x-logging: &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+      tag: "{{.Name}}/{{.ID}}"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
 services:
-  # 一次性初始化容器：预创建数据卷目录并将属主统一为执行 docker-compose 的用户（跑完即退出）
+  # =========================================================================
+  # 层 0：一次性初始化 —— 预创建中间件数据卷目录（跑完即退出）
   # 避免 docker daemon 以 root 自动创建目录导致容器内非 root 进程无写权限
+  # =========================================================================
   init-volumes:
     container_name: aipaas-init-volumes
     image: alpine
@@ -9,6 +46,10 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes:/volumes
     command: sh -c "mkdir -p /volumes/etcd /volumes/minio /volumes/milvus-data /volumes/attu-data /volumes/mongo/data /volumes/mongo/config && chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} /volumes"
     restart: "no"
+
+  # =========================================================================
+  # 层 1：核心组件（默认启动）
+  # =========================================================================
 
   etcd:
     container_name: milvus-etcd
@@ -29,17 +70,18 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    <<: [*default-restart, *default-logging]
 
   minio:
     container_name: milvus-minio
     #image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
     environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
     ports:
-      - "9001:9001"
-      - "9000:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_PORT:-9000}:9000"
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
     command: minio server /minio_data --console-address ":9001"
@@ -51,10 +93,10 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    <<: [*default-restart, *default-logging]
 
   milvus:
     container_name: milvus-standalone
-    restart: always
     image: milvusdb/milvus:v3.0.1
     # uid 跟随执行用户（数据属主与宿主机用户一致）；
     # gid 必须保留 999(milvus)，镜像内二进制和库仅对 milvus 组开放 r-x 权限
@@ -84,10 +126,39 @@ services:
         condition: service_started
       minio:
         condition: service_started
+    <<: [*default-restart, *default-logging]
 
+  mongodb:
+    image: amd64/mongo:8.0
+    container_name: mongodb
+    # 以执行用户身份运行，保证数据目录属主与宿主机用户一致
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      # 管理员用户名（自行修改）
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      # 管理员密码（务必修改为强密码）
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-123456}
+      # 初始化数据库名称
+      MONGO_INITDB_DATABASE: admin
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongo/data:/data/db
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongo/config:/data/configdb
+    # 关键配置：允许所有IP访问
+    command: mongod --bind_ip 0.0.0.0
+    depends_on:
+      init-volumes:
+        condition: service_completed_successfully
+    <<: [*default-restart, *default-logging]
+
+  # =========================================================================
+  # 层 2：可选组件 —— Milvus 管理 UI（profile: attu）
+  # =========================================================================
   attu:
     container_name: attu
     image: zilliz/attu:v3.0.0
+    profiles: ["attu"]
     ports:
       - "3000:3000"
     environment:
@@ -99,40 +170,179 @@ services:
         condition: service_completed_successfully
       milvus:
         condition: service_started
+    <<: [*default-restart, *default-logging]
 
-  mongodb:
-    # 官方MongoDB镜像
-    image: amd64/mongo:8.0
-    # 容器名称
-    container_name: mongodb
-    # 以执行用户身份运行，保证数据目录属主与宿主机用户一致
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    # 重启策略：开机自启
-    restart: always
-    # 环境变量（配置用户名密码）
+  # =========================================================================
+  # 层 2：可选组件 —— 配置中心（profile: nacos，postgres 为 nacos 主库）
+  # =========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: aipaas-postgres
+    profiles: ["nacos"]
     environment:
-      # 管理员用户名（自行修改）
-      MONGO_INITDB_ROOT_USERNAME: admin
-      # 管理员密码（务必修改为强密码）
-      MONGO_INITDB_ROOT_PASSWORD: 123456
-      # 初始化数据库名称
-      MONGO_INITDB_DATABASE: admin
-    # 端口映射：主机端口:容器端口
+      POSTGRES_USER: ${POSTGRES_USER:-nacos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nacos}
+      POSTGRES_DB: ${POSTGRES_DB:-nacos}
+      TZ: Asia/Shanghai
     ports:
-      - "27017:27017"
-    # 数据持久化（容器删除数据不丢失）
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongo/data:/data/db
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongo/config:/data/configdb
-    # 关键配置：允许所有IP访问
-    command: mongod --bind_ip 0.0.0.0
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nacos}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    <<: [*default-restart, *default-logging]
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: aipaas-nacos
+    profiles: ["nacos"]
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: postgresql
+      # nacos 镜像约定：数据源参数复用 MYSQL_SERVICE_* 前缀
+      MYSQL_SERVICE_HOST: postgres
+      MYSQL_SERVICE_PORT: "5432"
+      MYSQL_SERVICE_DB_NAME: ${POSTGRES_DB:-nacos}
+      MYSQL_SERVICE_USER: ${POSTGRES_USER:-nacos}
+      MYSQL_SERVICE_PASSWORD: ${POSTGRES_PASSWORD:-nacos}
+      NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-true}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-serverIdentity}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-mySecureValue123}
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-VGhpc0lzTXlTZWNyZXRLZXlXaGljaFNob3VsZEJlMzJDaGFyYWN0ZXJzTGFyZ2U=}
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+    ports:
+      - "${NACOS_PORT:-8848}:8848"
+      - "${NACOS_PORT_GRPC:-9848}:9848"
+    volumes:
+      - nacos-data:/home/nacos/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     depends_on:
-      init-volumes:
-        condition: service_completed_successfully
-  
+      postgres:
+        condition: service_healthy
+    <<: [*default-restart, *default-logging]
+
+  # =========================================================================
+  # 层 2：可选组件 —— 缓存（profile: redis）
+  # =========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: aipaas-redis
+    profiles: ["redis"]
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    <<: [*default-restart, *default-logging]
+
+  # =========================================================================
+  # 层 2：可选组件 —— 消息队列（profile: rocketmq）
+  # =========================================================================
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: aipaas-rocketmq-namesrv
+    profiles: ["rocketmq"]
+    command: sh mqnamesrv
+    environment:
+      JAVA_OPT: ${ROCKETMQ_NAMESRV_JAVA_OPT:--Xms128m -Xmx256m -Xmn64m}
+    ports:
+      - "${ROCKETMQ_NAMESRV_PORT:-9876}:9876"
+    volumes:
+      - rocketmq-namesrv-data:/home/rocketmq/store
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'exec 3<>/dev/tcp/localhost/9876' && echo ok || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    <<: [*default-restart, *default-logging]
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    container_name: aipaas-rocketmq-broker
+    profiles: ["rocketmq"]
+    command: sh mqbroker -n rocketmq-namesrv:9876
+    environment:
+      JAVA_OPT: ${ROCKETMQ_BROKER_JAVA_OPT:--Xms256m -Xmx512m -Xmn128m}
+    ports:
+      - "${ROCKETMQ_BROKER_PORT:-10911}:10911"
+      - "${ROCKETMQ_BROKER_PORT2:-10909}:10909"
+    volumes:
+      - rocketmq-broker-data:/home/rocketmq/store
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_healthy
+    <<: [*default-restart, *default-logging]
+
+  # =========================================================================
+  # 层 2：可选组件 —— vLLM 推理引擎（profile: vllm，需 NVIDIA GPU）
+  # -------------------------------------------------------------------------
+  # 以 OpenAI 兼容接口（/v1/chat/completions、/v1/models）对外提供 Qwen3-0.6B。
+  # 业务侧接入方式：LLM_BASE_URL=http://vllm:8000/v1  LLM_API_KEY=EMPTY  LLM_MODEL_NAME=qwen3-0.6b
+  # 前置条件：宿主机装好 NVIDIA 驱动 + nvidia-container-toolkit；
+  #           模型文件已下载到 ${VLLM_MODEL_DIR}（ModelScope: Qwen/Qwen3-0.6B）。
+  # =========================================================================
+  vllm:
+    image: vllm/vllm-openai:v0.11.0
+    container_name: aipaas-vllm
+    profiles: ["vllm"]
+    # vLLM 多进程共享内存通信需要
+    ipc: host
+    command: >
+      --model /models/Qwen3-0.6B
+      --served-model-name ${VLLM_SERVED_MODEL_NAME:-qwen3-0.6b}
+      --max-model-len ${VLLM_MAX_MODEL_LEN:-8192}
+      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTILIZATION:-0.85}
+      --port 8000
+    environment:
+      # 模型全部走本地挂载目录，禁止运行时访问外网下载
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      TZ: Asia/Shanghai
+    volumes:
+      - ${VLLM_MODEL_DIR:-../../models/Qwen3-0.6B}:/models/Qwen3-0.6B:ro
+    ports:
+      - "${VLLM_PORT:-8008}:8000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # 首次加载模型较慢，给足启动窗口
+      start_period: 300s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    <<: [*default-restart, *default-logging]
+
+# =============================================================================
+# 命名卷（postgres / redis / nacos / rocketmq 数据，均为可选 profile 组件使用）
+# =============================================================================
+volumes:
+  pg-data:
+  redis-data:
+  nacos-data:
+  rocketmq-namesrv-data:
+  rocketmq-broker-data:
+
 networks:
   default:
     name: milvus
-volumes:
-  milvus-data:
-  attu-data:

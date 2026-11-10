@@ -18,11 +18,9 @@ dependencies = [
     "langgraph>=1.2.12",
     "langchain>=1.4.3",
     "langchain-text-splitters>=1.1.3",
-    # 模型相关（CPU 版，GPU 机部署时切换为 cu128 源）
-    "torch==2.11.0+cpu",
-    "torchvision==0.26.0+cpu",
-    "torchaudio==2.11.0+cpu",
-    "flagembedding>=1.4.2",
+    # 模型相关
+    # 注意：torch / flagembedding 强依赖 torch，必须放在 workspace 根的
+    # cpu/gpu 分组里随分组安装（见根 pyproject.toml），写在这里会与分组索引冲突。
     "modelscope>=1.40.1",
     "transformers>=5.18.0",
     "numpy>=2.5.3",
@@ -34,14 +32,6 @@ aipaas-llm = { workspace = true }
 aipaas-retrieval = { workspace = true }
 aipaas-storage = { workspace = true }
 aipaas-pipeline = { workspace = true }
-torch = { index = "pytorch-cpu" }
-torchvision = { index = "pytorch-cpu" }
-torchaudio = { index = "pytorch-cpu" }
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
 
 [build-system]
 requires = ["hatchling"]

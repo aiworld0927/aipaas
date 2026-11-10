@@ -2,7 +2,7 @@
 from aipaas_common.log_decorator import node_log
 from aipaas_retrieval.milvus_utils import create_hybrid_search_requests, get_milvus_client, hybrid_search
 from aipaas_common.conf.milvus_config import milvus_config
-from aipaas_llm.lm.embedding_utils import generate_embeddings
+from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 from aipaas_pipeline.rag_base import BaseNode
 
 from aipaas_common.core.log import logger

@@ -12,6 +12,8 @@ requires-python = ">=3.12,<3.14"
 members = [
     "apps/ingest-worker",
     "apps/query-worker",
+    "apps/model-embedding-worker",
+    "apps/model-reranker-worker",
     "packages/common",
     "packages/llm",
     "packages/retrieval",
@@ -25,6 +27,36 @@ members = [
 #   aipaas-llm 已移除 mcp/openai-agents 依赖，MCP 客户端统一由 mcp-agents 包提供
 
 # ---------------------------------------------------------------------------
+# 机器环境分组（互斥，一次只同步其中一个）
+#   cpu：只有 CPU 的机器（纯 CPU 构建，体积小、无 CUDA 运行时）
+#   gpu：有 NVIDIA 显卡的机器（CUDA 12.8 构建）
+#
+# 用法：
+#   uv sync --all-packages --group cpu    # CPU 环境
+#   uv sync --all-packages --group gpu    # GPU 环境
+#
+# torch 本体只出现在分组里；flagembedding / pymilvus[model] 强依赖 torch，
+# 必须与 torch 同组，否则它们的传递依赖会让 torch 在分组外走默认 PyPI 源解析，
+# 与分组索引冲突（uv 报 conflicting indexes ... in all marker environments）。
+# 不带 --group 的裸 uv sync 不会安装这些包，模型服务无法运行，请勿使用。
+# ---------------------------------------------------------------------------
+[dependency-groups]
+cpu = [
+    "torch==2.11.0+cpu",
+    "torchvision==0.26.0+cpu",
+    "torchaudio==2.11.0+cpu",
+    "flagembedding>=1.4.2",
+    "pymilvus[model]>=3.0.2",
+]
+gpu = [
+    "torch==2.11.0+cu128",
+    "torchvision==0.26.0+cu128",
+    "torchaudio==2.11.0+cu128",
+    "flagembedding>=1.4.2",
+    "pymilvus[model]>=3.0.2",
+]
+
+# ---------------------------------------------------------------------------
 # 公共源索引（成员 pyproject.toml 未单独声明时继承这里的配置）
 # ---------------------------------------------------------------------------
 [[tool.uv.index]]
@@ -34,3 +66,41 @@ url = "https://mirrors.aliyun.com/pypi/simple"
 name = "tsinghua"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
+
+# PyTorch 官方索引：explicit = true 表示只服务于 tool.uv.sources 里显式指定的包，
+# 不会把它当成通用源去解析其它依赖。
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cuda128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv]
+# 同时配置了多个 PyPI 镜像，某些镜像的版本会滞后。
+# 允许跨索引择优，避免"首个含该包的镜像版本不全"导致整体锁文件无法解析。
+# 两个源均为官方 PyPI 镜像，可信度一致。
+index-strategy = "unsafe-best-match"
+# 声明 cpu / gpu 两组互斥：同时勾选两组会直接报错，避免装出 CPU+GPU 混杂的环境。
+conflicts = [
+    [{ group = "cpu" }, { group = "gpu" }],
+]
+
+# 让三个 torch 相关包在各自分组内走对应的 PyTorch 官方索引，
+# 用 group 限定作用域，因此同一份配置在两台机器上都能用。
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cuda128", group = "gpu" },
+]
+torchvision = [
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cuda128", group = "gpu" },
+]
+torchaudio = [
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cuda128", group = "gpu" },
+]

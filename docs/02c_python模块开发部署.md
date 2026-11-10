@@ -61,14 +61,16 @@ apps（svc-ingest / svc-query）
 |-----|------|------|----------|
 | `svc-ingest`（`apps/ingest-worker`） | 8000 | 接收文档上传 → LangGraph 流程编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus） | `ingest_worker.api.service:app` |
 | `svc-query`（`apps/query-worker`） | 8001 | 接收用户查询 → LangGraph 流程编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出） | `query_worker.api.service:app` |
+| `svc-model-embedding`（`apps/model-embedding-worker`） | 8101 | 嵌入模型独立推理服务：离线 BGE-M3（dense + sparse）/ 在线 DashScope 兼容接口（仅 dense） | `model_embedding_worker.api.service:app` |
+| `svc-model-reranker`（`apps/model-reranker-worker`） | 8102 | 重排序模型独立推理服务：离线 bge-reranker-large / 在线 DashScope TextReRank | `model_reranker_worker.api.service:app` |
 
 ### 1.4 各 package 职责
 
 | Package | Python 包名 | 职责 |
 |---------|-------------|------|
 | `packages/common` | `aipaas_common` | 基础共享：日志（loguru）、路径、SSE 工具、任务管理、配置管理（OmegaConf）、请求 ID 上下文 |
-| `packages/llm` | `aipaas_llm` | LLM 接入：DashScope / Ollama / 百炼、BGE 嵌入、重排序、LangChain 封装 |
-| `packages/retrieval` | `aipaas_retrieval` | 检索层：Milvus、Elasticsearch、Qdrant、Neo4j 客户端 + 重排 HTTP 工具 |
+| `packages/llm` | `aipaas_llm` | LLM 接入：DashScope / Ollama / 百炼、LangChain 封装；嵌入与重排只保留 **HTTP 客户端**（`embedding_http_utils` / `reranker_http_utils`） |
+| `packages/retrieval` | `aipaas_retrieval` | 检索层：Milvus、Elasticsearch、Qdrant、Neo4j 客户端 |
 | `packages/storage` | `aipaas_storage` | 存储层：MongoDB（含历史记录）、MinIO、MySQL、Kubernetes 客户端 |
 | `packages/pipeline` | `aipaas_pipeline` | RAG 流程编排基类 |
 | `packages/mcp-agents1.0` | `aipaas_mcp_agents` | MCP 客户端（v1 版本：`mcp>=1.19.0,<2` + `openai-agents<0.20.0`） |
@@ -88,10 +90,12 @@ apps（svc-ingest / svc-query）
 ```bash
 cd pymodules
 
-# ⚠️ 必须加 --all-packages！
+# ⚠️ 必须加 --all-packages，且必须用 --group 二选一选定 PyTorch 构建！
 # 裸 uv sync 只会装根项目（aipaas-monorepo），而根项目没有 dependencies，
 # 结果就是一个空 .venv，import 全部报 ModuleNotFoundError。
-uv sync --all-packages
+# 不带 --group 则不会安装 torch / flagembedding / pymilvus[model]，模型服务无法运行。
+uv sync --all-packages --group cpu    # CPU 机器
+# uv sync --all-packages --group gpu  # NVIDIA GPU 机器（CUDA 12.8 构建）
 
 # 校验锁文件是否与 pyproject.toml 一致（CI 也会跑）
 uv lock --check
@@ -116,7 +120,7 @@ IDE 解释器必须指向 **`pymodules/.venv/bin/python`**。
 uv workspace list
 
 # 锁定所有成员的依赖变更
-uv lock && uv sync --all-packages
+uv lock && uv sync --all-packages --group cpu
 ```
 
 ---
@@ -192,7 +196,7 @@ uv add --package aipaas-retrieval elasticsearch>=8.0.0
 uv remove --package aipaas-llm dashscope
 
 # 变更后务必重新锁定 + 同步
-uv lock && uv sync --all-packages
+uv lock && uv sync --all-packages --group cpu
 ```
 
 ### 4.2 workspace 内部新增依赖
@@ -215,12 +219,34 @@ touch packages/<new-pkg>/<new_pkg_name>/__init__.py
 
 # 2. 在根 pyproject.toml 的 [tool.uv.workspace].members 中追加路径
 # 3. 重新锁文件并同步
-uv lock && uv sync --all-packages
+uv lock && uv sync --all-packages --group cpu
 ```
 
-### 4.4 GPU 版 PyTorch
+### 4.4 GPU 版 PyTorch（cpu / gpu 分组二选一）
 
-当前 `svc-ingest` / `svc-query` 默认走 CPU 版（`torch==2.11.0+cpu`，来自 `https://download.pytorch.org/whl/cpu`）。GPU 机部署时需将 index 切换为 CUDA 版本（如 `cu128`），参考各 app 的 `pyproject.toml` 中 `[tool.uv.index]` 配置。
+torch / torchvision / torchaudio / flagembedding / pymilvus[model] 统一放在根 `pyproject.toml` 的
+**互斥分组** `cpu` 与 `gpu` 中（`conflicts` 声明两组不能同时启用），同步时二选一：
+
+```bash
+uv sync --all-packages --group cpu    # CPU 机器：torch 2.11.0+cpu（pytorch.org/whl/cpu）
+uv sync --all-packages --group gpu    # GPU 机器：torch 2.11.0+cu128（pytorch.org/whl/cu128）
+```
+
+注意：
+- 成员工程**不得**在自身 `dependencies` 里声明 torch / flagembedding / pymilvus[model]，
+  否则其无条件传递依赖会让 torch 在分组外走默认 PyPI 源，与分组索引冲突
+  （uv 报 `conflicting indexes for package 'torch' in all marker environments`）。
+- 不带 `--group` 的裸同步不会安装这些包，模型服务无法运行。
+- 本地开发机切换 GPU/CPU 的完整命令与排错见 [PyTorch_CPU_GPU版本切换.md](file:///d:/coding/gitee/aipaas/docs/学习笔记/项目部署/PyTorch_CPU_GPU版本切换.md)。
+- 两个模型服务的 Dockerfile 已内置“sync 后替换为 cu128 构建”的步骤：
+
+```dockerfile
+RUN uv pip install --python /app/.venv/bin/python --reinstall \
+    --extra-index-url https://download.pytorch.org/whl/cu128 \
+    torch==2.11.0+cu128
+```
+
+模型服务镜像面向 GPU 部署，运行时再通过 `BGE_DEVICE=cuda` / `BGE_RERANKER_DEVICE=cuda` 指定设备。
 
 ---
 
@@ -239,6 +265,12 @@ docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest:latest .
 
 # 查询服务
 docker build -f apps/query-worker/Dockerfile -t aipaas/svc-query:latest .
+
+# 嵌入模型服务（端口 8101）
+docker build -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding:latest .
+
+# 重排序模型服务（端口 8102）
+docker build -f apps/model-reranker-worker/Dockerfile -t aipaas/svc-model-reranker:latest .
 ```
 
 构建细节（以 ingest-worker 为例）：
@@ -300,7 +332,7 @@ deploy/docker/
 
 ### 6.2 启动顺序
 
-依赖链：`init-app-dirs` → `milvus（来自 base 编排，依赖 etcd + minio）/ minio / mongodb` → `svc-ingest / svc-query`。**编排依赖 base 编排的 milvus / minio / mongodb**，主编排通过 `depends_on`（`service_healthy`）等待它们就绪。
+依赖链：`init-app-dirs` → `milvus（来自 base 编排，依赖 etcd + minio）/ minio / mongodb` → `svc-model-embedding / svc-model-reranker` → `svc-ingest / svc-query` → `frontend`。**编排依赖 base 编排的 milvus / minio / mongodb**，主编排通过 `depends_on`（`service_healthy`）等待它们就绪；两个业务服务还会等待两个模型服务 `healthy` 后再启动。
 
 推荐启动步骤：
 
@@ -309,21 +341,24 @@ cd deploy/docker
 
 # 1. 拷贝并修改环境变量
 cp .env.example .env
-vim .env         # 修改 MINIO 密码、MONGO 密码、LLM 地址等
+vim .env         # 修改 MINIO 密码、MONGO 密码、LLM 地址、模型目录 MODEL_BASE_DIR 等
 
-# 2. 启动 Python AI 服务
+# 2. 启动模型服务（首次启动需加载本地模型，start_period 给到 120s）
+docker compose up -d svc-model-embedding svc-model-reranker
+
+# 3. 启动 Python AI 服务
 #    depends_on 会自动拉起 base 编排的 milvus / minio / mongodb 及 init 容器，
-#    并等待 milvus / minio healthy 后再启动服务
+#    并等待 milvus / minio / 两个模型服务 healthy 后再启动
 docker compose up -d svc-ingest svc-query
 
-# 3. 查看状态
-docker compose ps svc-ingest svc-query
+# 4. 查看状态
+docker compose ps
 
-# 4. 查看实时日志
+# 5. 查看实时日志
 docker compose logs -f svc-ingest
-docker compose logs -f --tail=100 svc-query
+docker compose logs -f --tail=100 svc-model-embedding
 
-# 5. 停止
+# 6. 停止
 docker compose down
 ```
 
@@ -332,6 +367,7 @@ docker compose down
 > ```bash
 > docker compose up -d milvus minio mongodb
 > docker compose ps milvus minio mongodb
+> docker compose up -d svc-model-embedding svc-model-reranker
 > docker compose up -d svc-ingest svc-query
 > ```
 
@@ -346,6 +382,9 @@ compose 编排的服务之间**必须用容器名（service name）互相寻址*
 | `MONGO_URL` | `mongodb://admin:123456@mongodb:27017/?authSource=admin` | MongoDB 连接串（账密与 base 编排 mongodb 服务一致）|
 | `MONGO_DB_NAME` | `aipaas` | 业务库名 |
 | `LLM_BASE_URL` | `http://host.docker.internal:11434/v1` | LLM 跑在宿主机时用此地址；代码实际读取 `OPENAI_BASE_URL`，compose 中由 `LLM_BASE_URL` 映射 |
+| `EMBEDDING_SERVICE_URL` | `http://svc-model-embedding:8101` | 嵌入模型服务（业务侧唯一入口，后端在服务侧切换）|
+| `RERANKER_SERVICE_URL` | `http://svc-model-reranker:8102` | 重排序模型服务（业务侧唯一入口，后端在服务侧切换）|
+| `MODEL_BASE_DIR` | `../../models` | 宿主机模型根目录，挂载为 `bge-m3`、`bge-reranker-large` |
 
 compose 已为两个 Python 服务预填好这些地址，见 [docker-compose.yaml](file:///coding/aipaas/deploy/docker/docker-compose.yaml) 的 `svc-ingest` / `svc-query` 服务定义。
 
@@ -423,6 +462,10 @@ logger.exception("LangGraph 全流程执行失败")  # 自动带完整堆栈
 |------|------|------------------------|---------------------|
 | svc-ingest | `/health`（需开发补充） | ✅ 已声明（`curl localhost:8000/health`） | ✅ 已声明 |
 | svc-query | `/health` ✅ | ✅ 已声明 | ✅ 已声明 |
+| svc-model-embedding | `/health`（存活）+ `/ready`（就绪，模型未加载返回 503） | ✅ 已声明 | ✅ 已声明 |
+| svc-model-reranker | `/health`（存活）+ `/ready`（就绪，模型未加载返回 503） | ✅ 已声明 | ✅ 已声明 |
+
+> 两个模型服务的 `/health` 只反映进程存活，容器探针用它；`/ready` 才反映模型是否可服务，业务侧与运维排查用它。启动预加载失败不会让进程退出，而是 `/ready` 持续 503 暴露原因。
 
 > **注意**：截至当前版本，`svc-ingest` 的 FastAPI app（`ingest_worker/api/service.py`）**尚未显式注册 `/health` 端点**，但 Dockerfile 和 compose 的 healthcheck 已在探测此端点。部署后若 healthcheck 持续失败，需在 ingest-worker 的 `service.py` 中补充：
 > ```python
@@ -493,7 +536,7 @@ uv 会自动在 `apps/ingest-worker/pyproject.toml` 的 `[tool.uv.sources]` 中�
 **步骤 5**：重新锁文件并同步
 
 ```bash
-uv lock && uv sync --all-packages
+uv lock && uv sync --all-packages --group cpu
 ```
 
 **步骤 6**：校验
@@ -662,7 +705,7 @@ svc-ingest:
 
 **修复**：
 ```bash
-uv lock && uv sync --all-packages
+uv lock && uv sync --all-packages --group cpu
 ```
 
 ### Q7：ingest-worker 的 compose healthcheck 一直是 `starting` / `unhealthy`
@@ -678,9 +721,227 @@ async def health():
 
 ### Q8：GPU 机部署时 PyTorch 报 CUDA not available
 
-**原因**：默认 `torch==2.11.0+cpu` 是 CPU 版。
+**原因**：同步时选了 `--group cpu`（或未选分组），装的是 CPU 版 torch。
 
-**修复**：修改 `apps/ingest-worker/pyproject.toml` 和 `apps/query-worker/pyproject.toml` 中 `[tool.uv.index]` 的 URL 为 CUDA 版本（如 `https://download.pytorch.org/whl/cu128`），并将 torch 依赖切换为对应版本，然后 `uv lock && uv sync --all-packages`。
+**修复**：重新按 GPU 分组同步（两组互斥，直接切换即可）：
+
+```bash
+cd pymodules
+uv sync --all-packages --group gpu
+```
+
+---
+
+## 12. 模型服务（嵌入 / 重排序）独立部署
+
+将 BGE-M3 嵌入模型与 bge-reranker-large 重排序模型从业务进程剥离，独立为两个 HTTP 推理服务；业务侧（ingest-worker / query-worker / retrieval 包）改为 HTTP 调用，不再在进程内加载模型。
+
+### 12.1 改造前后对比
+
+| | 改造前 | 改造后 |
+|---|---|---|
+| 嵌入模型 | ingest-worker、query-worker、retrieval 各自进程内加载 BGE-M3（6 处调用，每个进程一份显存/内存） | 统一调用 `svc-model-embedding`（8101） |
+| 重排序 | query-worker 直连 DashScope 在线 `qwen3-rerank` | 统一调用 `svc-model-reranker`（8102），在线/离线由服务侧环境变量切换 |
+| 业务镜像 | 需要 torch / transformers / FlagEmbedding，体积大 | 只需 HTTP 客户端；模型依赖集中在两个推理服务 |
+
+### 12.2 目录结构
+
+```text
+apps/model-embedding-worker/            # 端口 8101
+├─ pyproject.toml
+├─ Dockerfile
+└─ model_embedding_worker/
+   ├─ config.py                         # 全部嵌入配置（服务组 / 离线组 / 在线组）
+   ├─ model_service.py                  # 离线后端：BGE-M3 单例 + dense/sparse 编码
+   ├─ online_service.py                 # 在线后端：OpenAI 兼容接口（仅 dense，sparse 预留）
+   ├─ service.py                        # 后端门面：按 EMBEDDING_BACKEND 分派
+   └─ api/service.py                    # FastAPI 接口（全异步）
+
+apps/model-reranker-worker/             # 端口 8102
+├─ pyproject.toml
+├─ Dockerfile
+└─ model_reranker_worker/
+   ├─ config.py                         # 全部重排序配置（服务组 / 离线组 / 在线组）
+   ├─ model_service.py                  # 离线后端：FlagReranker 单例 + 归一化打分
+   ├─ online_service.py                 # 在线后端：DashScope TextReRank
+   ├─ service.py                        # 后端门面：按 RERANKER_BACKEND 分派
+   └─ api/service.py                    # FastAPI 接口（全异步）
+```
+
+配置全部收敛在各自 worker 工程内（原先 `aipaas_common/conf/embedding_config.py`、`reranker_config.py` 已删除）。
+
+### 12.3 在线 / 离线双后端
+
+| 服务 | 开关 | 取值 | 行为 |
+|---|---|---|---|
+| 嵌入 | `EMBEDDING_BACKEND` | `offline`（默认） | 本地 BGE-M3，输出 dense（1024）+ sparse（250002 词表） |
+| 嵌入 |  | `online` | DashScope/OpenAI 兼容 embedding，只输出 dense，`sparse` 固定为空列表（预留扩展点） |
+| 重排序 | `RERANKER_BACKEND` | `offline`（默认） | 本地 bge-reranker-large，`normalize=True` 打分 |
+| 重排序 |  | `online` | DashScope `TextReRank`（兼容旧值 `dashscope`） |
+
+实现要点：
+- 后端门面 `service.py` 用 `importlib` **延迟导入**，在线模式不会加载 `torch` / `pymilvus` / `FlagEmbedding`。
+- 在线稀疏向量目前为空列表，后续在 `online_service.encode()` 内补齐即可，接口结构不变。
+- 切换后端只需改环境变量并重启对应服务，业务侧无感知（调用地址不变）。
+
+### 12.4 接口清单
+
+**嵌入服务（8101）**
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/health` | 存活探针，不检查模型 |
+| GET | `/ready` | 就绪探针：模型未加载返回 503 |
+| GET | `/v1/model/info` | 当前后端、模型、设备、精度、向量维度 |
+| POST | `/v1/embeddings` | 批量生成 dense + sparse 向量 |
+
+```json
+// 请求
+{"embedding_documents": ["如何测量交流电压？", "烫金机"]}
+
+// 响应（离线后端；在线后端 sparse 为 []）
+{"dense": [[0.01, ...], [0.02, ...]], "sparse": [{"6": 0.0237, "32": 0.0498}, {...}]}
+```
+
+> 稀疏向量的 key 经 JSON 序列化后是字符串，客户端 `aipaas_llm.lm.embedding_http_utils.generate_embeddings`
+> 已自动还原为 int（Milvus 稀疏向量字段要求整数维度号）。
+
+**重排序服务（8102）**
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/health` | 存活探针 |
+| GET | `/ready` | 就绪探针 |
+| GET | `/v1/model/info` | 当前后端、模型、设备、归一化开关 |
+| POST | `/v1/rerank` | 返回与 documents 顺序一一对应的分数 |
+
+```json
+// 请求
+{"query": "烫金机", "documents": ["烫金机", "吹风机", "烫金机的使用方法"]}
+
+// 响应
+{"scores": [0.9999, 0.1889, 0.9874]}
+```
+
+打分固定 `normalize=True`，业务侧断崖截断阈值（0.5 / 0.25）依赖归一化分数。
+
+### 12.5 配置项（环境变量）
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `BGE_M3_PATH` | `D:/aigc/modelscope_cache/models/BAAI/bge-m3` | 嵌入模型目录 |
+| `BGE_DEVICE` | 自动探测（有 GPU 用 cuda） | 嵌入模型设备 |
+| `BGE_FP16` | `False` | 嵌入模型半精度 |
+| `MODEL_EMBEDDING_HOST` / `MODEL_EMBEDDING_PORT` | `0.0.0.0` / `8101` | 嵌入服务监听 |
+| `MODEL_EMBEDDING_MAX_BATCH` | `64` | 单请求最大文本条数 |
+| `MODEL_EMBEDDING_MAX_CONCURRENCY` | `1` | 嵌入推理并发上限（CPU 建议 1，GPU 可调大）|
+| `EMBEDDING_BACKEND` | `offline` | `offline` / `online` |
+| `EMBEDDING_ONLINE_API_KEY` | 空（回退 `OPENAI_API_KEY`） | 在线嵌入密钥 |
+| `EMBEDDING_ONLINE_BASE_URL` | 空（回退 `OPENAI_BASE_URL`） | 在线嵌入地址 |
+| `EMBEDDING_ONLINE_MODEL` | 空（回退 `EMBEDDING_MODEL`，再回退 `text-embedding-v4`） | 在线嵌入模型 |
+| `EMBEDDING_ONLINE_DIM` | 空（回退 `EMBEDDING_DIM`，再回退 `1536`） | 在线嵌入维度 |
+| `EMBEDDING_ONLINE_TIMEOUT` | `60` | 在线嵌入超时（秒） |
+| `BGE_RERANKER_LARGE` | `D:/aigc/modelscope_cache/models/BAAI/bge-reranker-large` | 重排序模型目录 |
+| `BGE_RERANKER_DEVICE` | 自动探测 | 重排序设备 |
+| `BGE_RERANKER_FP16` | `False` | 重排序半精度 |
+| `MODEL_RERANKER_HOST` / `MODEL_RERANKER_PORT` | `0.0.0.0` / `8102` | 重排序服务监听 |
+| `MODEL_RERANKER_MAX_DOCS` | `128` | 单请求最大文档条数 |
+| `MODEL_RERANKER_MAX_CONCURRENCY` | `1` | 重排序推理并发上限 |
+| `RERANKER_BACKEND` | `offline` | `offline` / `online`（兼容 `dashscope`） |
+| `TEXT_RERANK_MODEL` / `TEXT_RERANK_INSTRUCT` | `qwen3-rerank` / 内置说明 | 在线重排序模型与指令 |
+| `EMBEDDING_SERVICE_URL` | `http://127.0.0.1:8101` | 业务侧调用的嵌入服务地址 |
+| `RERANKER_SERVICE_URL` | `http://127.0.0.1:8102` | 业务侧调用的重排序服务地址 |
+
+以上均已写入 `pymodules/.env`。
+
+### 12.6 异步实现要点
+
+两个 worker 的路由、后端门面、推理入口全部为 `async def`：
+
+| 关注点 | 做法 |
+|---|---|
+| 模型单例加载 | `asyncio.Lock` 双检锁 + `asyncio.to_thread(_build_model)`，并发启动只加载一次 |
+| CPU/GPU 密集推理 | `asyncio.Semaphore(max_concurrency)` 限流 + `asyncio.to_thread` 卸载到线程池，避免阻塞事件循环 |
+| 在线嵌入 | `openai.AsyncOpenAI` 原生异步客户端，连接池复用 |
+| 在线重排 | dashscope SDK 为同步实现，用 `asyncio.to_thread` 包装 |
+| 请求体限制 | `MAX_BATCH` / `MAX_DOCS` 超限返回 413，空入参返回 400 |
+| 错误返回 | 推理异常统一 500 + `{"detail": ...}`；日志用占位符传参（异常字符串常含大括号，f-string 会触发 loguru 格式化报错） |
+
+### 12.7 本机启动（uv）
+
+```powershell
+cd d:\coding\gitee\aipaas\pymodules
+
+# 终端 1：嵌入服务
+uv run --no-sync python -m uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8101
+
+# 终端 2：重排序服务
+uv run --no-sync python -m uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8102
+```
+
+或用模块内置入口（读取 `MODEL_*_HOST/PORT`）：
+
+```powershell
+.\.venv\Scripts\python.exe -m model_embedding_worker.api.service
+.\.venv\Scripts\python.exe -m model_reranker_worker.api.service
+```
+
+验证：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8101/ready
+Invoke-RestMethod http://127.0.0.1:8102/ready
+```
+
+临时切到在线后端（不改代码，只改进程环境变量）：
+
+```powershell
+$env:EMBEDDING_BACKEND="online"; .\.venv\Scripts\python.exe -m uvicorn model_embedding_worker.api.service:app --port 8111
+$env:RERANKER_BACKEND="online";  .\.venv\Scripts\python.exe -m uvicorn model_reranker_worker.api.service:app --port 8112
+```
+
+### 12.8 业务侧调用方式
+
+调用方只改了 import，函数签名与返回结构不变：
+
+| 文件 | 改造后 import |
+|---|---|
+| `ingest-worker/.../f_node_bge_embedding.py` | `aipaas_llm.lm.embedding_http_utils.generate_embeddings` |
+| `ingest-worker/.../e_node_item_name_recognition.py` | 同上 |
+| `query-worker/.../a_node_item_name_confirm.py` | 同上 |
+| `query-worker/.../b_node_search_embedding.py` | 同上 |
+| `query-worker/.../c_node_search_embedding_hyde.py` | 同上 |
+| `retrieval/aipaas_retrieval/milvus_utils.py` | 同上 |
+| `query-worker/.../f_node_rerank.py` | `aipaas_llm.lm.reranker_http_utils.rerank_documents` |
+
+`aipaas-llm` 已移除 `dashscope` / `FlagEmbedding` / `pymilvus[model]` 依赖，只保留 `httpx` 客户端。
+
+### 12.9 实测记录（Windows / CPU torch 2.11.0+cpu）
+
+| 验证项 | 结果 |
+|---|---|
+| `GET /health` | `{"status":"ok","service":"model-embedding-worker"}` |
+| `GET /ready`（嵌入，离线） | 启动约 12s 可服务，`dim={"dense":1024,"sparse":250002}` |
+| `POST /v1/embeddings`（离线） | 2 条文本 → dense 2×1024（L2 范数 = 1.0）+ sparse 正常 |
+| `POST /v1/rerank`（离线） | `烫金机/吹风机/烫金机的使用方法` → `0.99993 / 0.18893 / 0.98740` |
+| 4 并发嵌入请求 | 全部返回 2×1024，串行闸门生效（`MAX_CONCURRENCY=1`） |
+| 在线嵌入 `/ready` | `backend=online, model=text-embedding-v4, dim=1536, sparse_supported=false` |
+| 在线重排 `/ready` | `backend=online, model=qwen3-rerank` |
+| 在线接口错误处理 | 无效密钥时返回结构化 `{"detail": ...}`（HTTP 500），进程不崩 |
+| `uv lock` | 183 包解析通过，10 个 workspace 成员全部锁定 |
+
+### 12.10 排错
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `/ready` 一直 503 | 模型加载失败 | 看服务日志；确认 `BGE_M3_PATH` / `BGE_RERANKER_LARGE` 指向真实目录 |
+| `torch.cuda.is_available()` 为 False | 装了 CPU 版 torch | 按 4.4 节替换为 cu128 构建，并设 `BGE_DEVICE=cuda` |
+| 业务报 `All connection attempts failed` | 服务未启动或地址不对 | 检查 `EMBEDDING_SERVICE_URL` / `RERANKER_SERVICE_URL`，先请求 `/health` |
+| 413 | 超过 `MAX_BATCH` / `MAX_DOCS` | 调用方分批，或调大环境变量 |
+| 在线后端 401 `invalid_api_key` | `OPENAI_API_KEY` / `EMBEDDING_ONLINE_API_KEY` 无效或过期 | 换成有效的 DashScope 密钥；或把后端切回 `offline` |
+| 业务侧拿到空 `sparse` | 服务端处于 `EMBEDDING_BACKEND=online` | 在线后端不产稀疏向量，Milvus 混合检索需切回 `offline` |
+| 日志出现 `KeyError: "'error'"` | 把含大括号的异常字符串直接塞进 f-string 记日志 | 改用 `logger.error("...：{}", exc, exc_info=True)` |
+| `uv lock` 报镜像版本不全 | 多个 PyPI 镜像版本滞后 | 根 `pyproject.toml` 已设 `index-strategy = "unsafe-best-match"` |
 
 ---
 
@@ -688,25 +949,30 @@ async def health():
 
 ```bash
 # ---------- 开发环境 ----------
-cd pymodules && uv sync --all-packages     # 一次性装好全部
+cd pymodules && uv sync --all-packages --group cpu   # 一次性装好全部（GPU 机换 --group gpu）
 uv lock --check                             # 校验锁文件
 
 # ---------- 开发启动 ----------
 uv run uvicorn ingest_worker.api.service:app --port 8000 --reload
 uv run uvicorn query_worker.api.service:app  --port 8001 --reload
+uv run uvicorn model_embedding_worker.api.service:app --port 8101 --reload
+uv run uvicorn model_reranker_worker.api.service:app  --port 8102 --reload
 
 # ---------- 依赖变更 ----------
 uv add    --package aipaas-retrieval elasticsearch>=8.0.0
 uv remove --package aipaas-llm dashscope
-uv lock && uv sync --all-packages
+uv lock && uv sync --all-packages --group cpu
 
 # ---------- 镜像构建 ----------
 cd pymodules
 docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest .
 docker build -f apps/query-worker/Dockerfile  -t aipaas/svc-query  .
+docker build -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding .
+docker build -f apps/model-reranker-worker/Dockerfile  -t aipaas/svc-model-reranker  .
 
 # ---------- compose ----------
 cd deploy/docker
+docker compose up -d svc-model-embedding svc-model-reranker   # 先起模型服务
 docker compose up -d svc-ingest svc-query   # 自动拉起依赖的 base 中间件（milvus/minio/mongodb）
 docker compose logs -f svc-ingest
 ```

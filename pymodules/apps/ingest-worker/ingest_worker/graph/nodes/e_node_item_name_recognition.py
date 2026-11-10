@@ -10,7 +10,7 @@ from aipaas_common.conf.milvus_config import milvus_config
 from aipaas_common.core.load_prompt import load_prompt
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
-from aipaas_llm.lm.embedding_utils import generate_embeddings
+from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 from aipaas_llm.lm.lm_utils import get_llm_client
 from aipaas_retrieval.milvus_utils import get_milvus_client, escape_milvus_string
 from ingest_worker.config import config
@@ -105,9 +105,9 @@ def _step_2_build_context(chunks: List[Dict]) -> str:
     for idx, chunk in enumerate(chunks[:config.item_name_chunk_k], start=1):
 
         # 1. 提取前k的切片，避免上下文过长
-        chunk_title = chunk.get("title").strip()
-        chunk_content = chunk.get("content").strip()
-
+        chunk_title = (chunk.get("title") or "").strip()
+        chunk_content = (chunk.get("content") or "").strip()
+        
         # 2. 格式化切片
         piece = f"【切片{idx}】\n标题{chunk_title}\n内容：{chunk_content}"
         parts.append(piece)
@@ -230,7 +230,7 @@ def _step_5_generate_vectors(item_name: str) -> Tuple[List, Dict]:
 
     # 1. 商品名称为空 → 直接返回空向量
     if not item_name:
-        return None, None
+        return [], {}
 
     # 2、调用向量生成工具：传入列表支持批量生成，单条数据仍用列表保证格式统一
     vectors = generate_embeddings([item_name])

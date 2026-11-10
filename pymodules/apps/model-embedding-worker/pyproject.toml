@@ -1,0 +1,30 @@
+[project]
+name = "model-embedding-worker"
+version = "0.1.0"
+description = "AIPaaS BGE-M3 嵌入模型独立推理服务（dense + sparse 混合向量）"
+requires-python = ">=3.12"
+dependencies = [
+    # 共享库（workspace 引用，提供统一 logger）
+    "aipaas-common",
+    # Web 框架
+    "fastapi>=0.142.2",
+    "uvicorn>=0.30.0",
+    "python-dotenv>=1.2.4",
+    "numpy>=2.5.3",
+    # 注意：torch / FlagEmbedding / pymilvus[model] 强依赖 torch，
+    # 必须放在 workspace 根的 cpu/gpu 分组里随分组安装（见根 pyproject.toml），
+    # 若写在这里会导致 torch 走默认 PyPI 源解析并与分组索引冲突。
+    "transformers>=5.18.0",
+    # 在线后端（OpenAI 兼容接口）
+    "openai>=1.60.0",
+]
+
+[tool.uv.sources]
+aipaas-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["model_embedding_worker"]
