@@ -4,10 +4,10 @@ from typing import Tuple, List, Dict
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_common.utils.table_utils import protect_tables
-from ingest_worker.config import config
 from ingest_worker.graph.state import ImportGraphState
 
 @node_log("node_document_split")
@@ -211,7 +211,7 @@ def _split_long_section( section: Dict[str, str]) -> List[Dict[str, str]]:
     # 内容空值兜底：无内容直接返回原章节
     content = section.get("content", "")
     # 长度未超限，无需切分，直接返回原章节（列表格式保持统一）
-    if len(content) <= config.max_content_length:
+    if len(content) <= get_settings().module.max_content_length:
         return [section]
 
     # 提取章节标题，用于组装子Chunk前缀（保留标题上下文）
@@ -223,7 +223,7 @@ def _split_long_section( section: Dict[str, str]) -> List[Dict[str, str]]:
     # 初始化LangChain递归分割器（核心工具：按优先级分隔符切分，保留语义）
     # separators：分割符优先级（从粗到细），优先按大语义单元切分，最后才硬拆
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=config.max_content_length,  # 正文部分最大长度（已扣除标题）
+        chunk_size=get_settings().module.max_content_length,  # 正文部分最大长度（已扣除标题）
         chunk_overlap=0,  # 无重叠：按标题切分后语义完整，无需重叠
         # 分割符优先级：空行(段落)→换行→中文标点→英文标点→空格，最后硬拆（在 chunk_size 位置强制切断）
         # 先用第一个分隔符进行切分，切分后如果某个 Chunk 还是超过 chunk_size，则继续用下一个优先级的分隔符切分
@@ -277,7 +277,7 @@ def _merge_short_sections( sections: List[Dict[str, str]]) -> List[Dict[str, str
             continue
 
         # 合并条件：1.当前块长度不足阈值 2.与下一块同父标题（同属一个原章节）
-        is_current_short = len(current_chunk["content"]) < config.min_content_length
+        is_current_short = len(current_chunk["content"]) < get_settings().module.min_content_length
         is_same_parent = current_chunk.get("parent_title") == sec.get("parent_title")
 
         if is_current_short and is_same_parent:

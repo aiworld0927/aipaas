@@ -10,6 +10,11 @@ from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse, StreamingResponse
 
+from aipaas_common.conf.settings import load_settings
+
+# 配置引导：必须在导入业务模块前完成加载（唯一权威来源，失败即终止启动）
+settings = load_settings("query_worker")
+
 from aipaas_common.core.context import request_id_ctx_var
 from aipaas_storage.mongo_history_utils import clear_history, get_recent_messages
 from query_worker.graph.main_v2 import KBQueryWorkflowV2

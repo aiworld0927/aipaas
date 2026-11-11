@@ -5,13 +5,12 @@
 #   cd pymodules
 #   docker build -f apps/model-reranker-worker/Dockerfile -t aipaas/svc-model-reranker:latest .
 #
-# 运行（模型目录挂载到容器内 /app/models/bge-reranker-large）：
+# 运行（模型目录挂载到容器内 /app/models/bge-reranker-large；配置包外部映射到 /app/configs）：
 #   docker run -d --name svc-model-reranker -p 8102:8102 --gpus all \
 #     -v /host/models/bge-reranker-large:/app/models/bge-reranker-large:ro \
 #     -v /host/path/logs:/app/logs \
-#     -e BGE_RERANKER_LARGE=/app/models/bge-reranker-large \
-#     -e BGE_RERANKER_DEVICE=cuda \
-#     -e BGE_RERANKER_FP16=1 \
+#     -v /host/path/aipaas-configs:/app/configs:ro \
+#     -e APP_ENV=devcompany -e CONFIG_DIR=/app/configs \
 #     aipaas/svc-model-reranker:latest
 # ===========================================================================
 
@@ -49,17 +48,6 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PROJECT_ROOT=/app \
-    LOG_DIR=/app/logs \
-    LOG_FILE_PREFIX=model-reranker-worker \
-    LOG_FILE_ENABLE=True \
-    LOG_FILE_LEVEL=INFO \
-    LOG_FILE_RETENTION="7 days" \
-    LOG_CONSOLE_ENABLE=True \
-    LOG_CONSOLE_LEVEL=INFO \
-    MODEL_RERANKER_HOST=0.0.0.0 \
-    MODEL_RERANKER_PORT=8102 \
-    BGE_RERANKER_LARGE=/app/models/bge-reranker-large \
-    BGE_RERANKER_FP16=1 \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
@@ -71,6 +59,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 COPY packages ./packages
 COPY apps/model-reranker-worker ./apps/model-reranker-worker
+COPY configs ./configs
 COPY pyproject.toml uv.lock ./
 
 # 数据卷声明：日志目录 + 模型目录（由 compose 或 -v 挂载到宿主机）

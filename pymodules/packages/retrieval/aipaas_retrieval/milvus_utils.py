@@ -1,5 +1,5 @@
 from pymilvus import MilvusClient, AnnSearchRequest, WeightedRanker, DataType
-from aipaas_common.conf.milvus_config import milvus_config
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
 from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 
@@ -17,7 +17,7 @@ def get_milvus_client():
         global _milvus_client
         # 单例判断：未初始化则创建新连接
         if _milvus_client is None:
-            milvus_uri = milvus_config.milvus_url
+            milvus_uri = get_settings().common.milvus.url
             # 校验Milvus连接地址配置
             if not milvus_uri:
                 logger.error("Milvus客户端连接失败：缺少MILVUS_URL环境变量配置")
@@ -199,7 +199,7 @@ def hybrid_search(client, collection_name, reqs, ranker_weights=(0.5, 0.5), norm
 if __name__ == '__main__':
     milvus_client = get_milvus_client()
 
-    if not milvus_client.has_collection(collection_name=milvus_config.item_name_collection):
+    if not milvus_client.has_collection(collection_name=get_settings().common.milvus.item_name_collection):
         schema = milvus_client.create_schema(
             auto_id=True,  # id 数字 自增长
             enable_dynamic_collection=True,  # 可以传入没有声明的字段
@@ -228,17 +228,17 @@ if __name__ == '__main__':
         )
         # 4、创建集合collection
         milvus_client.create_collection(
-            collection_name=milvus_config.item_name_collection,
+            collection_name=get_settings().common.milvus.item_name_collection,
             schema=schema,
             index_params=index_params,
         )
-    milvus_client.load_collection(milvus_config.item_name_collection)
+    milvus_client.load_collection(get_settings().common.milvus.item_name_collection)
     file_title ="test"
     item_name ="测试示例"
     result = generate_embeddings([item_name])
     dense_vector, sparse_vector = result['dense'][0], result['sparse'][0]
     # 先删除数据item_name
-    milvus_client.delete(collection_name=milvus_config.item_name_collection, filter=f"item_name=='{item_name}'")
+    milvus_client.delete(collection_name=get_settings().common.milvus.item_name_collection, filter=f"item_name=='{item_name}'")
     item_data = {
             "file_title": file_title,
             "item_name": item_name,
@@ -247,14 +247,14 @@ if __name__ == '__main__':
         }
     print(f"sparse_vector:{sparse_vector}")
     # 打印 collection schema
-    desc = milvus_client.describe_collection(collection_name=milvus_config.item_name_collection)
+    desc = milvus_client.describe_collection(collection_name=get_settings().common.milvus.item_name_collection)
     import json
 
     print(json.dumps(desc, indent=2, ensure_ascii=False))
     print("插入数据:", item_data)
 
 
-    milvus_client.insert(collection_name=milvus_config.item_name_collection, data=[item_data])
+    milvus_client.insert(collection_name=get_settings().common.milvus.item_name_collection, data=[item_data])
 
 
 def escape_milvus_string(value: str) -> str:

@@ -11,11 +11,8 @@ from datetime import datetime
 from pymongo import MongoClient, ASCENDING
 # 导入bson的ObjectId：MongoDB默认的主键类型，用于唯一标识文档
 from bson import ObjectId
-# 导入dotenv模块：用于从.env文件加载环境变量，避免硬编码敏感配置（如MongoDB连接地址）
-from dotenv import load_dotenv
-
-# 加载.env文件中的环境变量，使os.getenv能读取到配置
-load_dotenv()
+# 统一配置入口（common.mongo 节点）
+from aipaas_common.conf.settings import get_settings
 
 
 class HistoryMongoTool:
@@ -30,10 +27,11 @@ class HistoryMongoTool:
         初始化失败会抛出异常并记录错误日志，确保程序感知连接问题
         """
         try:
-            # 从环境变量读取MongoDB连接地址（敏感配置，不硬编码）
-            self.mongo_url = os.getenv("MONGO_URL")
-            # 从环境变量读取要使用的数据库名称
-            self.db_name = os.getenv("MONGO_DB_NAME")
+            # 从统一配置读取MongoDB连接地址（敏感配置，来自环境变量注入）
+            mongo_cfg = get_settings().common.mongo
+            self.mongo_url = mongo_cfg.url_str
+            # 从统一配置读取要使用的数据库名称
+            self.db_name = mongo_cfg.db_name
 
             # 创建MongoDB客户端实例，建立与数据库的连接
             self.client = MongoClient(self.mongo_url)
@@ -58,15 +56,8 @@ class HistoryMongoTool:
 
 # 定义全局变量：存储HistoryMongoTool的单例实例
 # 作用：避免多次创建HistoryMongoTool实例，从而避免重复建立MongoDB连接
+# 纯惰性加载：配置由 load_settings 在模块入口加载，import 期不触碰数据库
 _history_mongo_tool = None
-# 模块加载时尝试初始化单例实例，实现预加载
-# 目的：将数据库连接的初始化提前到模块加载阶段，避免第一次调用接口时才建立连接（提升首次响应速度）
-try:
-    _history_mongo_tool = HistoryMongoTool()
-except Exception as e:
-    # 初始化失败时仅记录警告日志，不抛出异常
-    # 原因：模块加载阶段的异常可能导致整个程序启动失败，此处保留懒加载兜底（get_history_mongo_tool会再次尝试创建）
-    logging.warning(f"Could not initialize HistoryMongoTool on module load: {e}")
 
 def get_history_mongo_tool() -> HistoryMongoTool:
     """

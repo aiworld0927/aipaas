@@ -1,19 +1,17 @@
 """重排序 HTTP 客户端。
 
 对应独立部署的 apps/model-reranker-worker 服务。在线/离线后端的切换
-在服务端通过 RERANKER_BACKEND 完成，业务侧只认一个地址。
+在服务端通过配置 backend 完成，业务侧只认一个地址。
 
 函数名、入参、返回值与历史 rerank_documents 一致。
 
-环境变量：
-    RERANKER_SERVICE_URL       服务地址，默认 http://127.0.0.1:8102
-    RERANKER_SERVICE_TIMEOUT   超时秒数，默认 60
+配置来源：统一配置 common.rerank_service 节点（url / timeout）。
 """
-import os
 from typing import Optional
 
 import httpx
 
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
 
 _client: Optional[httpx.Client] = None
@@ -23,10 +21,9 @@ def _get_client() -> httpx.Client:
     """惰性创建并复用 HTTP 连接池。"""
     global _client
     if _client is None:
-        base_url = os.getenv("RERANKER_SERVICE_URL", "http://127.0.0.1:8102")
-        timeout = float(os.getenv("RERANKER_SERVICE_TIMEOUT", "60"))
-        _client = httpx.Client(base_url=base_url, timeout=timeout)
-        logger.info(f"重排序服务客户端已初始化 | base_url={base_url} timeout={timeout}s")
+        cfg = get_settings().common.rerank_service
+        _client = httpx.Client(base_url=cfg.url, timeout=cfg.timeout)
+        logger.info(f"重排序服务客户端已初始化 | base_url={cfg.url} timeout={cfg.timeout}s")
     return _client
 
 

@@ -1,5 +1,5 @@
 # processor/query_processor/nodes/node_search_embedding_hyde.py
-from aipaas_common.conf.milvus_config import milvus_config
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.load_prompt import load_prompt
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
@@ -98,7 +98,7 @@ def _step_2_search_embedding_hyde(
         sparse_vec = embeddings.get("sparse")[0]
 
         # 3. 获取Milvus的集合
-        collection_name = milvus_config.chunks_collection
+        collection_name = get_settings().common.milvus.chunks_collection
 
         # 4、处理 item_names 中的引号，防止注入或语法错误
         expr = None

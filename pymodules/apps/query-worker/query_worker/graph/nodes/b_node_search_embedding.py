@@ -1,7 +1,7 @@
 # processor/query_processor/nodes/node_search_embedding.py
 from aipaas_common.log_decorator import node_log
 from aipaas_retrieval.milvus_utils import create_hybrid_search_requests, get_milvus_client, hybrid_search
-from aipaas_common.conf.milvus_config import milvus_config
+from aipaas_common.conf.settings import get_settings
 from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 from aipaas_pipeline.rag_base import BaseNode
 
@@ -36,7 +36,7 @@ def node_search_embedding( state: QueryGraphState) -> QueryGraphState:
         sparse_vec = embeddings.get("sparse")[0]
 
         # 3. 获取Milvus的集合
-        collection_name = milvus_config.chunks_collection
+        collection_name = get_settings().common.milvus.chunks_collection
 
         # 4、处理 item_names 中的引号，防止注入或语法错误
         expr = None

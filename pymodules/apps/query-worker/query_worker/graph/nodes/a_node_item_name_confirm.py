@@ -2,7 +2,7 @@ import json
 from typing import Dict, List, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from aipaas_common.conf.milvus_config import milvus_config
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.load_prompt import load_prompt
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
@@ -10,7 +10,6 @@ from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 from aipaas_llm.lm.lm_utils import get_llm_client
 from aipaas_retrieval.milvus_utils import get_milvus_client, create_hybrid_search_requests, hybrid_search
 from aipaas_storage.mongo_history_utils import save_chat_message, get_recent_messages, update_message_item_names
-from query_worker.config import query_config
 from query_worker.graph.state import QueryGraphState
 
 
@@ -180,7 +179,7 @@ def _step_5_vectorize_and_query(item_names) -> List[Dict]:
         return results
 
     # 4、从环境变量中获取Milvus中存储商品名称向量的集合名（表名）
-    collection_name = milvus_config.item_name_collection  # kb_item_names
+    collection_name = get_settings().common.milvus.item_name_collection  # kb_item_names
 
     # 5、对所有商品名称批量生成BGEM3向量（稠密+稀疏），相比逐个生成提升处理效率
     # embeddings格式：{"dense": [向量1, 向量2,...], "sparse": [向量1, 向量2,...]}
@@ -275,10 +274,10 @@ def _step_6_align_item_names(query_results) -> Dict:
             continue
 
         # 筛选高置信度匹配结果：评分>0.85
-        high = [m for m in matches if m.get("score", 0) > query_config.query_high_threshold]
+        high = [m for m in matches if m.get("score", 0) > get_settings().module.query_high_threshold]
         # 筛选中置信度匹配结果：评分≥0.6（仅高置信度为空时生效）
         mid = [m for m in matches if
-               query_config.query_high_threshold > m.get("score", 0) >= query_config.query_mid_threshold]
+               get_settings().module.query_high_threshold > m.get("score", 0) >= get_settings().module.query_mid_threshold]
 
         # 优化 ab 所有评分高于0.85的都可以直接确认
         if len(high) > 0:

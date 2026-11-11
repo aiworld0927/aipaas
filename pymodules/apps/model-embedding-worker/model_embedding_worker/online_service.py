@@ -10,37 +10,45 @@ from typing import Optional
 
 from openai import AsyncOpenAI
 
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
-from model_embedding_worker.config import embedding_worker_config
 
 _client: Optional[AsyncOpenAI] = None
-_infer_semaphore = asyncio.Semaphore(embedding_worker_config.max_concurrency)
+# 惰性创建：解除 import 期对配置加载顺序的依赖
+_infer_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_infer_semaphore() -> asyncio.Semaphore:
+    global _infer_semaphore
+    if _infer_semaphore is None:
+        _infer_semaphore = asyncio.Semaphore(get_settings().module.max_concurrency)
+    return _infer_semaphore
 
 
 def _get_client() -> AsyncOpenAI:
     """惰性创建异步客户端，复用连接池。"""
     global _client
     if _client is None:
-        cfg = embedding_worker_config.online
-        _client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=cfg.timeout)
+        cfg = get_settings().module.online
+        _client = AsyncOpenAI(api_key=cfg.api_key_str, base_url=cfg.base_url, timeout=cfg.timeout)
         logger.info(f"在线 embedding 客户端已初始化 | base_url={cfg.base_url} model={cfg.model}")
     return _client
 
 
 async def ensure_loaded() -> None:
     """在线后端无本地模型，仅校验必要配置。"""
-    cfg = embedding_worker_config.online
+    cfg = get_settings().module.online
     if not cfg.api_key:
         raise RuntimeError("在线 embedding 后端缺少 API Key，请配置 EMBEDDING_ONLINE_API_KEY 或 OPENAI_API_KEY")
     logger.info(f"在线 embedding 后端就绪 | model={cfg.model} dim={cfg.dimension}")
 
 
 def is_loaded() -> bool:
-    return bool(embedding_worker_config.online.api_key)
+    return bool(get_settings().module.online.api_key)
 
 
 def info() -> dict:
-    cfg = embedding_worker_config.online
+    cfg = get_settings().module.online
     return {
         "backend": "online",
         "model": cfg.model,
@@ -52,8 +60,8 @@ def info() -> dict:
 
 async def encode(texts: list[str]) -> dict:
     """调用远端接口生成稠密向量，sparse 预留为空。"""
-    cfg = embedding_worker_config.online
-    async with _infer_semaphore:
+    cfg = get_settings().module.online
+    async with _get_infer_semaphore():
         response = await _get_client().embeddings.create(model=cfg.model, input=texts)
 
     # 接口返回顺序不保证与入参一致，按 index 还原

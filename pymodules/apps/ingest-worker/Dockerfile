@@ -13,13 +13,14 @@
 #   cd pymodules
 #   docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest:latest .
 #
-# 运行：
+# 运行（配置包外部映射：部署时把宿主机配置目录挂到 /app/configs）：
 #   docker run -d --name svc-ingest -p 8000:8000 \
 #     -v /host/path/logs:/app/logs \
-#     -e LOG_FILE_PREFIX=ingest-worker \
+#     -v /host/path/aipaas-configs:/app/configs:ro \
+#     -e APP_ENV=devcompany -e CONFIG_DIR=/app/configs \
 #     aipaas/svc-ingest:latest
 #
-# docker-compose 中自动挂载日志卷，日志文件命名为 ingest-worker_YYYYMMDD.log
+# docker-compose 中自动挂载日志卷与配置包，日志文件命名为 ingest-worker_YYYYMMDD.log
 # ===========================================================================
 
 # ---- 阶段 1：依赖构建 ----
@@ -50,13 +51,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MODELSCOPE_CACHE=/app/models/modelscope_cache \
     HF_HOME=/app/models/huggingface \
     PROJECT_ROOT=/app \
-    LOG_DIR=/app/logs \
-    LOG_FILE_PREFIX=ingest-worker \
-    LOG_FILE_ENABLE=True \
-    LOG_FILE_LEVEL=INFO \
-    LOG_FILE_RETENTION="7 days" \
-    LOG_CONSOLE_ENABLE=True \
-    LOG_CONSOLE_LEVEL=INFO \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app

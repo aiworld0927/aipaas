@@ -1,8 +1,11 @@
 # processor/query_processor/main_graph.py
-from dotenv import load_dotenv
+from aipaas_common.conf.settings import load_settings
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from query_worker.graph.state import QueryGraphState
+
+# 配置引导（类加载前执行，保证全局生效；幂等，已加载则返回缓存）
+load_settings("query_worker")
 
 from query_worker.graph.nodes.a_node_item_name_confirm import node_item_name_confirm
 from query_worker.graph.nodes.b_node_search_embedding import node_search_embedding
@@ -12,9 +15,6 @@ from query_worker.graph.nodes.e_node_rrf import node_rrf
 from query_worker.graph.nodes.f_node_rerank import node_rerank
 from query_worker.graph.nodes.g_node_answer_output import node_answer_output
 from aipaas_common.core.log import logger
-
-# 初始化环境变量（类加载前执行，保证全局生效）
-load_dotenv()
 
 
 class KBQueryWorkflow:

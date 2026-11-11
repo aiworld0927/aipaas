@@ -12,13 +12,11 @@ from minio.deleteobjects import DeleteObject
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 
-from aipaas_common.conf.lm_config import lm_config
-from aipaas_common.conf.minio_config import minio_config
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.utils.rate_limit_utils import apply_api_rate_limit
 from aipaas_llm.lm.lm_utils import get_llm_client
 from aipaas_storage.minio_utils import get_minio_client
 
-from ingest_worker.config import config
 from ingest_worker.graph.state import ImportGraphState
 
 @node_log("node_md_img")
@@ -101,7 +99,7 @@ def _step_2_scan_images(md_content: str, images_dir: Path) -> List[Tuple[str, st
 
         # 2.1 过滤无效后缀
         file_ext = os.path.splitext(image_file)[1].lower()
-        if file_ext not in config.image_extensions:
+        if file_ext not in get_settings().module.image_extensions:
             logger.warning(f"图片格式不支持，跳过：{image_file}")
             continue
 
@@ -185,7 +183,7 @@ def _summarize_image(image_path: str, root_folder: str, image_content: Tuple[str
     base64_image = base64.b64encode(image_path_obj.read_bytes()).decode("utf-8")
 
     try:
-        chat_model = get_llm_client(lm_config.vl_model)
+        chat_model = get_llm_client(get_settings().common.llm.vl_model)
         messages = [
             {
                 "role": "user",
@@ -233,7 +231,7 @@ def _step_4_upload_and_replace(doc_stem: str, target_images: List[Tuple[str, str
     minio_client = get_minio_client()
 
     # 构造上传目录，去除文件名中的空格
-    minio_img_dir = minio_config.minio_img_dir
+    minio_img_dir = get_settings().common.minio.img_dir
     upload_dir = f"{minio_img_dir}/{doc_stem}".replace(" ", "")
 
     # 步骤1：清理该文档对应的MinIO旧目录
@@ -258,11 +256,11 @@ def _clean_minio_directory(minio_client: Minio, prefix: str) -> None:
     :param prefix: MinIO目录前缀（要清理的目录路径）
     """
     try:
-        objects_to_delete = minio_client.list_objects(minio_config.bucket_name, prefix=prefix, recursive=True)
+        objects_to_delete = minio_client.list_objects(get_settings().common.minio.bucket_name, prefix=prefix, recursive=True)
         # 构造删除列表
         delete_list = [DeleteObject(obj.object_name) for obj in objects_to_delete]
         if delete_list:
-            errors = minio_client.remove_objects(minio_config.bucket_name, delete_list)
+            errors = minio_client.remove_objects(get_settings().common.minio.bucket_name, delete_list)
             for error in errors:
                 logger.error(f"删除失败：{error}")
     except Exception as e:
@@ -293,15 +291,16 @@ def _upload_to_minio(minio_client: Minio, local_path: str, object_name: str) -> 
     try:
         # 上传本地文件至MinIO（fput_object：文件流上传，适合大文件）
         minio_client.fput_object(
-            bucket_name=minio_config.bucket_name,  # MinIO存储桶名（从配置读取）
+            bucket_name=get_settings().common.minio.bucket_name,  # MinIO存储桶名（从配置读取）
             object_name=object_name,  # MinIO对象名称
             file_path=local_path,  # 本地文件路径
             # 关键规则：多后缀文件仅拆分最后一个，如test.tar.gz拆分为("test.tar", ".gz")。
             content_type=f"image/{os.path.splitext(local_path)[1][1:]}"
         )
 
-        # 构造MinIO基础访问URL
-        base_url = f"http://{minio_config.endpoint}/{minio_config.bucket_name}"
+        # 构造MinIO基础访问URL（scheme 由 secure 配置推导）
+        minio_cfg = get_settings().common.minio
+        base_url = f"{minio_cfg.base_url}/{minio_cfg.bucket_name}"
 
         return f"{base_url}/{object_name}"
 

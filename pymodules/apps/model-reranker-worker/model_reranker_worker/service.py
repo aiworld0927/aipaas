@@ -1,16 +1,16 @@
-"""后端门面：按 RERANKER_BACKEND 把请求分派到离线或在线实现。
+"""后端门面：按配置 backend 把请求分派到离线或在线实现。
 
 离线：model_service（本地 bge-reranker-large）
 在线：online_service（DashScope TextReRank）
 """
 import importlib
 
-from model_reranker_worker.config import reranker_worker_config
+from aipaas_common.conf.settings import get_settings
 
 
 def _backend():
     # 延迟导入：在线模式无需加载 FlagEmbedding / torch
-    if reranker_worker_config.is_online:
+    if get_settings().module.is_online:
         return importlib.import_module("model_reranker_worker.online_service")
     return importlib.import_module("model_reranker_worker.model_service")
 

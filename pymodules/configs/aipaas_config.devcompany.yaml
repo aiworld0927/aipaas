@@ -1,0 +1,31 @@
+# =============================================================================
+# devcompany 环境差异覆盖（公司开发环境，中间件主机 192.168.222.188）
+# 只写偏离 base 的字段；未出现的键继承 aipaas_config.base.yaml
+# 适用场景：裸机本地开发（模型服务跑本机 192.168.222.188，中间件在 192.168.222.188）
+# =============================================================================
+
+common:
+  milvus:
+    url: http://192.168.222.188:19530
+    chunks_collection: kb_chunks
+  minio:
+    endpoint: 192.168.222.188:9000
+    bucket_name: knowledge-base-files
+  mongo:
+    db_name: kb002
+  embedding_service:
+    url: http://192.168.222.188:8101
+  rerank_service:
+    url: http://192.168.222.188:8102
+
+model_embedding_worker:
+  offline:
+    model_path: /coding/models/BAAI/bge-m3
+    device: cpu
+    use_fp16: false
+
+model_reranker_worker:
+  offline:
+    model_path: /coding/models/BAAI/bge-reranker-large
+    device: cpu
+    use_fp16: false

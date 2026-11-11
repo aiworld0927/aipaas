@@ -9,7 +9,7 @@ from aipaas_common.utils.sse_utils import push_to_session, SSEEvent
 from aipaas_common.utils.task_utils import set_task_result
 from aipaas_llm.lm.lm_utils import get_llm_client
 from aipaas_storage.mongo_history_utils import save_chat_message
-from query_worker.config import query_config
+from aipaas_common.conf.settings import get_settings
 from query_worker.graph.state import QueryGraphState
 
 
@@ -91,7 +91,7 @@ def _step_2_construct_prompt(state: QueryGraphState) -> str:
     阶段二：构建 Prompt
     根据state中的问题、重新问题、历史对话、提问商品（item_names）、 重排内容 组装 LLM 提示词
     """
-    char_budget = query_config.max_context_chars
+    char_budget = get_settings().module.max_context_chars
 
     # 1. 获取问题和商品名
     # 优先使用重写后的问题

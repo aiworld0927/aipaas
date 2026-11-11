@@ -3,29 +3,38 @@
 dashscope SDK 为同步实现，统一用 asyncio.to_thread 包装成异步调用。
 """
 import asyncio
+from typing import Optional
 
 import dashscope
 
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
-from model_reranker_worker.config import reranker_worker_config
 
-_infer_semaphore = asyncio.Semaphore(reranker_worker_config.max_concurrency)
+# 惰性创建：解除 import 期对配置加载顺序的依赖
+_infer_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_infer_semaphore() -> asyncio.Semaphore:
+    global _infer_semaphore
+    if _infer_semaphore is None:
+        _infer_semaphore = asyncio.Semaphore(get_settings().module.max_concurrency)
+    return _infer_semaphore
 
 
 async def ensure_loaded() -> None:
     """在线后端无本地模型，仅校验必要配置。"""
-    cfg = reranker_worker_config.online
+    cfg = get_settings().module.online
     if not cfg.api_key:
         raise RuntimeError("在线 rerank 后端缺少 API Key，请配置 TEXT_RERANK_API_KEY 或 OPENAI_API_KEY")
     logger.info(f"在线 rerank 后端就绪 | model={cfg.model}")
 
 
 def is_loaded() -> bool:
-    return bool(reranker_worker_config.online.api_key)
+    return bool(get_settings().module.online.api_key)
 
 
 def info() -> dict:
-    cfg = reranker_worker_config.online
+    cfg = get_settings().module.online
     return {
         "backend": "online",
         "model": cfg.model,
@@ -35,9 +44,9 @@ def info() -> dict:
 
 def _call_sync(query: str, documents: list[str]) -> list[float]:
     """同步调用 DashScope（在线程池中执行）。"""
-    cfg = reranker_worker_config.online
+    cfg = get_settings().module.online
     response = dashscope.TextReRank.call(
-        api_key=cfg.api_key,
+        api_key=cfg.api_key_str,
         model=cfg.model,
         query=query,
         documents=documents,
@@ -59,5 +68,5 @@ def _call_sync(query: str, documents: list[str]) -> list[float]:
 
 async def compute_scores(query: str, documents: list[str]) -> list[float]:
     """异步打分入口（受并发上限保护）。"""
-    async with _infer_semaphore:
+    async with _get_infer_semaphore():
         return await asyncio.to_thread(_call_sync, query, documents)

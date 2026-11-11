@@ -1,16 +1,16 @@
-"""后端门面：按 EMBEDDING_BACKEND 把请求分派到离线或在线实现。
+"""后端门面：按配置 backend 把请求分派到离线或在线实现。
 
 离线：model_service（本地 BGE-M3，dense + sparse）
 在线：online_service（远端接口，仅 dense）
 """
 import importlib
 
-from model_embedding_worker.config import embedding_worker_config
+from aipaas_common.conf.settings import get_settings
 
 
 def _backend():
     # 延迟导入：在线模式无需加载 pymilvus / torch
-    if embedding_worker_config.is_online:
+    if get_settings().module.is_online:
         return importlib.import_module("model_embedding_worker.online_service")
     return importlib.import_module("model_embedding_worker.model_service")
 

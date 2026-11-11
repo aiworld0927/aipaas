@@ -6,7 +6,7 @@ import json
 from minio import Minio
 
 # 导入项目内部配置与日志工具
-from aipaas_common.conf.minio_config import minio_config  # MinIO相关配置（端点、密钥、桶名等）
+from aipaas_common.conf.settings import get_settings  # 统一配置入口（common.minio 节点）
 from aipaas_common.core.log import logger            # 项目统一日志工具
 
 # 全局MinIO客户端实例（单例模式，避免重复创建连接，提升性能）
@@ -20,11 +20,12 @@ def _create_minio_client() -> Minio:
     核心作用：读取配置文件中的MinIO参数，初始化客户端连接
     :return: 初始化完成的MinIO客户端对象
     """
+    minio_cfg = get_settings().common.minio
     return Minio(
-        endpoint=minio_config.endpoint,        # MinIO服务端点（IP:端口）
-        access_key=minio_config.access_key,    # MinIO访问密钥
-        secret_key=minio_config.secret_key,    # MinIO秘密密钥
-        secure=minio_config.minio_secure       # 是否启用HTTPS（True/False）
+        endpoint=minio_cfg.endpoint,           # MinIO服务端点（host:port，不带scheme）
+        access_key=minio_cfg.access_key_str,   # MinIO访问密钥
+        secret_key=minio_cfg.secret_key_str,   # MinIO秘密密钥
+        secure=minio_cfg.secure                # 是否启用HTTPS（True/False）
     )
 
 
@@ -60,7 +61,7 @@ def _create_bucket_ready(client: Minio):
     核心作用：确保图片上传所需的桶已就绪，避免上传失败
     :param client: 已初始化的MinIO客户端对象
     """
-    bucket_name = minio_config.bucket_name  # 从配置中获取目标桶名
+    bucket_name = get_settings().common.minio.bucket_name  # 从配置中获取目标桶名
     # 检查桶是否存在
     if not client.bucket_exists(bucket_name):
         client.make_bucket(bucket_name)  # 不存在则创建桶

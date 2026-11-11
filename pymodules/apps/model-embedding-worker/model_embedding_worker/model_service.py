@@ -8,25 +8,45 @@ from typing import Optional
 
 from pymilvus.model.hybrid import BGEM3EmbeddingFunction
 
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
-from model_embedding_worker.config import embedding_worker_config
 
 _model: Optional[BGEM3EmbeddingFunction] = None
 _load_lock = asyncio.Lock()
-# 推理并发闸门：GPU 显存有限，默认串行（Python 3.10+ 允许在无事件循环时创建）
-_infer_semaphore = asyncio.Semaphore(embedding_worker_config.max_concurrency)
+# 推理并发闸门：GPU 显存有限，默认串行；惰性创建以解除 import 期对配置加载顺序的依赖
+_infer_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_infer_semaphore() -> asyncio.Semaphore:
+    global _infer_semaphore
+    if _infer_semaphore is None:
+        _infer_semaphore = asyncio.Semaphore(get_settings().module.max_concurrency)
+    return _infer_semaphore
+
+
+def _resolve_device(device: Optional[str]) -> str:
+    """device 未配置时自动选择：有可用 GPU 用 cuda，否则 cpu。"""
+    if device:
+        return device
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
 
 
 def _build_model() -> BGEM3EmbeddingFunction:
     """同步加载模型（在线程池中执行）。"""
-    cfg = embedding_worker_config.offline
+    cfg = get_settings().module.offline
+    device = _resolve_device(cfg.device)
     logger.info(
-        f"开始加载 BGE-M3 模型 | path={cfg.model_path} device={cfg.device} "
+        f"开始加载 BGE-M3 模型 | path={cfg.model_path} device={device} "
         f"fp16={cfg.use_fp16} normalize={cfg.normalize_embeddings}"
     )
     model = BGEM3EmbeddingFunction(
         model_name=cfg.model_path,
-        device=cfg.device,
+        device=device,
         use_fp16=cfg.use_fp16,
         normalize_embeddings=cfg.normalize_embeddings,
     )
@@ -50,11 +70,11 @@ def is_loaded() -> bool:
 
 def info() -> dict:
     """返回离线模型信息。"""
-    cfg = embedding_worker_config.offline
+    cfg = get_settings().module.offline
     return {
         "backend": "offline",
         "model": cfg.model_path,
-        "device": cfg.device,
+        "device": _resolve_device(cfg.device),
         "fp16": cfg.use_fp16,
         "normalize_embeddings": cfg.normalize_embeddings,
         "dim": getattr(_model, "dim", None),
@@ -83,5 +103,5 @@ def _encode_sync(texts: list[str]) -> dict:
 
 async def encode(texts: list[str]) -> dict:
     """异步编码入口：推理在独立线程执行，并受并发上限保护。"""
-    async with _infer_semaphore:
+    async with _get_infer_semaphore():
         return await asyncio.to_thread(_encode_sync, texts)

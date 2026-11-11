@@ -12,7 +12,11 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 
-from aipaas_common.conf.minio_config import minio_config
+from aipaas_common.conf.settings import load_settings
+
+# 配置引导：必须在导入业务模块前完成加载（唯一权威来源，失败即终止启动）
+settings = load_settings("ingest_worker")
+
 from aipaas_common.core.log import logger
 from aipaas_common.utils.path_util import PROJECT_ROOT
 from aipaas_common.utils.task_utils import add_running_task, add_done_task, update_task_status, get_task_status, \
@@ -158,7 +162,7 @@ async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile
             minio_client = get_minio_client()
 
             # 从环境变量获取MinIO的桶名配置
-            minio_bucket_name = minio_config.bucket_name
+            minio_bucket_name = settings.common.minio.bucket_name
 
             # 本地文件上传至MinIO（同名文件会自动覆盖，保证文件最新）
             minio_client.fput_object(

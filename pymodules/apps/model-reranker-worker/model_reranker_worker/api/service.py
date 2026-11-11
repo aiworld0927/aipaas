@@ -9,9 +9,13 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from aipaas_common.conf.settings import load_settings
+
+# 配置引导：必须在导入业务模块前完成加载（唯一权威来源，失败即终止启动）
+settings = load_settings("model_reranker_worker")
+
 from aipaas_common.core.log import logger
 from model_reranker_worker import service
-from model_reranker_worker.config import reranker_worker_config
 
 
 @asynccontextmanager
@@ -79,7 +83,7 @@ async def rerank(request: RerankRequest):
     if not request.documents:
         raise HTTPException(status_code=400, detail="documents 不能为空")
 
-    max_documents = reranker_worker_config.max_documents
+    max_documents = settings.module.max_documents
     if len(request.documents) > max_documents:
         raise HTTPException(
             status_code=413,
@@ -101,4 +105,4 @@ async def rerank(request: RerankRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app=app, host=reranker_worker_config.host, port=reranker_worker_config.port)
+    uvicorn.run(app=app, host=settings.module.host, port=settings.module.port)

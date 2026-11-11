@@ -118,3 +118,7 @@ pymodules/logs
 pymodules/.idea
 pymodules/.venv
 pymodules/.env
+
+# 环境变量文件（保留模板）
+.env.*
+!.env.example

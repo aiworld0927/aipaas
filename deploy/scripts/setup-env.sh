@@ -6,7 +6,7 @@
 
 # 设置默认环境（可通过参数覆盖）
 # 用法: source setup-env.sh devhome | devcompany
-ENV_NAME=${1:-devhome}
+export ENV_NAME=${1:-devhome}
 
 # ============================================
 # 0. 环境选择

@@ -2,7 +2,7 @@ from typing import Dict, Any, List
 
 from pymilvus import DataType
 
-from aipaas_common.conf.milvus_config import milvus_config
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_retrieval.milvus_utils import get_milvus_client, escape_milvus_string
@@ -104,7 +104,7 @@ def _step_2_prepare_collection( vector_dimension: int):
         raise ValueError("Milvus 连接失败")
 
     # 2. 集合不存在则创建
-    collections_name = milvus_config.chunks_collection
+    collections_name = get_settings().common.milvus.chunks_collection
     if not milvus_client.has_collection(collections_name):
         _create_chunks_collection(collections_name, milvus_client, vector_dimension)
 
@@ -171,7 +171,7 @@ def _clear_chunks_by_file_title( client, file_title):
     try:
         file_title = escape_milvus_string(file_title)
         client.delete(
-            collection_name=milvus_config.chunks_collection,
+            collection_name=get_settings().common.milvus.chunks_collection,
             filter=f"file_title=='{file_title}'")
     except Exception as e:
         logger.error(f"Milvus 数据删除失败: {str(e)}")
@@ -202,7 +202,7 @@ def _step_4_insert_data( client, chunks_json_data: List[Dict[str, Any]]) -> List
         data_to_insert.append(item_copy)
 
     # 2. 执行批量插入
-    insert_result = client.insert(collection_name=milvus_config.chunks_collection, data=data_to_insert)
+    insert_result = client.insert(collection_name=get_settings().common.milvus.chunks_collection, data=data_to_insert)
     insert_count = insert_result.get('insert_count', 0)
 
     # 3. 主键回填：将Milvus生成的chunk_id回填到原始切片

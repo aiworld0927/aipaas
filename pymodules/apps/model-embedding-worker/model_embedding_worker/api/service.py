@@ -9,9 +9,13 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from aipaas_common.conf.settings import load_settings
+
+# 配置引导：必须在导入业务模块前完成加载（唯一权威来源，失败即终止启动）
+settings = load_settings("model_embedding_worker")
+
 from aipaas_common.core.log import logger
 from model_embedding_worker import service
-from model_embedding_worker.config import embedding_worker_config
 
 
 @asynccontextmanager
@@ -78,7 +82,7 @@ async def embeddings(request: EmbeddingRequest):
     if not texts:
         raise HTTPException(status_code=400, detail="embedding_documents 不能为空")
 
-    max_batch = embedding_worker_config.max_batch_size
+    max_batch = settings.module.max_batch_size
     if len(texts) > max_batch:
         raise HTTPException(
             status_code=413,
@@ -100,4 +104,4 @@ async def embeddings(request: EmbeddingRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app=app, host=embedding_worker_config.host, port=embedding_worker_config.port)
+    uvicorn.run(app=app, host=settings.module.host, port=settings.module.port)

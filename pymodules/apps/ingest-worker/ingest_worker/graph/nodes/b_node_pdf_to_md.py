@@ -4,7 +4,7 @@ import zipfile
 from pathlib import Path
 import requests
 
-from aipaas_common.conf.mineru_config import mineru_config
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.log_decorator import node_log
 from aipaas_common.core.log import logger
 from ingest_worker.graph.state import ImportGraphState
@@ -77,8 +77,8 @@ def _step_2_upload_and_poll(pdf_path_obj: Path):
     异常：ConfigurationError(配置缺失)、PdfConversionError(请求/上传失败)、TimeoutError(任务超时)
     """
     # 1. 从MinerU服务器获取上传链接
-    token = mineru_config.api_token
-    url = f"{mineru_config.base_url}/file-urls/batch"
+    token = get_settings().common.mineru.api_token_str
+    url = f"{get_settings().common.mineru.base_url}/file-urls/batch"
     header = {"Content-Type": "application/json","Authorization": f"Bearer {token}"}
     data = {
         "files": [{"name": pdf_path_obj.name}],
@@ -110,7 +110,7 @@ def _step_2_upload_and_poll(pdf_path_obj: Path):
         logger.info(f"文件上传成功！")
 
     # 3. 批量获取任务结果
-    poll_url = f"{mineru_config.base_url}/extract-results/batch/{batch_id}"
+    poll_url = f"{get_settings().common.mineru.base_url}/extract-results/batch/{batch_id}"
 
     start_time = time.time()  # 记录开始时间
     timeout_seconds = 600  # 最大超时时间

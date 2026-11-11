@@ -3,7 +3,7 @@ import asyncio
 from agents.mcp import MCPServerStreamableHttp
 from mcp.types import TextContent
 
-from aipaas_common.conf.bailian_mcp_config import mcp_config
+from aipaas_common.conf.settings import get_settings
 
 
 async def call_web_search_mcp(rewritten_query:str,max_retries:int=3):
@@ -12,14 +12,15 @@ async def call_web_search_mcp(rewritten_query:str,max_retries:int=3):
     :param rewritten_query:
     :return:
     """
+    mcp_cfg = get_settings().common.mcp
     mcp_result = ""
     for i in range(max_retries):
         # 1、链接mcpserver服务
         mcp_server = MCPServerStreamableHttp(
             name="search_mcp",
             params={
-                "url":"https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp",
-                "headers":{"Authorization":f"Bearer {mcp_config.api_key}"},
+                "url": mcp_cfg.mcp_base_url,
+                "headers":{"Authorization":f"Bearer {mcp_cfg.api_key_str}"},
                 "timeout":300,
                 "sse_read_timeout":300,
             },
@@ -52,11 +53,12 @@ async def call_web_search_mcp(rewritten_query:str,max_retries:int=3):
 
 
 async def test():
+    mcp_cfg = get_settings().common.mcp
     async with MCPServerStreamableHttp(
             name="search_mcp",
             params={
-                "url":"https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp",
-                "headers":{"Authorization":f"Bearer {mcp_config.bailian_api_key}"},
+                "url": mcp_cfg.mcp_base_url,
+                "headers":{"Authorization":f"Bearer {mcp_cfg.api_key_str}"},
                 "timeout":300,
                 "sse_read_timeout":300,
             },

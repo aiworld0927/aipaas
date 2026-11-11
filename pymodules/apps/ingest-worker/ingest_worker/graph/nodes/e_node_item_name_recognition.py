@@ -5,15 +5,13 @@ from typing import List, Dict, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage
 from pymilvus import DataType
 
-from aipaas_common.conf.lm_config import lm_config
-from aipaas_common.conf.milvus_config import milvus_config
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.load_prompt import load_prompt
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_llm.lm.embedding_http_utils import generate_embeddings
 from aipaas_llm.lm.lm_utils import get_llm_client
 from aipaas_retrieval.milvus_utils import get_milvus_client, escape_milvus_string
-from ingest_worker.config import config
 from ingest_worker.graph.state import ImportGraphState
 
 
@@ -102,7 +100,7 @@ def _step_2_build_context(chunks: List[Dict]) -> str:
 
     parts: List[str] = []
     total_chars = 0
-    for idx, chunk in enumerate(chunks[:config.item_name_chunk_k], start=1):
+    for idx, chunk in enumerate(chunks[:get_settings().module.item_name_chunk_k], start=1):
 
         # 1. 提取前k的切片，避免上下文过长
         chunk_title = (chunk.get("title") or "").strip()
@@ -116,15 +114,15 @@ def _step_2_build_context(chunks: List[Dict]) -> str:
         total_chars += len(piece)
 
         # 4. 判断是否需要继续切分
-        if total_chars > config.item_name_chunk_size:
-            logger.warning(f"累计字符数{total_chars}已超过限制{config.item_name_chunk_size}，停止切分")
+        if total_chars > get_settings().module.item_name_chunk_size:
+            logger.warning(f"累计字符数{total_chars}已超过限制{get_settings().module.item_name_chunk_size}，停止切分")
             break
 
     # 5. 使用换行符对切分后的片段进行连接
     context = "\n\n".join(parts).strip()
 
     # 6. 对返回结果进行二次截断
-    final_context = context[:config.item_name_chunk_size]
+    final_context = context[:get_settings().module.item_name_chunk_size]
 
     return final_context
 
@@ -158,7 +156,7 @@ def _step_3_call_llm(file_title: str, context: str) -> str:
         user_prompt = load_prompt("item_name_recognition", file_title=file_title, context=context)
 
         # 3. 初始化大模型客户端
-        llm = get_llm_client(lm_config.llm_model)
+        llm = get_llm_client(get_settings().common.llm.llm_model)
 
         # 4. 创建消息对象
         messages = [
@@ -263,7 +261,7 @@ def _step_6_save_to_milvus(state: ImportGraphState, file_title: str, item_name: 
             return
 
         # 2. 创建集合（如果不存在）
-        collection_name = milvus_config.item_name_collection  # 集合名称
+        collection_name = get_settings().common.milvus.item_name_collection  # 集合名称
         if not milvus_client.has_collection(collection_name):
             _create_item_name_collection(collection_name, milvus_client)
 

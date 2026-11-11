@@ -1,14 +1,15 @@
 from langchain.chat_models import init_chat_model
 
-from aipaas_common.conf.lm_config import lm_config
+from aipaas_common.conf.settings import get_settings
 
 
 def get_vl_client():
+    llm_cfg = get_settings().common.llm
     vl_client = init_chat_model(
-        model=lm_config.vl_model,
+        model=llm_cfg.vl_model,
         model_provider="OpenAI",
-        base_url =lm_config.base_url,
-        api_key=lm_config.api_key,
+        base_url=llm_cfg.base_url,
+        api_key=llm_cfg.api_key_str,
     )
     return vl_client
 

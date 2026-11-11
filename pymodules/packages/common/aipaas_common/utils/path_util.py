@@ -2,8 +2,6 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 
 def get_path_dir(ps:int = 0)->Path:
     """
@@ -26,22 +24,15 @@ def get_project_root(identifier: str = ".env") -> Path:
     if env_root and Path(env_root).absolute().exists():
         return Path(env_root).absolute()
 
-    # 第二步：加载根目录的.env文件（为了后续逻辑，也可省略）
-    current_dir = Path(__file__).absolute().parent
-    while current_dir != current_dir.parent:
-        if (current_dir / identifier).exists():
-            load_dotenv(dotenv_path=current_dir / identifier)
-            break
-        current_dir = current_dir.parent
-
-    # 第三步：递归查找标识（兜底，开发环境用）
+    # 第二步：递归查找标识（兜底，开发环境用）
+    # 注：.env 仅作根目录标识；配置加载统一由 aipaas_common.conf.settings 负责
     current_dir = Path(__file__).absolute().parent
     while current_dir != current_dir.parent:
         if (current_dir / identifier).exists():
             return current_dir
         current_dir = current_dir.parent
 
-    # 第四步：未找到标识时，回退到 pymodules 根目录（packages/common/aipaas_common/utils → pymodules）
+    # 第三步：未找到标识时，回退到 pymodules 根目录（packages/common/aipaas_common/utils → pymodules）
     return Path(__file__).absolute().parents[4]
 
 

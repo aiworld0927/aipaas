@@ -5,13 +5,12 @@
 #   cd pymodules
 #   docker build -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding:latest .
 #
-# 运行（模型目录挂载到容器内 /app/models/bge-m3）：
+# 运行（模型目录挂载到容器内 /app/models/bge-m3；配置包外部映射到 /app/configs）：
 #   docker run -d --name svc-model-embedding -p 8101:8101 --gpus all \
 #     -v /host/models/bge-m3:/app/models/bge-m3:ro \
 #     -v /host/path/logs:/app/logs \
-#     -e BGE_M3_PATH=/app/models/bge-m3 \
-#     -e BGE_DEVICE=cuda \
-#     -e BGE_FP16=True \
+#     -v /host/path/aipaas-configs:/app/configs:ro \
+#     -e APP_ENV=devcompany -e CONFIG_DIR=/app/configs \
 #     aipaas/svc-model-embedding:latest
 # ===========================================================================
 
@@ -49,17 +48,6 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PROJECT_ROOT=/app \
-    LOG_DIR=/app/logs \
-    LOG_FILE_PREFIX=model-embedding-worker \
-    LOG_FILE_ENABLE=True \
-    LOG_FILE_LEVEL=INFO \
-    LOG_FILE_RETENTION="7 days" \
-    LOG_CONSOLE_ENABLE=True \
-    LOG_CONSOLE_LEVEL=INFO \
-    MODEL_EMBEDDING_HOST=0.0.0.0 \
-    MODEL_EMBEDDING_PORT=8101 \
-    BGE_M3_PATH=/app/models/bge-m3 \
-    BGE_FP16=True \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
@@ -71,6 +59,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 COPY packages ./packages
 COPY apps/model-embedding-worker ./apps/model-embedding-worker
+COPY configs ./configs
 COPY pyproject.toml uv.lock ./
 
 # 数据卷声明：日志目录 + 模型目录（由 compose 或 -v 挂载到宿主机）

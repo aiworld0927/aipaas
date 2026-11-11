@@ -4,15 +4,13 @@
 与历史进程内实现保持一致，业务侧调用逻辑无需改动。
 服务端支持离线（本地 BGE-M3）与在线（远端接口）两种后端，由服务侧配置决定。
 
-环境变量：
-    EMBEDDING_SERVICE_URL      服务地址，默认 http://127.0.0.1:8101
-    EMBEDDING_SERVICE_TIMEOUT  请求超时秒数，默认 120
+配置来源：统一配置 common.embedding_service 节点（url / timeout）。
 """
-import os
 from typing import Optional
 
 import httpx
 
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
 
 _client: Optional[httpx.Client] = None
@@ -22,10 +20,9 @@ def _get_client() -> httpx.Client:
     """惰性创建并复用 HTTP 连接池。"""
     global _client
     if _client is None:
-        base_url = os.getenv("EMBEDDING_SERVICE_URL", "http://127.0.0.1:8101")
-        timeout = float(os.getenv("EMBEDDING_SERVICE_TIMEOUT", "120"))
-        _client = httpx.Client(base_url=base_url, timeout=timeout)
-        logger.info(f"嵌入模型服务客户端已初始化 | base_url={base_url} timeout={timeout}s")
+        cfg = get_settings().common.embedding_service
+        _client = httpx.Client(base_url=cfg.url, timeout=cfg.timeout)
+        logger.info(f"嵌入模型服务客户端已初始化 | base_url={cfg.url} timeout={cfg.timeout}s")
     return _client
 
 

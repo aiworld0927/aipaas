@@ -4,21 +4,42 @@ from typing import Optional
 
 from FlagEmbedding import FlagReranker
 
+from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.log import logger
-from model_reranker_worker.config import reranker_worker_config
 
 _reranker_model: Optional[FlagReranker] = None
 _load_lock = asyncio.Lock()
-_infer_semaphore = asyncio.Semaphore(reranker_worker_config.max_concurrency)
+# 推理并发闸门：惰性创建以解除 import 期对配置加载顺序的依赖
+_infer_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_infer_semaphore() -> asyncio.Semaphore:
+    global _infer_semaphore
+    if _infer_semaphore is None:
+        _infer_semaphore = asyncio.Semaphore(get_settings().module.max_concurrency)
+    return _infer_semaphore
+
+
+def _resolve_device(device: Optional[str]) -> str:
+    """device 未配置时自动选择：有可用 GPU 用 cuda，否则 cpu。"""
+    if device:
+        return device
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
 
 
 def _build_model() -> FlagReranker:
     """同步加载模型（在线程池中执行）。"""
-    cfg = reranker_worker_config.offline
-    logger.info(f"开始加载 Reranker 模型 | path={cfg.model_path} device={cfg.device} fp16={cfg.use_fp16}")
+    cfg = get_settings().module.offline
+    device = _resolve_device(cfg.device)
+    logger.info(f"开始加载 Reranker 模型 | path={cfg.model_path} device={device} fp16={cfg.use_fp16}")
     model = FlagReranker(
         model_name_or_path=cfg.model_path,
-        device=cfg.device,
+        device=device,
         use_fp16=cfg.use_fp16,
     )
     logger.success("Reranker 模型加载完成")
@@ -40,11 +61,11 @@ def is_loaded() -> bool:
 
 
 def info() -> dict:
-    cfg = reranker_worker_config.offline
+    cfg = get_settings().module.offline
     return {
         "backend": "offline",
         "model": cfg.model_path,
-        "device": cfg.device,
+        "device": _resolve_device(cfg.device),
         "fp16": cfg.use_fp16,
         "normalize": cfg.normalize,
     }
@@ -53,7 +74,7 @@ def info() -> dict:
 def _compute_sync(query: str, documents: list[str]) -> list[float]:
     """同步打分（在线程池中执行）。"""
     sentence_pairs = [[query, document] for document in documents]
-    scores = _reranker_model.compute_score(sentence_pairs, normalize=reranker_worker_config.offline.normalize)
+    scores = _reranker_model.compute_score(sentence_pairs, normalize=get_settings().module.offline.normalize)
 
     # 单条输入时 compute_score 可能返回标量，统一转成列表
     if isinstance(scores, (int, float)):
@@ -65,5 +86,5 @@ def _compute_sync(query: str, documents: list[str]) -> list[float]:
 
 async def compute_scores(query: str, documents: list[str]) -> list[float]:
     """异步打分入口：推理在独立线程执行，并受并发上限保护。"""
-    async with _infer_semaphore:
+    async with _get_infer_semaphore():
         return await asyncio.to_thread(_compute_sync, query, documents)

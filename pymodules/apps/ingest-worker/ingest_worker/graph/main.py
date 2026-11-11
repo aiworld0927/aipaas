@@ -3,6 +3,11 @@ import json
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 
+from aipaas_common.conf.settings import load_settings
+
+# 配置引导：命令行/脚本入口独立运行时，先加载配置再导入节点
+load_settings("ingest_worker")
+
 from ingest_worker.graph.nodes.a_node_entry import node_entry
 from ingest_worker.graph.nodes.b_node_pdf_to_md import node_pdf_to_md
 from ingest_worker.graph.nodes.c_node_md_img import node_md_img

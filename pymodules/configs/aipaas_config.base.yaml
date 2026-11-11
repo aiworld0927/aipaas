@@ -1,0 +1,122 @@
+# =============================================================================
+# AIPaaS Python 服务配置基线（所有命名空间的默认值）
+# -----------------------------------------------------------------------------
+# 加载规则（aipaas_common.conf.settings.load_settings）：
+#   合并层序：aipaas_config.base.yaml → aipaas_config.{APP_ENV}.yaml（后者覆盖前者）
+#   生效范围：每个模块进程只加载 common + 自己模块名对应的命名空间
+#   密钥注入：${oc.env:VAR,null} 由环境变量注入，YAML 不落明文密钥
+#
+# 默认值口径：容器/compose 部署拓扑（服务名主机、容器内路径），
+# 裸机开发环境在 aipaas_config.{devhome,devcompany}.yaml 中覆盖主机与模型路径。
+# =============================================================================
+
+common:
+  # ---- LLM（OpenAI 兼容接口，默认 DashScope）----
+  llm:
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api_key: ${oc.env:OPENAI_API_KEY,null}
+    llm_model: qwen-flash
+    llm_temperature: 0.1
+    vl_model: qwen3.6-flash
+  # ---- Milvus 向量库 ----
+  milvus:
+    url: http://milvus:19530
+    chunks_collection: chunks
+    item_name_collection: kb_item_names
+    entity_name_collection: kb_graph_entity_names   # 预留
+  # ---- MinIO 对象存储（endpoint 为 host:port，不带 scheme；scheme 由 secure 推导）----
+  minio:
+    endpoint: minio:9000
+    secure: false
+    bucket_name: aipaas
+    img_dir: upload-images
+    access_key: ${oc.env:MINIO_ACCESS_KEY,null}
+    secret_key: ${oc.env:MINIO_SECRET_KEY,null}
+  # ---- MongoDB（url 含账密，走环境变量）----
+  mongo:
+    url: ${oc.env:MONGO_URL,null}
+    db_name: aipaas
+  # ---- MinerU 文档解析服务 ----
+  mineru:
+    base_url: https://mineru.net/api/v4
+    api_token: ${oc.env:MINERU_API_TOKEN,null}
+  # ---- 百炼 MCP（联网搜索）----
+  mcp:
+    mcp_base_url: https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp
+    api_key: ${oc.env:OPENAI_API_KEY,null}
+  # ---- 模型推理服务（业务侧 HTTP 客户端）----
+  embedding_service:
+    url: http://svc-model-embedding:8101
+    timeout: 120
+  rerank_service:
+    url: http://svc-model-reranker:8102
+    timeout: 60
+  # ---- 日志（file_prefix 为 null 时按 module_name 推导：下划线转连字符）----
+  logging:
+    console_enable: true
+    console_level: INFO
+    file_enable: true
+    file_level: INFO
+    file_retention: "7 days"
+    file_prefix: null
+
+# =============================================================================
+# 模块命名空间：字段只允许本模块使用，schema 校验 extra=forbid
+# =============================================================================
+
+ingest_worker:
+  # 文档切片
+  max_content_length: 500        # 切片最大长度
+  min_content_length: 200        # 合并短内容的最小长度
+  # 商品名识别
+  item_name_chunk_k: 3           # 使用的切片数量
+  item_name_chunk_size: 2500     # 使用的切片内容长度
+  # 图片处理
+  image_extensions: [.jpg, .jpeg, .png, .gif, .bmp, .webp]
+
+query_worker:
+  # 商品名确认阈值
+  query_high_threshold: 0.65
+  query_mid_threshold: 0.55
+  # 动态 TopK
+  rerank_max_topk: 10            # 硬上限（<=10）
+  rerank_min_topk: 3             # 最少保留条数
+  # 断崖截断阈值（绝对/相对）
+  rerank_gap_abs: 0.5
+  rerank_gap_ratio: 0.25
+  # 答案生成上下文预算
+  max_context_chars: 12000
+
+model_embedding_worker:
+  backend: offline               # offline=本地 BGE-M3（dense+sparse）/ online=远端接口（仅 dense）
+  host: 0.0.0.0
+  port: 8101
+  max_batch_size: 64
+  max_concurrency: 1             # GPU 显存有限，默认串行
+  offline:
+    model_path: /app/models/bge-m3
+    device: null                 # null=代码侧自动探测（有 GPU 用 cuda，否则 cpu）
+    use_fp16: true
+    normalize_embeddings: true   # 固定开启：Milvus IP 检索归一化后等价余弦
+  online:
+    api_key: ${oc.env:EMBEDDING_ONLINE_API_KEY,${oc.env:OPENAI_API_KEY,null}}
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    model: text-embedding-v4
+    dimension: 1536
+    timeout: 60
+
+model_reranker_worker:
+  backend: offline               # offline=本地 bge-reranker-large / online=DashScope TextReRank
+  host: 0.0.0.0
+  port: 8102
+  max_documents: 128
+  max_concurrency: 1
+  offline:
+    model_path: /app/models/bge-reranker-large
+    device: null
+    use_fp16: true
+    normalize: true              # 固定开启：业务断崖阈值（0.5/0.25）按归一化分数设定
+  online:
+    api_key: ${oc.env:TEXT_RERANK_API_KEY,${oc.env:OPENAI_API_KEY,null}}
+    model: qwen3-rerank
+    instruct: 针对给定的查询，检索能够解答该查询的相关段落

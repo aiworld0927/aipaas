@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_llm.lm.reranker_http_utils import rerank_documents
-from query_worker.config import query_config
+from aipaas_common.conf.settings import get_settings
 from query_worker.graph.state import QueryGraphState
 
 
@@ -107,8 +107,8 @@ def _step_3_cliff_cutoff( ranked_docs: List[Dict[str, Any]]) -> List[Dict[str, A
     if not ranked_docs:
         return []
 
-    upper_bound = min(query_config.rerank_max_topk, len(ranked_docs))
-    lower_bound = min(query_config.rerank_min_topk, upper_bound)
+    upper_bound = min(get_settings().module.rerank_max_topk, len(ranked_docs))
+    lower_bound = min(get_settings().module.rerank_min_topk, upper_bound)
 
     # 默认值：取满硬上限（最多10条）
     cutoff_pos = upper_bound
@@ -130,7 +130,7 @@ def _step_3_cliff_cutoff( ranked_docs: List[Dict[str, Any]]) -> List[Dict[str, A
 
         # 触发断崖截断条件：绝对差距≥绝对阈值 OR 相对差距≥相对阈值
         # 满足任一条件，说明下一条文档相关性骤降，截断在当前位置
-        if abs_gap >= query_config.rerank_gap_abs or rel_gap >= query_config.rerank_gap_ratio:
+        if abs_gap >= get_settings().module.rerank_gap_abs or rel_gap >= get_settings().module.rerank_gap_ratio:
             # 最终取前i+1条（索引转实际数量，如i=2 → 取前3条）
             cutoff_pos = idx + 1
             logger.debug(f"断崖检测: 位置 {idx + 1}, abs_gap={abs_gap:.4f}, rel_gap={rel_gap:.4f}")
