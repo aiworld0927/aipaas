@@ -36,9 +36,12 @@ COPY apps/model-embedding-worker ./apps/model-embedding-worker
 RUN uv sync --package model-embedding-worker --no-dev --group cpu 2>&1
 
 # 推理服务面向 GPU 部署：把 CPU 版 torch 替换为 CUDA 12.8 构建
+# 注意：构建该镜像必须加 --network host（docker build --network host ...），
+# 否则 buildkit bridge 网络下访问 pypi.nvidia.cn 会 ReadTimeout（uv/pip 都一样）
 RUN uv pip install --python /app/.venv/bin/python --reinstall \
     --extra-index-url https://download.pytorch.org/whl/cu128 \
-    torch==2.11.0+cu128
+    torch==2.11.0+cu128 && \
+    /app/.venv/bin/python -c "import torch; assert torch.version.cuda.startswith('12.8'), torch.version.cuda; print('cu128 OK', torch.__version__)"
 
 # ---- 阶段 2：运行时 ----
 FROM python:3.12-slim AS runtime
