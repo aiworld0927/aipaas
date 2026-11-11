@@ -70,6 +70,11 @@ services:
     build:
       context: ../../pymodules
       dockerfile: apps/model-embedding-worker/Dockerfile
+      # 构建容器直连宿主机网络：bridge 网络下访问 download.pytorch.org / pypi.nvidia.cn 会超时
+      network: host
+      args:
+        # cpu = torch +cpu（无 CUDA）；gpu = torch +cu128
+        TORCH_VARIANT: ${TORCH_VARIANT:-gpu}
     image: aipaas/svc-model-embedding:latest
     container_name: aipaas-svc-model-embedding
     env_file: .env
@@ -110,6 +115,11 @@ services:
     build:
       context: ../../pymodules
       dockerfile: apps/model-reranker-worker/Dockerfile
+      # 构建容器直连宿主机网络：bridge 网络下访问 download.pytorch.org / pypi.nvidia.cn 会超时
+      network: host
+      args:
+        # cpu = torch +cpu（无 CUDA）；gpu = torch +cu128
+        TORCH_VARIANT: ${TORCH_VARIANT:-gpu}
     image: aipaas/svc-model-reranker:latest
     container_name: aipaas-svc-model-reranker
     env_file: .env

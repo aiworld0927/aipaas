@@ -238,15 +238,26 @@ uv sync --all-packages --group gpu    # GPU 机器：torch 2.11.0+cu128（pytorc
   （uv 报 `conflicting indexes for package 'torch' in all marker environments`）。
 - 不带 `--group` 的裸同步不会安装这些包，模型服务无法运行。
 - 本地开发机切换 GPU/CPU 的完整命令与排错见 [PyTorch_CPU_GPU版本切换.md](file:///d:/coding/gitee/aipaas/docs/学习笔记/项目部署/PyTorch_CPU_GPU版本切换.md)。
-- 两个模型服务的 Dockerfile 已内置“sync 后替换为 cu128 构建”的步骤：
+- 两个模型服务的 Dockerfile 用 **构建参数 `TORCH_VARIANT`** 决定镜像里装哪种 torch，无需手工改文件：
 
 ```dockerfile
-RUN uv pip install --python /app/.venv/bin/python --reinstall \
-    --extra-index-url https://download.pytorch.org/whl/cu128 \
-    torch==2.11.0+cu128
+ARG TORCH_VARIANT=gpu                                  # 默认 gpu，构建时 --build-arg 覆盖
+RUN uv sync --package model-embedding-worker --no-dev --group cpu
+
+# gpu 变体额外把 torch 系替换为 CUDA 12.8 构建；cpu 变体跳过
+RUN if [ "${TORCH_VARIANT}" = "gpu" ]; then \
+      uv pip install --python /app/.venv/bin/python --reinstall \
+        --extra-index-url https://download.pytorch.org/whl/cu128 \
+        torch==2.11.0+cu128 torchvision==0.26.0+cu128 torchaudio==2.11.0+cu128; \
+    fi
 ```
 
-模型服务镜像面向 GPU 部署，运行时再通过 `BGE_DEVICE=cuda` / `BGE_RERANKER_DEVICE=cuda` 指定设备。
+构建完成后 Dockerfile 内会自校验：`cpu` 分组必须满足 `torch.version.cuda is None`，`gpu` 分组必须是 `CUDA 12.8`，不一致直接构建失败，避免传出“标签写 GPU、实际是 CPU”的镜像。
+
+| `TORCH_VARIANT` | 安装来源 | 镜像体积 | 适用 |
+|---|---|---|---|
+| `gpu`（默认） | `pytorch.org/whl/cu128` | ≈12GB | 有 NVIDIA 显卡（运行时 `BGE_DEVICE=cuda`） |
+| `cpu` | `pytorch.org/whl/cpu` | ≈2GB | 无显卡 / 纯 CPU 推理（`BGE_DEVICE=cpu`） |
 
 ---
 
@@ -266,11 +277,28 @@ docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest:latest .
 # 查询服务
 docker build -f apps/query-worker/Dockerfile -t aipaas/svc-query:latest .
 
-# 嵌入模型服务（端口 8101）
-docker build -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding:latest .
+# 嵌入模型服务（端口 8101）—— 必须加 --network host，并按需选择 torch 构建
+docker build --network host --build-arg TORCH_VARIANT=gpu \
+  -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding:latest .
 
 # 重排序模型服务（端口 8102）
-docker build -f apps/model-reranker-worker/Dockerfile -t aipaas/svc-model-reranker:latest .
+docker build --network host --build-arg TORCH_VARIANT=gpu \
+  -f apps/model-reranker-worker/Dockerfile -t aipaas/svc-model-reranker:latest .
+```
+
+两个模型服务的构建有两个必选项：
+
+| 选项 | 作用 | 不加的后果 |
+|---|---|---|
+| `--network host` | 构建容器走宿主机网络 | docker 默认 bridge 网络访问 `download.pytorch.org` / `pypi.nvidia.cn` 会 `network unreachable` 或 `ReadTimeout`，`uv sync` 装 torch 失败 |
+| `--build-arg TORCH_VARIANT=cpu\|gpu` | 选择 CPU / GPU 版 torch | 省略时默认 `gpu`（≈12GB，含 CUDA 12.8）；纯 CPU 机器要用 `cpu`（≈2GB） |
+
+`TORCH_VARIANT` 也可在 compose 里统一配置，见 6.2 节的 `.env`。构建结束前 Dockerfile 会打印实际 torch 版本，可用下面命令复查：
+
+```bash
+docker run --rm aipaas/svc-model-embedding:latest \
+  .venv/bin/python -c "import torch; print(torch.__version__, torch.version.cuda)"
+# gpu: 2.11.0+cu128 12.8      cpu: 2.11.0+cpu None
 ```
 
 构建细节（以 ingest-worker 为例）：
@@ -342,6 +370,7 @@ cd deploy/docker
 # 1. 拷贝并修改环境变量
 cp .env.example .env
 vim .env         # 修改 MINIO 密码、MONGO 密码、LLM 地址、模型目录 MODEL_BASE_DIR 等
+                 # 同时确认 TORCH_VARIANT=gpu|cpu（决定模型服务镜像装哪版 torch，默认 gpu）
 
 # 2. 启动模型服务（首次启动需加载本地模型，start_period 给到 120s）
 docker compose up -d svc-model-embedding svc-model-reranker
@@ -721,7 +750,7 @@ async def health():
 
 ### Q8：GPU 机部署时 PyTorch 报 CUDA not available
 
-**原因**：同步时选了 `--group cpu`（或未选分组），装的是 CPU 版 torch。
+**原因**：同步时选了 `--group cpu`（或未选分组），装的是 CPU 版 torch；镜像构建时 `TORCH_VARIANT=cpu`。
 
 **修复**：重新按 GPU 分组同步（两组互斥，直接切换即可）：
 
@@ -729,6 +758,32 @@ async def health():
 cd pymodules
 uv sync --all-packages --group gpu
 ```
+
+镜像侧则用 `--build-arg TORCH_VARIANT=gpu` 重构建，或在 `deploy/docker/.env` 里设 `TORCH_VARIANT=gpu` 后 `docker compose build svc-model-embedding svc-model-reranker`。
+
+### Q9：模型服务 `docker build` 在 `uv sync` 阶段失败（torch 下载报错）
+
+典型报错：
+
+```
+error: Failed to download `torch==2.11.0+cpu`
+  cause: error decoding response body
+  cause: network unreachable
+# 或 gpu 分组：
+ReadTimeoutError: HTTPSConnectionPool(host='pypi.nvidia.cn', port=443): Read timed out.
+```
+
+**原因**：torch wheel（CPU 181MB / CUDA 版数 GB）托管在 `download.pytorch.org`，其中 NVIDIA 子依赖会经 DNS 跳到 `pypi.nvidia.cn`。docker 默认 bridge 网络经常连不上这些 CDN，表现为 `network unreachable` 或读超时；该问题与 uv / pip 无关，换成 pip 也一样失败。
+
+**修复**：构建时让构建容器走宿主机网络：
+
+```bash
+docker build --network host ...          # 单镜像构建
+```
+
+compose 已在两个模型服务的 `build.network: host` 中配好，直接 `docker compose build` 即可。
+
+**附带问题**：日志里 `Sending build context to Docker daemon 1.868GB` 是因为缺少 `.dockerignore`，把 `pymodules/.venv`（≈1.9GB）打进了构建上下文。仓库已提供 [.dockerignore](file:///coding/aipaas/pymodules/.dockerignore) 排除 `.venv` / `logs` / `tests` / `__pycache__`，上下文约 4MB。
 
 ---
 
@@ -967,8 +1022,9 @@ uv lock && uv sync --all-packages --group cpu
 cd pymodules
 docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest .
 docker build -f apps/query-worker/Dockerfile  -t aipaas/svc-query  .
-docker build -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding .
-docker build -f apps/model-reranker-worker/Dockerfile  -t aipaas/svc-model-reranker  .
+# 模型服务：--network host 必加；TORCH_VARIANT 决定 CPU / GPU 版（默认 gpu）
+docker build --network host --build-arg TORCH_VARIANT=gpu -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding .
+docker build --network host --build-arg TORCH_VARIANT=gpu -f apps/model-reranker-worker/Dockerfile  -t aipaas/svc-model-reranker  .
 
 # ---------- compose ----------
 cd deploy/docker

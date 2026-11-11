@@ -56,10 +56,10 @@ def load_settings(module_name: str) -> BaseModel:
             )
         return _settings
 
-    config_dir_str = os.environ.get("CONFIG_DIR", "").strip()
+    config_dir_str = os.environ.get("CONFIG_DIR", "/home/aipaas/aipaas/pymodules/configs").strip()
     if not config_dir_str:
         raise SettingsError("缺少环境变量 CONFIG_DIR（配置包目录，代码不提供默认值）")
-    app_env = os.environ.get("APP_ENV", "").strip()
+    app_env = os.environ.get("APP_ENV", "devhome").strip()
     if app_env not in VALID_APP_ENVS:
         raise SettingsError(f"APP_ENV 非法：{app_env!r}，可选：{list(VALID_APP_ENVS)}")
 
