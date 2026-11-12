@@ -295,32 +295,26 @@ uv sync --all-packages --group gpu    # GPU 机器：torch 2.11.0+cu128（pytorc
   （uv 报 `conflicting indexes for package 'torch' in all marker environments`）。
 - 不带 `--group` 的裸同步不会安装这些包，模型服务无法运行。
 - 本地开发机切换 GPU/CPU 的完整命令与排错见 [PyTorch_CPU_GPU版本切换.md](file:///d:/coding/gitee/aipaas/docs/学习笔记/项目部署/PyTorch_CPU_GPU版本切换.md)。
-- 两个模型服务的 Dockerfile 用 **构建参数 `TORCH_VARIANT`** 决定镜像里装哪种 torch，无需手工改文件：
+- 两个模型服务**不直接安装 torch**，而是依赖「基座镜像」——同一套依赖只构建一次、两个工程共享（详见 5.1.2）：
 
 ```dockerfile
-ARG TORCH_VARIANT=gpu                                  # 默认 gpu，构建时 --build-arg 覆盖
-RUN uv sync --package model-embedding-worker --no-dev --group cpu
-
-# gpu 变体额外把 torch 系替换为 CUDA 12.8 构建；cpu 变体跳过
-RUN if [ "${TORCH_VARIANT}" = "gpu" ]; then \
-      uv pip install --python /app/.venv/bin/python --reinstall \
-        --extra-index-url https://download.pytorch.org/whl/cu128 \
-        torch==2.11.0+cu128 torchvision==0.26.0+cu128 torchaudio==2.11.0+cu128; \
-    fi
+# docker/base/Dockerfile：按变体安装全部第三方依赖（含 cpu/gpu 分组的 torch）
+ARG TORCH_VARIANT=gpu
+RUN uv sync --frozen --no-dev --all-packages --no-install-workspace --group "${TORCH_VARIANT}"
 ```
 
-构建完成后 Dockerfile 内会自校验：`cpu` 分组必须满足 `torch.version.cuda is None`，`gpu` 分组必须是 `CUDA 12.8`，不一致直接构建失败，避免传出“标签写 GPU、实际是 CPU”的镜像。
+构建完成后基座内会自校验：`cpu` 变体必须满足 `torch.version.cuda is None`，`gpu` 变体必须是 `CUDA 12.8`，不一致直接构建失败，避免传出“标签写 GPU、实际是 CPU”的镜像。
 
-| `TORCH_VARIANT` | 安装来源 | 镜像体积 | 适用 |
+| 基座镜像 | torch 来源 | 体积 | 适用 |
 |---|---|---|---|
-| `gpu`（默认） | `pytorch.org/whl/cu128` | ≈12GB | 有 NVIDIA 显卡（运行时 `offline.device: cuda`） |
-| `cpu` | `pytorch.org/whl/cpu` | ≈2GB | 无显卡 / 纯 CPU 推理（`offline.device: cpu`） |
+| `aipaas/aipaas-torch-gpu-base` | `pytorch.org/whl/cu128` | ≈12GB | 有 NVIDIA 显卡（运行时 `offline.device: cuda`） |
+| `aipaas/aipaas-torch-cpu-base` | `pytorch.org/whl/cpu` | ≈2GB | 无显卡 / 纯 CPU 推理（`offline.device: cpu`） |
 
 ---
 
 ## 五、镜像构建与运行
 
-四个 app 各自拥有独立的 Dockerfile，采用 **多阶段构建**（builder 阶段装依赖 + runtime 阶段只拷贝 `.venv` 和源码），镜像体积小、构建可缓存。
+四个 app 各自拥有独立的 Dockerfile。`ingest` / `query` 采用 **多阶段构建**（builder 阶段装依赖 + runtime 阶段只拷贝 `.venv` 和源码）；两个模型服务改为「基座镜像 + 业务镜像」两层，见 5.1.2。
 
 ### 5.1 构建镜像
 
@@ -333,24 +327,34 @@ docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest:latest .
 
 # 查询服务
 docker build -f apps/query-worker/Dockerfile -t aipaas/svc-query:latest .
-
-# 嵌入模型服务（端口 8003）—— 必须加 --network host，并按需选择 torch 构建
-docker build --network host --build-arg TORCH_VARIANT=gpu \
-  -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding:latest .
-
-# 重排序模型服务（端口 8004）
-docker build --network host --build-arg TORCH_VARIANT=gpu \
-  -f apps/model-reranker-worker/Dockerfile -t aipaas/svc-model-reranker:latest .
 ```
 
-两个模型服务的构建有两个必选项：
+两个模型服务依赖**基座镜像**，构建顺序必须是「先基座、后业务」：
 
-| 选项 | 作用 | 不加的后果 |
+```bash
+# 依赖基座镜像 + 薄应用镜像
+# 1) 基座（仅 torch 升级 / uv.lock 变更时重建，见 5.1.2）
+docker build --network host --build-arg TORCH_VARIANT=gpu \
+  -f docker/base/Dockerfile -t aipaas/aipaas-torch-gpu-base:local .
+
+# 2) 嵌入模型服务（端口 8003）—— 只叠加代码，约 30 秒
+docker build -f apps/model-embedding-worker/Dockerfile \
+  --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local \
+  -t aipaas/svc-model-embedding:latest .
+
+# 3) 重排序模型服务（端口 8004）
+docker build -f apps/model-reranker-worker/Dockerfile \
+  --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local \
+  -t aipaas/svc-model-reranker:latest .
+```
+
+| 选项 | 作用 | 说明 |
 |---|---|---|
-| `--network host` | 构建容器走宿主机网络 | docker 默认 bridge 网络访问 `download.pytorch.org` / `pypi.nvidia.cn` 会 `network unreachable` 或 `ReadTimeout`，`uv sync` 装 torch 失败 |
-| `--build-arg TORCH_VARIANT=cpu\|gpu` | 选择 CPU / GPU 版 torch | 省略时默认 `gpu`（≈12GB，含 CUDA 12.8）；纯 CPU 机器要用 `cpu`（≈2GB） |
+| `--network host`（仅基座） | 构建容器走宿主机网络 | bridge 网络访问 `download.pytorch.org` / `pypi.nvidia.cn` 会 `network unreachable`，装 torch 失败 |
+| `--build-arg TORCH_VARIANT=cpu\|gpu`（仅基座） | 决定基座装哪版 torch | 同时产出 `aipaas/aipaas-torch-{cpu,gpu}-base` 两个镜像 |
+| `--build-arg BASE_IMAGE=...`（业务镜像） | 选择用哪个基座 | 业务镜像不再接受 `TORCH_VARIANT`，变体由基座决定 |
 
-`TORCH_VARIANT` 也可在 compose 里统一配置，见 5.3 节。构建结束前 Dockerfile 会打印实际 torch 版本，可用下面命令复查：
+`TORCH_VARIANT` 也可在 compose 里统一配置（compose 会自动拼出 `BASE_IMAGE`），见 5.3 节。构建结束前基座会打印实际 torch 版本，可用下面命令复查：
 
 ```bash
 docker run --rm aipaas/svc-model-embedding:latest \
@@ -402,6 +406,72 @@ find apps/query-worker -name "*.py" -newer /dev/null -printf '%TY-%Tm-%Td %TH:%T
 ```
 
 镜像时间早于源码时间 → 需要重建。注意模型服务的 `TORCH_VARIANT`（cpu/gpu）变化也会触发重建，见 5.3。
+
+### 5.1.2 依赖基座镜像（CPU / GPU 双变体）
+
+两个模型服务（`model-embedding-worker` / `model-reranker-worker`）依赖同一套重型依赖（torch / flagembedding / pymilvus[model]）。若各自构建，torch 会被下载解包两遍，单镜像约 12GB、构建 30~40 分钟。
+
+因此把「Python + uv + 全部第三方依赖」抽成基座镜像，业务镜像只叠加代码：
+
+```
+aipaas/aipaas-torch-cpu-base:<tag>   ← docker/base/Dockerfile，TORCH_VARIANT=cpu
+aipaas/aipaas-torch-gpu-base:<tag>   ← 同一份 Dockerfile，TORCH_VARIANT=gpu
+
+aipaas/svc-model-embedding:<tag>     ← FROM 基座 + COPY 代码，约 30 秒、不联网
+aipaas/svc-model-reranker:<tag>      ← 同上
+```
+
+**构建顺序（先基座、后业务）**：
+
+```bash
+cd pymodules
+
+# 1) 基座（torch 升级或 uv.lock 变更后才需要重建；两个变体按机器情况二选一或都建）
+docker build --network host --build-arg TORCH_VARIANT=cpu \
+  -f docker/base/Dockerfile -t aipaas/aipaas-torch-cpu-base:local .
+docker build --network host --build-arg TORCH_VARIANT=gpu \
+  -f docker/base/Dockerfile -t aipaas/aipaas-torch-gpu-base:local .
+
+# 2) 业务镜像（依赖已就绪，秒级完成）
+docker build -f apps/model-embedding-worker/Dockerfile \
+  --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local \
+  -t aipaas/svc-model-embedding:latest .
+```
+
+**变体选择**：`deploy/docker/.env` 中 `TORCH_VARIANT=cpu|gpu` 决定 compose 使用哪个基座，镜像名由 compose 拼出：
+
+```yaml
+BASE_IMAGE: aipaas/aipaas-torch-${TORCH_VARIANT:-gpu}-base:${PY_BASE_TAG:-local}
+```
+
+`PY_GPU_TAG` / `PY_CPU_TAG` 是构建基座时使用的 tag；`PY_BASE_TAG` 是 compose 当前实际引用的 tag（两个变体 tag 相同时保持三者一致即可）。
+
+**基座内容边界**：
+
+| 内容 | 是否在基座 | 说明 |
+|---|---|---|
+| `[dependency-groups] cpu/gpu`（torch 系、flagembedding、pymilvus[model]） | ✅ | 由 `--group ${TORCH_VARIANT}` 安装 |
+| 各成员 pyproject 的第三方依赖（fastapi/uvicorn/openai/loguru...） | ✅ | 由 `--all-packages` 安装 |
+| `packages/*`、`apps/*` 本地包 | ❌ | `--no-install-workspace` 跳过，由业务镜像 `-e` 安装 |
+| 模型权重、配置 | ❌ | 运行时挂载 |
+
+**一致性保护**：基座构建时把 `uv.lock` 的 sha256 写入 `/app/.uv-lock-sha256`；业务镜像构建时校验，不一致直接报错：
+
+```
+基座镜像与当前 uv.lock 不一致，请先重建 docker/base/Dockerfile
+```
+
+因此凡是 `uv.lock` 变化的改动（升级依赖、加包），都必须重建基座，否则构建失败——不会出现「运行环境与锁文件不符」的静默问题。
+
+**收益**：
+
+| 指标 | 各自构建 | 基座方案 |
+|---|---|---|
+| GPU 两镜像磁盘占用 | 24GB | 12GB + 2×~50MB |
+| 改业务代码重建 | 30~40 分钟 | 20~40 秒，且不联网 |
+| 依赖升级 | 两个工程各重建 | 只重建基座一次 |
+
+注意：`ingest-worker` / `query-worker` 不需要 torch，**不要**改用该基座，否则镜像会从 ~1GB 涨到 12GB。
 
 ### 5.2 单独运行（需要中间件已就绪）
 
@@ -1192,7 +1262,7 @@ cd pymodules
 uv sync --all-packages --group gpu
 ```
 
-镜像侧则用 `--build-arg TORCH_VARIANT=gpu` 重构建，或在 `deploy/docker/.env` 里设 `TORCH_VARIANT=gpu` 后 `docker compose build svc-model-embedding svc-model-reranker`；同时把配置里的 `offline.device` 设为 `cuda`。
+镜像侧则重建 GPU 基座（`--build-arg TORCH_VARIANT=gpu`）后再构建两个模型镜像，或在 `deploy/docker/.env` 里设 `TORCH_VARIANT=gpu`（并确认 `aipaas/aipaas-torch-gpu-base:${PY_BASE_TAG}` 已存在）后执行 `docker-compose build svc-model-embedding svc-model-reranker`；同时把配置里的 `offline.device` 设为 `cuda`。
 
 ### Q8：模型服务 `docker build` 在 `uv sync` 阶段失败（torch 下载报错）
 
@@ -1208,13 +1278,14 @@ ReadTimeoutError: HTTPSConnectionPool(host='pypi.nvidia.cn', port=443): Read tim
 
 **原因**：torch wheel（CPU 181MB / CUDA 版数 GB）托管在 `download.pytorch.org`，其中 NVIDIA 子依赖会经 DNS 跳到 `pypi.nvidia.cn`。docker 默认 bridge 网络经常连不上这些 CDN，表现为 `network unreachable` 或读超时；该问题与 uv / pip 无关，换成 pip 也一样失败。
 
-**修复**：构建时让构建容器走宿主机网络：
+**修复**：构建**基座镜像**时让构建容器走宿主机网络：
 
 ```bash
-docker build --network host ...          # 单镜像构建
+docker build --network host --build-arg TORCH_VARIANT=gpu \
+  -f docker/base/Dockerfile -t aipaas/aipaas-torch-gpu-base:local .
 ```
 
-compose 已在两个模型服务的 `build.network: host` 中配好，直接 `docker compose build` 即可。
+基座构建完成后，两个模型镜像只安装本地包（`uv pip install --no-deps`），不再联网，也不会再触发该错误。compose 已在两个模型服务的 `build.network: host` 中配好。
 
 **附带问题**：日志里 `Sending build context to Docker daemon 1.868GB` 是因为缺少 `.dockerignore`，把 `pymodules/.venv`（≈1.9GB）打进了构建上下文。仓库已提供 [.dockerignore](file:///coding/aipaas/pymodules/.dockerignore) 排除 `.venv` / `logs` / `tests` / `__pycache__`，上下文约 4MB。
 
@@ -1243,9 +1314,10 @@ uv lock && uv sync --all-packages --group cpu
 cd pymodules
 docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest .
 docker build -f apps/query-worker/Dockerfile  -t aipaas/svc-query  .
-# 模型服务：--network host 必加；TORCH_VARIANT 决定 CPU / GPU 版（默认 gpu）
-docker build --network host --build-arg TORCH_VARIANT=gpu -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding .
-docker build --network host --build-arg TORCH_VARIANT=gpu -f apps/model-reranker-worker/Dockerfile  -t aipaas/svc-model-reranker  .
+# 模型服务：先建基座（--network host 必加；TORCH_VARIANT 决定 CPU / GPU），再建业务镜像
+docker build --network host --build-arg TORCH_VARIANT=gpu -f docker/base/Dockerfile -t aipaas/aipaas-torch-gpu-base:local .
+docker build --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding .
+docker build --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local -f apps/model-reranker-worker/Dockerfile  -t aipaas/svc-model-reranker  .
 
 # ---------- compose ----------
 cd deploy/docker

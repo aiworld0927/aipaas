@@ -74,9 +74,9 @@ services:
       # 构建容器直连宿主机网络：bridge 网络下访问 download.pytorch.org / pypi.nvidia.cn 会超时
       network: host
       args:
-        # cpu = torch +cpu（无 CUDA）；gpu = torch +cu128
-        # 环境默认值由 setup-env.sh 提供：devhome=gpu  devcompany=cpu
-        TORCH_VARIANT: ${TORCH_VARIANT:-gpu}
+        # 基座镜像按 TORCH_VARIANT 自动选择变体：aipaas/aipaas-torch-{cpu|gpu}-base:{PY_BASE_TAG}
+        # 依赖已预装在基座里，此处只叠加业务代码
+        BASE_IMAGE: aipaas/aipaas-torch-${TORCH_VARIANT:-gpu}-base:${PY_BASE_TAG:-local}
     image: aipaas/svc-model-embedding:${IMAGE_TAG:-latest}
     container_name: aipaas-svc-model-embedding
     env_file: .env
@@ -125,8 +125,8 @@ services:
       # 构建容器直连宿主机网络：bridge 网络下访问 download.pytorch.org / pypi.nvidia.cn 会超时
       network: host
       args:
-        # cpu = torch +cpu（无 CUDA）；gpu = torch +cu128
-        TORCH_VARIANT: ${TORCH_VARIANT:-gpu}
+        # 基座镜像按 TORCH_VARIANT 自动选择变体：aipaas/aipaas-torch-{cpu|gpu}-base:{PY_BASE_TAG}
+        BASE_IMAGE: aipaas/aipaas-torch-${TORCH_VARIANT:-gpu}-base:${PY_BASE_TAG:-local}
     image: aipaas/svc-model-reranker:${IMAGE_TAG:-latest}
     container_name: aipaas-svc-model-reranker
     env_file: .env

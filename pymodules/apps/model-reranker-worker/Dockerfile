@@ -1,94 +1,36 @@
 # ===========================================================================
-# AIPaaS 重排序模型服务 Dockerfile（bge-reranker-large，独立部署单元，端口 8004）
+# AIPaaS 重排序模型服务镜像（bge-reranker-large，端口 8004）
 # ---------------------------------------------------------------------------
-# 构建（在 pymodules/ 目录下执行，TORCH_VARIANT 决定 CPU / GPU 版）：
-#   # GPU 镜像（CUDA 12.8，默认）
-#   docker build --network host --build-arg TORCH_VARIANT=gpu \
+# 依赖全部来自基座镜像，本文件只叠加业务代码：
+#   aipaas/aipaas-torch-cpu-base:<tag>   torch==2.11.0+cpu
+#   aipaas/aipaas-torch-gpu-base:<tag>   torch==2.11.0+cu128
+#
+# 构建（在 pymodules/ 目录下执行，先构建 docker/base/Dockerfile）：
+#   docker build --network host \
+#     --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local \
 #     -f apps/model-reranker-worker/Dockerfile -t aipaas/svc-model-reranker:latest .
-#   # CPU 镜像（无 CUDA 依赖，体积小）
-#   docker build --network host --build-arg TORCH_VARIANT=cpu \
-#     -f apps/model-reranker-worker/Dockerfile -t aipaas/svc-model-reranker:cpu .
 #
-# 必须加 --network host：构建容器访问 download.pytorch.org / pypi.nvidia.cn
-# 在 docker 默认 bridge 网络下会 ReadTimeout 或 network unreachable。
-#
-# 运行（模型目录挂载到容器内 /app/models/bge-reranker-large；配置包外部映射到 /app/configs）：
-#   docker run -d --name svc-model-reranker -p 8004:8004 --gpus all \
-#     -v /host/models/bge-reranker-large:/app/models/bge-reranker-large:ro \
-#     -v /host/path/logs:/app/logs \
-#     -v /host/path/aipaas-configs:/app/configs:ro \
-#     -e APP_ENV=devcompany -e CONFIG_DIR=/app/configs \
-#     aipaas/svc-model-reranker:latest
+# 只改业务代码时本文件约 30 秒完成，且不需要联网。
 # ===========================================================================
 
-# ---- 阶段 1：依赖构建 ----
-FROM python:3.12-slim AS builder
+ARG BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local
 
-# torch 构建版本开关：cpu = pytorch.org/whl/cpu；gpu = pytorch.org/whl/cu128
-# 取值由根 pyproject.toml 的 cpu / gpu 互斥分组（[dependency-groups]）决定
-ARG TORCH_VARIANT=gpu
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    UV_HTTP_TIMEOUT=120
+FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
-# workspace 配置 + 依赖的成员源码（editable install 需要源码树）
-COPY pyproject.toml uv.lock ./
-COPY packages ./packages
-COPY apps/model-reranker-worker ./apps/model-reranker-worker
-
-# torch / flagembedding 只声明在根 pyproject.toml 的 cpu / gpu 互斥分组里，
-# 因此 sync 必须显式带 --group（这里统一用 cpu 分组，保证任何机器都能解析；
-# gpu 变体在下一步把 torch 系替换成 cu128 构建）
-RUN case "${TORCH_VARIANT}" in cpu|gpu) ;; \
-      *) echo "TORCH_VARIANT 只能是 cpu 或 gpu，收到: ${TORCH_VARIANT}" >&2; exit 1 ;; \
-    esac && \
-    uv sync --package model-reranker-worker --no-dev --group cpu 2>&1
-
-# gpu 变体：把 CPU 版 torch 系替换为 CUDA 12.8 构建（cpu 变体跳过此步）
-# 注意：构建时必须加 --network host，否则 bridge 网络下访问 pypi.nvidia.cn 会 ReadTimeout
-RUN if [ "${TORCH_VARIANT}" = "gpu" ]; then \
-      uv pip install --python /app/.venv/bin/python --reinstall \
-        --extra-index-url https://download.pytorch.org/whl/cu128 \
-        torch==2.11.0+cu128 torchvision==0.26.0+cu128 torchaudio==2.11.0+cu128; \
-    fi
-
-# 校验实际装到的 torch 构建与 TORCH_VARIANT 一致：
-# cpu 分组 torch.version.cuda 必须为 None；gpu 分组必须是 CUDA 12.8
-RUN TORCH_VARIANT="${TORCH_VARIANT}" /app/.venv/bin/python -c "\
-import os, torch; \
-v = os.environ['TORCH_VARIANT']; \
-cuda = torch.version.cuda; \
-assert (cuda is not None and cuda.startswith('12.8')) if v == 'gpu' else cuda is None, \
-    f'TORCH_VARIANT={v} 但实际 torch={torch.__version__} cuda={cuda}'; \
-print(f'torch OK: {torch.__version__} (variant={v})')"
-
-# ---- 阶段 2：运行时 ----
-FROM python:3.12-slim AS runtime
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PROJECT_ROOT=/app \
-    PATH="/app/.venv/bin:$PATH"
-
-WORKDIR /app
-
-RUN touch .env && mkdir -p /app/logs /app/models
-
-COPY --from=builder /app/.venv .venv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# 基座与 uv.lock 一致性校验：lock 变了但基座没重建时直接失败，避免运行环境静默漂移
+COPY uv.lock ./
+RUN test "$(sha256sum uv.lock | cut -d' ' -f1)" = "$(cat /app/.uv-lock-sha256)" \
+      || { echo "基座镜像与当前 uv.lock 不一致，请先重建 docker/base/Dockerfile" >&2; exit 1; }
 
 COPY packages ./packages
 COPY apps/model-reranker-worker ./apps/model-reranker-worker
 COPY configs ./configs
-COPY pyproject.toml uv.lock ./
 
-# 数据卷声明：日志目录 + 模型目录（由 compose 或 -v 挂载到宿主机）
-VOLUME ["/app/logs", "/app/models"]
+# 只安装本地包，不解析、不下载（--no-deps），也不需要构建隔离环境
+RUN uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation \
+      -e packages/common -e apps/model-reranker-worker
 
 EXPOSE 8004
 
