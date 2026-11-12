@@ -105,3 +105,24 @@ async def embeddings(request: EmbeddingRequest):
 
 if __name__ == "__main__":
     uvicorn.run(app=app, host=settings.module.host, port=settings.module.port)
+    """
+    1、端口冲突解决办法：
+    # 查看PID
+    netstat -ano | findstr :8101
+    # 查看对应程序
+    tasklist | findstr 12345
+    # 强制结束
+    taskkill /PID 12345 /F
+
+    2、powershell
+    # 查看
+    Get-Process -Id (Get-NetTCPConnection -LocalPort 8080).OwningProcess
+    # 终止
+    Stop-Process -Id 12345 -Force
+
+    3、Linux
+    lsof -i :8080
+    lsof -t -i :8080  # 输出中 PID 列即为占用进程的 PID。如果只想拿到 PID 方便后续处理，可以加 -t：
+    kill $(lsof -t -i :8080)
+    lsof -t -i :8080 | xargs -r kill
+    """
