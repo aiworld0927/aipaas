@@ -1,10 +1,10 @@
 """query_worker 模块配置 schema。"""
 from pydantic import BaseModel
 
-from aipaas_common.conf.schemas.common import CommonSettings, _Base
+from aipaas_common.conf.schemas.common import CommonSettings, HostPortSettings
 
 
-class QueryWorkerModule(_Base):
+class QueryWorkerModule(HostPortSettings):
     """查询流程的商品名确认阈值 / 动态 TopK / 断崖截断 / 上下文预算。"""
 
     query_high_threshold: float

@@ -1,7 +1,7 @@
 """重排序模型服务的 HTTP 接口定义（全异步）。
 
 启动方式：
-    uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8102
+    uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8004
 """
 from contextlib import asynccontextmanager
 

@@ -14,9 +14,9 @@ common:
   mongo:
     db_name: kb002
   embedding_service:
-    url: http://192.168.222.188:8101
+    url: http://192.168.222.188:8003
   rerank_service:
-    url: http://192.168.222.188:8102
+    url: http://192.168.222.188:8004
 
 model_embedding_worker:
   offline:

@@ -50,7 +50,7 @@ async def health():
 
 
 # 3. 静态页面路由：返回文件导入前端页面
-# 访问地址：http://localhost:8000/import.html
+# 访问地址：http://localhost:8001/import.html
 @app.get("/import.html")  # 对外访问地址
 async def get_import_page():
     # 拼接HTML文件绝对路径
@@ -104,7 +104,7 @@ async def run_graph_task_async(task_id: str, file_dir: str, import_file_path: st
 
 # 5. 核心接口：文件上传接口
 # 支持多文件上传，核心流程：接收文件 → 本地保存 → MinIO上传 → 启动后台任务
-# 访问地址：http://localhost:8000/upload （POST请求，form-data格式传参）
+# 访问地址：http://localhost:8001/upload （POST请求，form-data格式传参）
 @app.post("/upload", summary="文件上传接口", description="支持多文件批量上传，自动触发知识库导入全流程")
 async def upload_files(files: List[UploadFile] = File(...)):
     """
@@ -197,7 +197,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
 # 6. 核心接口：任务状态查询接口
 # 前端轮询此接口获取单个任务的处理进度和状态
-# 访问地址：http://localhost:8000/status/{task_id} （GET请求）
+# 访问地址：http://localhost:8001/status/{task_id} （GET请求）
 @app.get("/status/{task_id}", summary="任务状态查询", description="根据TaskID查询单个文件的处理进度和全局状态")
 async def get_task_progress(task_id: str):
     """
@@ -223,4 +223,4 @@ async def get_task_progress(task_id: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app=app, host="127.0.0.1", port=8000)
+    uvicorn.run(app=app, host=settings.module.host, port=settings.module.port)

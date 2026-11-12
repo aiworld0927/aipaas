@@ -1,6 +1,4 @@
 """日志配置 schema：由 aipaas_config.*.yaml 的 common.logging 节点校验生成。"""
-from typing import Optional
-
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 
@@ -10,11 +8,22 @@ class _Base(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class HostPortSettings(_Base):
+    """所有 HTTP worker 共用的监听地址。
+
+    端口统一由环境变量 `{MODULE_NAME大写}_PORT` / `{MODULE_NAME大写}_HOST` 覆盖
+    （如 INGEST_WORKER_PORT=9000），未设置时取 YAML 中的默认值。
+    """
+
+    host: str = "0.0.0.0"
+    port: int
+
+
 class LLMSettings(_Base):
     """OpenAI 兼容 LLM 接口配置。"""
 
     base_url: str
-    api_key: Optional[SecretStr] = None
+    api_key: SecretStr | None = None
     llm_model: str
     llm_temperature: float
     vl_model: str
@@ -38,8 +47,8 @@ class MinioSettings(_Base):
     secure: bool
     bucket_name: str
     img_dir: str
-    access_key: Optional[SecretStr] = None
-    secret_key: Optional[SecretStr] = None
+    access_key: SecretStr | None = None
+    secret_key: SecretStr | None = None
 
     @property
     def access_key_str(self) -> str:
@@ -56,7 +65,7 @@ class MinioSettings(_Base):
 
 
 class MongoSettings(_Base):
-    url: Optional[SecretStr] = None
+    url: SecretStr | None = None
     db_name: str
 
     @property
@@ -66,7 +75,7 @@ class MongoSettings(_Base):
 
 class MineruSettings(_Base):
     base_url: str
-    api_token: Optional[SecretStr] = None
+    api_token: SecretStr | None = None
 
     @property
     def api_token_str(self) -> str:
@@ -75,7 +84,7 @@ class MineruSettings(_Base):
 
 class McpSettings(_Base):
     mcp_base_url: str
-    api_key: Optional[SecretStr] = None
+    api_key: SecretStr | None = None
 
     @property
     def api_key_str(self) -> str:
@@ -84,7 +93,6 @@ class McpSettings(_Base):
 
 class HttpServiceSettings(_Base):
     """内部模型推理服务（embedding / reranker）HTTP 客户端配置。"""
-
     url: str
     timeout: float
 
@@ -95,7 +103,7 @@ class LoggingSettings(_Base):
     file_enable: bool
     file_level: str
     file_retention: str
-    file_prefix: Optional[str] = None
+    file_prefix: str | None = None
 
 
 class CommonSettings(_Base):

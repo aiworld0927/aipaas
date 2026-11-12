@@ -1,7 +1,7 @@
 """嵌入模型服务的 HTTP 接口定义（全异步）。
 
 启动方式：
-    uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8101
+    uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8003
 """
 from contextlib import asynccontextmanager
 

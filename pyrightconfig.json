@@ -11,11 +11,16 @@
   "extraPaths": [
     "pymodules/packages/common",
     "pymodules/packages/llm",
+    "pymodules/packages/mcp-agents1.0",
+    "pymodules/packages/mcp-agents2.0",
+    "pymodules/packages/model-clients",
+    "pymodules/packages/pipeline",
     "pymodules/packages/retrieval",
     "pymodules/packages/storage",
-    "pymodules/packages/pipeline",
     "pymodules/apps/ingest-worker",
-    "pymodules/apps/query-worker"
+    "pymodules/apps/query-worker",
+    "pymodules/apps/model-embedding-worker",
+    "pymodules/apps/model-reranker-worker"
   ],
   "pythonVersion": "3.12"
 }

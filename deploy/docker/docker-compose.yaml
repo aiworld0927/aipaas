@@ -77,7 +77,7 @@ services:
         # cpu = torch +cpu（无 CUDA）；gpu = torch +cu128
         # 环境默认值由 setup-env.sh 提供：devhome=gpu  devcompany=cpu
         TORCH_VARIANT: ${TORCH_VARIANT:-gpu}
-    image: aipaas/svc-model-embedding:latest
+    image: aipaas/svc-model-embedding:${IMAGE_TAG:-latest}
     container_name: aipaas-svc-model-embedding
     env_file: .env
     environment:
@@ -87,18 +87,20 @@ services:
       # 密钥（业务配置统一由配置包 aipaas_config.*.yaml 提供）
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       EMBEDDING_ONLINE_API_KEY: ${EMBEDDING_ONLINE_API_KEY:-}
+      # 监听端口：统一由 MODEL_EMBEDDING_WORKER_PORT 决定（容器监听 + 宿主机映射同源）
+      MODEL_EMBEDDING_WORKER_PORT: ${MODEL_EMBEDDING_WORKER_PORT:-8003}
       TZ: Asia/Shanghai
     ports:
-      - "${EMBEDDING_PORT:-8101}:8101"
+      - "${MODEL_EMBEDDING_WORKER_PORT:-8003}:${MODEL_EMBEDDING_WORKER_PORT:-8003}"
     volumes:
       - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-model-embedding:/app/logs
       - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
-      - ${MODEL_BASE_DIR:-../../models}/bge-m3:/app/models/bge-m3:ro
+      - ${MODEL_BASE_DIR:-/home/aipaas/models/BAAI}/bge-m3:${MODEL_BASE_DIR:-/home/aipaas/models/BAAI}/bge-m3:ro
       # devcompany 等环境配置里 model_path 写的是宿主机绝对路径（/coding/models/BAAI/...），
       # 按原路径透传挂载，保证容器内与裸机路径一致
       - /coding/models:/coding/models:ro
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8101/health')"]
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${MODEL_EMBEDDING_WORKER_PORT:-8003}/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -125,7 +127,7 @@ services:
       args:
         # cpu = torch +cpu（无 CUDA）；gpu = torch +cu128
         TORCH_VARIANT: ${TORCH_VARIANT:-gpu}
-    image: aipaas/svc-model-reranker:latest
+    image: aipaas/svc-model-reranker:${IMAGE_TAG:-latest}
     container_name: aipaas-svc-model-reranker
     env_file: .env
     environment:
@@ -133,18 +135,20 @@ services:
       CONFIG_DIR: /app/configs
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       TEXT_RERANK_API_KEY: ${TEXT_RERANK_API_KEY:-}
+      # 监听端口：统一由 MODEL_RERANKER_WORKER_PORT 决定（容器监听 + 宿主机映射同源）
+      MODEL_RERANKER_WORKER_PORT: ${MODEL_RERANKER_WORKER_PORT:-8004}
       TZ: Asia/Shanghai
     ports:
-      - "${RERANKER_PORT:-8102}:8102"
+      - "${MODEL_RERANKER_WORKER_PORT:-8004}:${MODEL_RERANKER_WORKER_PORT:-8004}"
     volumes:
       - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-model-reranker:/app/logs
       - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
-      - ${MODEL_BASE_DIR:-../../models}/bge-reranker-large:/app/models/bge-reranker-large:ro
+      - ${MODEL_BASE_DIR:-/home/aipaas/models/BAAI}/bge-reranker-large:${MODEL_BASE_DIR:-/home/aipaas/models/BAAI}/bge-reranker-large:ro
       # devcompany 等环境配置里 model_path 写的是宿主机绝对路径（/coding/models/BAAI/...），
       # 按原路径透传挂载，保证容器内与裸机路径一致
       - /coding/models:/coding/models:ro
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8102/health')"]
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${MODEL_RERANKER_WORKER_PORT:-8004}/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -170,7 +174,7 @@ services:
     build:
       context: ../../pymodules
       dockerfile: apps/ingest-worker/Dockerfile
-    image: aipaas/svc-ingest:latest
+    image: aipaas/svc-ingest:${IMAGE_TAG:-latest}
     container_name: aipaas-svc-ingest
     env_file: .env
     environment:
@@ -182,14 +186,19 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MONGO_URL: ${MONGO_URL:-mongodb://admin:123456@mongodb:27017/?authSource=admin}
       MINERU_API_TOKEN: ${MINERU_API_TOKEN:-}
+      # 下游模型服务地址跟随其端口变量，换端口时无需再改这里
+      EMBEDDING_SERVICE_URL: http://svc-model-embedding:${MODEL_EMBEDDING_WORKER_PORT:-8003}
+      RERANKER_SERVICE_URL: http://svc-model-reranker:${MODEL_RERANKER_WORKER_PORT:-8004}
+      # 监听端口：统一由 INGEST_WORKER_PORT 决定（容器监听 + 宿主机映射同源）
+      INGEST_WORKER_PORT: ${INGEST_WORKER_PORT:-8001}
       TZ: Asia/Shanghai
     ports:
-      - "${INGEST_PORT:-8000}:8000"
+      - "${INGEST_WORKER_PORT:-8001}:${INGEST_WORKER_PORT:-8001}"
     volumes:
       - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-ingest:/app/logs
       - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${INGEST_WORKER_PORT:-8001}/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -213,7 +222,7 @@ services:
     build:
       context: ../../pymodules
       dockerfile: apps/query-worker/Dockerfile
-    image: aipaas/svc-query:latest
+    image: aipaas/svc-query:${IMAGE_TAG:-latest}
     container_name: aipaas-svc-query
     env_file: .env
     environment:
@@ -224,14 +233,19 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MONGO_URL: ${MONGO_URL:-mongodb://admin:123456@mongodb:27017/?authSource=admin}
+      # 下游模型服务地址跟随其端口变量，换端口时无需再改这里
+      EMBEDDING_SERVICE_URL: http://svc-model-embedding:${MODEL_EMBEDDING_WORKER_PORT:-8003}
+      RERANKER_SERVICE_URL: http://svc-model-reranker:${MODEL_RERANKER_WORKER_PORT:-8004}
+      # 监听端口：统一由 QUERY_WORKER_PORT 决定（容器监听 + 宿主机映射同源）
+      QUERY_WORKER_PORT: ${QUERY_WORKER_PORT:-8002}
       TZ: Asia/Shanghai
     ports:
-      - "${QUERY_PORT:-8001}:8001"
+      - "${QUERY_WORKER_PORT:-8002}:${QUERY_WORKER_PORT:-8002}"
     volumes:
       - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-query:/app/logs
       - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${QUERY_WORKER_PORT:-8002}/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -257,11 +271,11 @@ services:
     build:
       context: ../../web
       dockerfile: Dockerfile
-    image: aipaas/frontend:latest
+    image: aipaas/frontend:${IMAGE_TAG:-latest}
     container_name: aipaas-frontend
     environment:
-      QUERY_API_UPSTREAM: http://svc-query:8001
-      IMPORT_API_UPSTREAM: http://svc-ingest:8000
+      QUERY_API_UPSTREAM: http://svc-query:${QUERY_WORKER_PORT:-8002}
+      IMPORT_API_UPSTREAM: http://svc-ingest:${INGEST_WORKER_PORT:-8001}
     ports:
       - "${FRONTEND_PORT:-80}:80"
     depends_on:

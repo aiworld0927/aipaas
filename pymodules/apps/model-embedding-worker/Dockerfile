@@ -1,5 +1,5 @@
 # ===========================================================================
-# AIPaaS 嵌入模型服务 Dockerfile（BGE-M3，独立部署单元，端口 8101）
+# AIPaaS 嵌入模型服务 Dockerfile（BGE-M3，独立部署单元，端口 8003）
 # ---------------------------------------------------------------------------
 # 构建（在 pymodules/ 目录下执行，TORCH_VARIANT 决定 CPU / GPU 版）：
 #   # GPU 镜像（CUDA 12.8，默认）
@@ -13,7 +13,7 @@
 # 在 docker 默认 bridge 网络下会 ReadTimeout 或 network unreachable。
 #
 # 运行（模型目录挂载到容器内 /app/models/bge-m3；配置包外部映射到 /app/configs）：
-#   docker run -d --name svc-model-embedding -p 8101:8101 --gpus all \
+#   docker run -d --name svc-model-embedding -p 8003:8003 --gpus all \
 #     -v /host/models/bge-m3:/app/models/bge-m3:ro \
 #     -v /host/path/logs:/app/logs \
 #     -v /host/path/aipaas-configs:/app/configs:ro \
@@ -90,11 +90,9 @@ COPY pyproject.toml uv.lock ./
 # 数据卷声明：日志目录 + 模型目录（由 compose 或 -v 挂载到宿主机）
 VOLUME ["/app/logs", "/app/models"]
 
-EXPOSE 8101
+EXPOSE 8003
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
-  CMD .venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:8101/health')" || exit 1
+  CMD .venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:${MODEL_EMBEDDING_WORKER_PORT:-8003}/health')" || exit 1
 
-CMD [".venv/bin/python", "-m", "uvicorn", \
-     "model_embedding_worker.api.service:app", \
-     "--host", "0.0.0.0", "--port", "8101"]
+CMD [".venv/bin/python", "-m", "model_embedding_worker.api.service"]

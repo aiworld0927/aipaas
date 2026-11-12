@@ -46,14 +46,10 @@ def load_settings(module_name: str) -> BaseModel:
     load_dotenv()
 
     if module_name not in MODULE_SCHEMAS:
-        raise SettingsError(
-            f"未注册的 module_name：{module_name!r}，可选：{sorted(MODULE_SCHEMAS)}"
-        )
+        raise SettingsError(f"未注册的 module_name：{module_name!r}，可选：{sorted(MODULE_SCHEMAS)}")
     if _settings is not None:
         if module_name != _loaded_module:
-            raise SettingsError(
-                f"本进程已按 {_loaded_module!r} 加载配置，不能再以 {module_name!r} 加载"
-            )
+            raise SettingsError(f"本进程已按 {_loaded_module!r} 加载配置，不能再以 {module_name!r} 加载")
         return _settings
 
     config_dir_str = os.environ.get("CONFIG_DIR", "/home/aipaas/aipaas/pymodules/configs").strip()
@@ -79,6 +75,7 @@ def load_settings(module_name: str) -> BaseModel:
     cropped = OmegaConf.create({"common": merged["common"], "module": merged[module_name]})
     OmegaConf.resolve(cropped)
     data = OmegaConf.to_container(cropped, resolve=True)
+    _apply_env_overrides(data, module_name)
 
     settings = MODULE_SCHEMAS[module_name].model_validate(data)
 
@@ -93,6 +90,29 @@ def get_settings() -> BaseModel:
     if _settings is None:
         raise SettingsError("配置尚未加载：请先由模块入口调用 load_settings(module_name)")
     return _settings
+
+
+def _apply_env_overrides(data: dict, module_name: str) -> None:
+    """统一用环境变量覆盖监听地址，优先级：环境变量 > {APP_ENV}.yaml > base.yaml。
+
+    变量名固定为 `{MODULE_NAME大写}_{字段大写}`：
+      INGEST_WORKER_PORT / QUERY_WORKER_PORT /
+      MODEL_EMBEDDING_WORKER_PORT / MODEL_RERANKER_WORKER_PORT（另有对应 _HOST）
+    这样容器、裸机、K8s 都只需改环境变量即可换端口，无需改 YAML 或镜像。
+    """
+    module = data.setdefault("module", {})
+    prefix = module_name.upper()
+    for field in ("host", "port"):
+        raw = os.environ.get(f"{prefix}_{field.upper()}", "").strip()
+        if not raw:
+            continue
+        if field == "port":
+            try:
+                module[field] = int(raw)
+            except ValueError:
+                raise SettingsError(f"环境变量 {prefix}_PORT 必须是整数，当前：{raw!r}") from None
+        else:
+            module[field] = raw
 
 
 def _apply_logging(settings: BaseModel, module_name: str) -> None:

@@ -22,16 +22,18 @@ echo "================================================"
 #   MODEL_BASE_DIR           —— 宿主机模型根目录（其下含 bge-m3 / bge-reranker-large）
 case $ENV_NAME in
     devhome)
-        MIDDLEWARE_HOST=172.30.93.209
+        MIDDLEWARE_HOST=192.168.5.18
         NACOS_PORT=8848
         DEFAULT_TORCH_VARIANT=gpu
         DEFAULT_DOCKER_VOLUME_DIRECTORY=/home/aipaas/docker_hub
+        DEFAULT_MODEL_BASE_DIR=/home/aipaas/models/BAAI
         ;;
     devcompany)
         MIDDLEWARE_HOST=192.168.222.188
         NACOS_PORT=8848
         DEFAULT_TORCH_VARIANT=cpu
         DEFAULT_DOCKER_VOLUME_DIRECTORY=/coding/docker_hub
+        DEFAULT_MODEL_BASE_DIR=/coding/models/BAAI
         ;;
     *)
         echo "未知环境: $ENV_NAME，使用默认值"
@@ -39,11 +41,12 @@ case $ENV_NAME in
         NACOS_PORT=8848
         DEFAULT_TORCH_VARIANT=gpu
         DEFAULT_DOCKER_VOLUME_DIRECTORY=/home/aipaas/docker_hub
+        DEFAULT_MODEL_BASE_DIR=/home/aipaas/models/BAAI
         ;;
 esac
 
 # 允许外部已导出的同名变量优先生效（便于临时覆盖）
-DEFAULT_MODEL_BASE_DIR=/coding/models/BAAI
+
 
 # ============================================
 # 1. 基础环境配置

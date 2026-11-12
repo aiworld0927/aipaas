@@ -25,10 +25,10 @@ pymodules/
 ├── .dockerignore           # 排除 .venv / logs / tests / __pycache__
 ├── .venv/                  # 所有成员共用的虚拟环境
 ├── apps/                   # 可独立运行的应用（每个 app = 一个部署单元）
-│   ├── ingest-worker/          # 文档导入服务（端口 8000）
-│   ├── query-worker/           # 用户查询服务（端口 8001）
-│   ├── model-embedding-worker/ # 嵌入模型推理服务（端口 8101）
-│   ├── model-reranker-worker/  # 重排序模型推理服务（端口 8102）
+│   ├── ingest-worker/          # 文档导入服务（端口 8001）
+│   ├── query-worker/           # 用户查询服务（端口 8002）
+│   ├── model-embedding-worker/ # 嵌入模型推理服务（端口 8003）
+│   ├── model-reranker-worker/  # 重排序模型推理服务（端口 8004）
 │   ├── apis/                   # 管理端业务逻辑（不在 workspace）
 │   └── eval-runner/            # RAG 评估脚本（不在 workspace）
 ├── packages/               # 共享能力包（被 apps 和 packages 向下依赖）
@@ -49,10 +49,10 @@ pymodules/
 
 | App | 端口 | 职责 | 入口模块 | 配置命名空间 |
 |-----|------|------|----------|--------------|
-| `svc-ingest`（`apps/ingest-worker`） | 8000 | 接收文档上传 → LangGraph 流程编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus） | `ingest_worker.api.service:app` | `ingest_worker` |
-| `svc-query`（`apps/query-worker`） | 8001 | 接收用户查询 → LangGraph 流程编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出） | `query_worker.api.service:app` | `query_worker` |
-| `svc-model-embedding`（`apps/model-embedding-worker`） | 8101 | 嵌入模型独立推理服务：离线 BGE-M3（dense + sparse）/ 在线 DashScope 兼容接口（仅 dense） | `model_embedding_worker.api.service:app` | `model_embedding_worker` |
-| `svc-model-reranker`（`apps/model-reranker-worker`） | 8102 | 重排序模型独立推理服务：离线 bge-reranker-large / 在线 DashScope TextReRank | `model_reranker_worker.api.service:app` | `model_reranker_worker` |
+| `svc-ingest`（`apps/ingest-worker`） | 8001 | 接收文档上传 → LangGraph 流程编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus） | `ingest_worker.api.service:app` | `ingest_worker` |
+| `svc-query`（`apps/query-worker`） | 8002 | 接收用户查询 → LangGraph 流程编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出） | `query_worker.api.service:app` | `query_worker` |
+| `svc-model-embedding`（`apps/model-embedding-worker`） | 8003 | 嵌入模型独立推理服务：离线 BGE-M3（dense + sparse）/ 在线 DashScope 兼容接口（仅 dense） | `model_embedding_worker.api.service:app` | `model_embedding_worker` |
+| `svc-model-reranker`（`apps/model-reranker-worker`） | 8004 | 重排序模型独立推理服务：离线 bge-reranker-large / 在线 DashScope TextReRank | `model_reranker_worker.api.service:app` | `model_reranker_worker` |
 
 ### 1.3 共享能力（`packages/`）
 
@@ -159,27 +159,27 @@ uv lock && uv sync --all-packages --group cpu
 
 ### 3.1 启动顺序与命令
 
-先起两个**模型服务**（8101 / 8102），再起两个**业务服务**（8000 / 8001）——业务服务通过 HTTP 调用模型服务。开发时统一加 `--reload`。
+先起两个**模型服务**（8003 / 8004），再起两个**业务服务**（8001 / 8002）——业务服务通过 HTTP 调用模型服务。开发时统一加 `--reload`。
 
 | 服务 | 端口 | 启动命令（在 `pymodules/` 下执行） |
 |------|------|------|
-| 嵌入模型 | 8101 | `uv run uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8101 --reload` |
-| 重排序模型 | 8102 | `uv run uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8102 --reload` |
-| 导入服务 | 8000 | `uv run uvicorn ingest_worker.api.service:app --host 0.0.0.0 --port 8000 --reload` |
-| 查询服务 | 8001 | `uv run uvicorn query_worker.api.service:app --host 0.0.0.0 --port 8001 --reload` |
+| 嵌入模型 | 8003 | `uv run uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8003 --reload` |
+| 重排序模型 | 8004 | `uv run uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8004 --reload` |
+| 导入服务 | 8001 | `uv run uvicorn ingest_worker.api.service:app --host 0.0.0.0 --port 8001 --reload` |
+| 查询服务 | 8002 | `uv run uvicorn query_worker.api.service:app --host 0.0.0.0 --port 8002 --reload` |
 
 ```bash
 # 终端 1：嵌入模型
-cd pymodules && uv run uvicorn model_embedding_worker.api.service:app --port 8101 --reload
+cd pymodules && uv run uvicorn model_embedding_worker.api.service:app --port 8003 --reload
 
 # 终端 2：重排序模型
-cd pymodules && uv run uvicorn model_reranker_worker.api.service:app --port 8102 --reload
+cd pymodules && uv run uvicorn model_reranker_worker.api.service:app --port 8004 --reload
 
 # 终端 3：导入服务
-cd pymodules && uv run uvicorn ingest_worker.api.service:app --port 8000 --reload
+cd pymodules && uv run uvicorn ingest_worker.api.service:app --port 8001 --reload
 
 # 终端 4：查询服务
-cd pymodules && uv run uvicorn query_worker.api.service:app --port 8001 --reload
+cd pymodules && uv run uvicorn query_worker.api.service:app --port 8002 --reload
 ```
 
 `--reload` 会监听源码变更并自动重启，开发时务必加上。各模块的接口与配置细节见 [第六章](#六四个模块独立说明)。
@@ -233,10 +233,10 @@ configs/
 ### 3.4 启动校验
 
 ```bash
-curl -s http://localhost:8101/ready    # 嵌入模型：模型加载完成才返回 200
-curl -s http://localhost:8102/ready    # 重排序模型
-curl -s http://localhost:8000/health   # ingest-worker
-curl -s http://localhost:8001/health   # query-worker
+curl -s http://localhost:8003/ready    # 嵌入模型：模型加载完成才返回 200
+curl -s http://localhost:8004/ready    # 重排序模型
+curl -s http://localhost:8001/health   # ingest-worker
+curl -s http://localhost:8002/health   # query-worker
 ```
 
 ---
@@ -334,11 +334,11 @@ docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest:latest .
 # 查询服务
 docker build -f apps/query-worker/Dockerfile -t aipaas/svc-query:latest .
 
-# 嵌入模型服务（端口 8101）—— 必须加 --network host，并按需选择 torch 构建
+# 嵌入模型服务（端口 8003）—— 必须加 --network host，并按需选择 torch 构建
 docker build --network host --build-arg TORCH_VARIANT=gpu \
   -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding:latest .
 
-# 重排序模型服务（端口 8102）
+# 重排序模型服务（端口 8004）
 docker build --network host --build-arg TORCH_VARIANT=gpu \
   -f apps/model-reranker-worker/Dockerfile -t aipaas/svc-model-reranker:latest .
 ```
@@ -364,6 +364,45 @@ docker run --rm aipaas/svc-model-embedding:latest \
 - 环境变量内置了生产默认值：`PROJECT_ROOT=/app`、`MODELSCOPE_CACHE=/app/models/modelscope_cache` 等
 - 声明了两个卷：`/app/logs`（日志）、`/app/models`（模型缓存）
 
+### 5.1.1 镜像版本与重建策略（重要）
+
+`docker-compose up -d` **默认不构建镜像**，判定规则：
+
+| 场景 | 是否 build |
+|---|---|
+| 本地已存在 `image:` 指定的 tag（如 `aipaas/svc-model-embedding:latest`） | ❌ 直接用它起容器，源码改了也不会生效 |
+| 本地不存在该 tag（首次、删了镜像、换了版本号） | ✅ 自动 build 一次 |
+| `docker-compose up -d --build` | ✅ 强制重建 |
+| `docker-compose build <service>` | ✅ 显式构建 |
+
+即：`up -d` 只负责“启动”，不负责“更新”；`apps/*/` 下的代码没有以卷的方式挂进容器，必须重建镜像才能生效。
+
+镜像版本由 `deploy/docker/.env` 的 `IMAGE_TAG` 统一控制（compose 中 `image: aipaas/svc-xxx:${IMAGE_TAG:-latest}`）：
+
+```bash
+# 开发迭代：保持 latest，改完代码显式重建再起
+docker-compose build svc-model-embedding && docker-compose up -d svc-model-embedding
+
+# 发布：用版本号打 tag，镜像可追溯、可回滚
+IMAGE_TAG=0.1.0 docker-compose build
+IMAGE_TAG=0.1.0 docker-compose up -d
+
+# 回滚：切回旧 tag 重启即可（镜像还在本地）
+IMAGE_TAG=0.0.9 docker-compose up -d
+
+# 彻底重建（跳过所有层缓存，依赖也会重装，耗时最长）
+docker-compose build --no-cache svc-query
+```
+
+排查“改了代码没生效”时，先比对镜像与源码时间：
+
+```bash
+docker image inspect aipaas/svc-query:latest --format '{{.Created}}'
+find apps/query-worker -name "*.py" -newer /dev/null -printf '%TY-%Tm-%Td %TH:%TM %p\n' | sort -r | head -3
+```
+
+镜像时间早于源码时间 → 需要重建。注意模型服务的 `TORCH_VARIANT`（cpu/gpu）变化也会触发重建，见 5.3。
+
 ### 5.2 单独运行（需要中间件已就绪）
 
 以下命令在 `pymodules/` 目录下执行。配置由 `configs/aipaas_config.*.yaml` 提供：`APP_ENV` 选择覆盖层，`CONFIG_DIR` 指向容器内配置目录。覆盖层里的中间件地址必须在宿主机可达；若想用 `docker-compose` 的容器名寻址，请直接用 5.3 的 compose 方式。
@@ -371,8 +410,8 @@ docker run --rm aipaas/svc-model-embedding:latest \
 #### 5.2.1 业务服务
 
 ```bash
-# 运行 svc-ingest（端口 8000）
-docker run -d --name svc-ingest -p 8000:8000 \
+# 运行 svc-ingest（端口 8001）
+docker run -d --name svc-ingest -p 8001:8001 \
   --network host \
   -e APP_ENV=devhome -e CONFIG_DIR=/app/configs \
   -e OPENAI_API_KEY=sk-xxx \
@@ -383,8 +422,8 @@ docker run -d --name svc-ingest -p 8000:8000 \
   -v /tmp/logs/svc-ingest:/app/logs \
   aipaas/svc-ingest:latest
 
-# 运行 svc-query（端口 8001）
-docker run -d --name svc-query -p 8001:8001 \
+# 运行 svc-query（端口 8002）
+docker run -d --name svc-query -p 8002:8002 \
   --network host \
   -e APP_ENV=devhome -e CONFIG_DIR=/app/configs \
   -e OPENAI_API_KEY=sk-xxx \
@@ -400,8 +439,8 @@ docker run -d --name svc-query -p 8001:8001 \
 模型服务必须把**离线模型目录**挂载到配置中 `offline.model_path` 指向的路径（base 默认为 `/app/models/bge-m3`、`/app/models/bge-reranker-large`；`devhome` / `devcompany` 覆盖层会改成本机的模型目录，挂载路径要与之保持一致）。
 
 ```bash
-# 运行 svc-model-embedding（端口 8101）
-docker run -d --name svc-model-embedding -p 8101:8101 \
+# 运行 svc-model-embedding（端口 8003）
+docker run -d --name svc-model-embedding -p 8003:8003 \
   --network host \
   -e APP_ENV=devhome -e CONFIG_DIR=/app/configs \
   -e OPENAI_API_KEY=sk-xxx \
@@ -410,8 +449,8 @@ docker run -d --name svc-model-embedding -p 8101:8101 \
   -v /tmp/logs/svc-model-embedding:/app/logs \
   aipaas/svc-model-embedding:latest
 
-# 运行 svc-model-reranker（端口 8102）
-docker run -d --name svc-model-reranker -p 8102:8102 \
+# 运行 svc-model-reranker（端口 8004）
+docker run -d --name svc-model-reranker -p 8004:8004 \
   --network host \
   -e APP_ENV=devhome -e CONFIG_DIR=/app/configs \
   -e OPENAI_API_KEY=sk-xxx \
@@ -422,8 +461,8 @@ docker run -d --name svc-model-reranker -p 8102:8102 \
 
 # 查看日志 / 就绪状态
 docker logs -f svc-model-embedding
-curl -s http://localhost:8101/ready
-curl -s http://localhost:8102/ready
+curl -s http://localhost:8003/ready
+curl -s http://localhost:8004/ready
 ```
 
 > 离线后端首次启动需加载本地模型（约十几秒到数分钟）；`/health` 只代表进程存活，`/ready` 才代表模型可服务。在线后端（`backend: online`）则无需挂载模型目录。
@@ -490,8 +529,8 @@ docker compose down
 | `CONFIG_PACKAGE_DIR` | `../../pymodules/configs` | 宿主机配置包，只读挂载到 `/app/configs` |
 | `MODEL_BASE_DIR` | `../../models` | 宿主机模型根目录，分别挂载为 `bge-m3`、`bge-reranker-large` |
 | `TORCH_VARIANT` | `gpu`（默认）/ `cpu` | 模型服务镜像的 torch 构建 |
-| `INGEST_PORT` / `QUERY_PORT` | `8000` / `8001` | 业务服务宿主机端口 |
-| `EMBEDDING_PORT` / `RERANKER_PORT` | `8101` / `8102` | 模型服务宿主机端口 |
+| `INGEST_WORKER_PORT` / `QUERY_WORKER_PORT` | `8001` / `8002` | 业务服务监听端口（容器内 + 宿主机映射同源） |
+| `MODEL_EMBEDDING_WORKER_PORT` / `MODEL_RERANKER_WORKER_PORT` | `8003` / `8004` | 模型服务监听端口（容器内 + 宿主机映射同源） |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MONGO_URL` / `OPENAI_API_KEY` / `MINERU_API_TOKEN` | — | 密钥，经 `env_file` + `environment` 注入 |
 
 服务间寻址**不再通过环境变量**，而是由配置包中的地址决定：
@@ -501,8 +540,18 @@ docker compose down
 | `common.milvus.url` | `http://milvus:19530` | Milvus 地址（容器名） |
 | `common.minio.endpoint` | `minio:9000` | MinIO 地址（host:port，不带 scheme） |
 | `common.mongo.url` | `${oc.env:MONGO_URL}` | 连接串走环境变量 |
-| `common.embedding_service.url` | `http://svc-model-embedding:8101` | 业务侧唯一入口 |
-| `common.rerank_service.url` | `http://svc-model-reranker:8102` | 业务侧唯一入口 |
+| `common.embedding_service.url` | `http://svc-model-embedding:8003` | 业务侧唯一入口，可用 `EMBEDDING_SERVICE_URL` 覆盖 |
+| `common.rerank_service.url` | `http://svc-model-reranker:8004` | 业务侧唯一入口，可用 `RERANKER_SERVICE_URL` 覆盖 |
+
+**端口统一规则**：四个 worker 的监听地址都由 `{模块名大写}_HOST` / `{模块名大写}_PORT` 环境变量覆盖（加载优先级：环境变量 > `{APP_ENV}.yaml` > `base.yaml`），默认值写在 `base.yaml` 里。改端口只需一处：
+
+```bash
+# 裸机 / 容器通用
+INGEST_WORKER_PORT=9000 .venv/bin/python -m ingest_worker.api.service
+
+# compose：改 deploy/docker/.env，容器监听、宿主机映射、服务间调用地址会一起变
+INGEST_WORKER_PORT=9000 docker-compose up -d
+```
 
 `devhome` / `devcompany` 覆盖层会把这些地址改成对应的开发网络地址，部署时按实际环境选择 `APP_ENV`。compose 已为四个服务预填好挂载与依赖，见 [docker-compose.yaml](file:///coding/aipaas/deploy/docker/docker-compose.yaml)。
 
@@ -512,7 +561,7 @@ docker compose down
 
 四个模块共用同一套配置加载机制（`CONFIG_DIR` + `APP_ENV`，`extra="forbid"`），公共节点 `common` 见 [3.3 节](#33-配置加载与环境变量)；本章只列各模块自己的启动命令、接口与专属配置。
 
-### 6.1 ingest-worker（端口 8000）
+### 6.1 ingest-worker（端口 8001）
 
 **职责**：接收文档上传 → LangGraph 编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus）；入口 `ingest_worker.api.service:app`。
 
@@ -520,7 +569,7 @@ docker compose down
 
 ```bash
 cd pymodules
-uv run uvicorn ingest_worker.api.service:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn ingest_worker.api.service:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 **接口清单**：
@@ -535,13 +584,13 @@ uv run uvicorn ingest_worker.api.service:app --host 0.0.0.0 --port 8000 --reload
 **测试**：
 
 ```bash
-curl -s http://localhost:8000/health
+curl -s http://localhost:8001/health
 
 # 上传文件（可重复 -F 传多个）
-curl -s -X POST http://localhost:8000/upload -F "files=@./test.pdf"
+curl -s -X POST http://localhost:8001/upload -F "files=@./test.pdf"
 
 # 轮询任务进度（task_id 来自上传响应）
-curl -s http://localhost:8000/status/<task_id>
+curl -s http://localhost:8001/status/<task_id>
 ```
 
 **配置项**（`ingest_worker` 命名空间）：
@@ -556,7 +605,7 @@ curl -s http://localhost:8000/status/<task_id>
 
 依赖的公共节点：`common.milvus`、`common.minio`、`common.mongo`、`common.mineru`、`common.llm`、`common.embedding_service`。
 
-### 6.2 query-worker（端口 8001）
+### 6.2 query-worker（端口 8002）
 
 **职责**：接收用户查询 → LangGraph 编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出）；入口 `query_worker.api.service:app`。
 
@@ -564,7 +613,7 @@ curl -s http://localhost:8000/status/<task_id>
 
 ```bash
 cd pymodules
-uv run uvicorn query_worker.api.service:app --host 0.0.0.0 --port 8001 --reload
+uv run uvicorn query_worker.api.service:app --host 0.0.0.0 --port 8002 --reload
 ```
 
 **接口清单**：
@@ -581,22 +630,22 @@ uv run uvicorn query_worker.api.service:app --host 0.0.0.0 --port 8001 --reload
 **测试**：
 
 ```bash
-curl -s http://localhost:8001/health
+curl -s http://localhost:8002/health
 
 # 非流式
-curl -s -X POST http://localhost:8001/query \
+curl -s -X POST http://localhost:8002/query \
   -H 'Content-Type: application/json' \
   -d '{"query":"如何测量交流电压？","session_id":"demo-1","is_stream":false}'
 
 # 流式：先拿 session_id，再订阅 SSE
-curl -s -X POST http://localhost:8001/query \
+curl -s -X POST http://localhost:8002/query \
   -H 'Content-Type: application/json' \
   -d '{"query":"如何测量交流电压？","is_stream":true}'
-curl -N http://localhost:8001/stream/<session_id>
+curl -N http://localhost:8002/stream/<session_id>
 
 # 历史
-curl -s "http://localhost:8001/history/demo-1?limit=50"
-curl -s -X DELETE http://localhost:8001/history/demo-1
+curl -s "http://localhost:8002/history/demo-1?limit=50"
+curl -s -X DELETE http://localhost:8002/history/demo-1
 ```
 
 **配置项**（`query_worker` 命名空间）：
@@ -613,7 +662,7 @@ curl -s -X DELETE http://localhost:8001/history/demo-1
 
 依赖的公共节点：`common.milvus`、`common.mongo`、`common.llm`、`common.mcp`、`common.embedding_service`、`common.rerank_service`。
 
-### 6.3 model-embedding-worker（端口 8101）
+### 6.3 model-embedding-worker（端口 8003）
 
 **职责**：嵌入模型独立推理服务——离线 BGE-M3（dense + sparse）或在线 DashScope / OpenAI 兼容接口（仅 dense）；入口 `model_embedding_worker.api.service:app`。
 
@@ -621,7 +670,7 @@ curl -s -X DELETE http://localhost:8001/history/demo-1
 
 ```bash
 cd pymodules
-uv run uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8101 --reload
+uv run uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8003 --reload
 # 或沿用配置中的 host/port
 uv run python -m model_embedding_worker.api.service
 ```
@@ -638,11 +687,11 @@ uv run python -m model_embedding_worker.api.service
 **测试**：
 
 ```bash
-curl -s http://localhost:8101/health
-curl -s http://localhost:8101/ready
-curl -s http://localhost:8101/v1/model/info
+curl -s http://localhost:8003/health
+curl -s http://localhost:8003/ready
+curl -s http://localhost:8003/v1/model/info
 
-curl -s -X POST http://localhost:8101/v1/embeddings \
+curl -s -X POST http://localhost:8003/v1/embeddings \
   -H 'Content-Type: application/json' \
   -d '{"embedding_documents":["如何测量交流电压？","烫金机"]}'
 # 响应示例（离线后端；在线后端 sparse 为 []）
@@ -656,7 +705,7 @@ curl -s -X POST http://localhost:8101/v1/embeddings \
 | 配置键 | 默认值 | 说明 |
 |---|---|---|
 | `backend` | `offline` | `offline`（本地 BGE-M3，dense + sparse）/ `online`（远端接口，仅 dense） |
-| `host` / `port` | `0.0.0.0` / `8101` | 服务监听 |
+| `host` / `port` | `0.0.0.0` / `8003` | 服务监听 |
 | `max_batch_size` | `64` | 单请求最大文本条数，超限返回 413 |
 | `max_concurrency` | `1` | 推理并发上限（CPU 建议 1，GPU 可调大） |
 | `offline.model_path` | `/app/models/bge-m3` | 嵌入模型目录 |
@@ -668,7 +717,7 @@ curl -s -X POST http://localhost:8101/v1/embeddings \
 | `online.model` / `online.dimension` | `text-embedding-v4` / `1536` | 在线模型与维度 |
 | `online.timeout` | `60` | 在线请求超时（秒） |
 
-### 6.4 model-reranker-worker（端口 8102）
+### 6.4 model-reranker-worker（端口 8004）
 
 **职责**：重排序模型独立推理服务——离线 bge-reranker-large 或在线 DashScope `TextReRank`；入口 `model_reranker_worker.api.service:app`。
 
@@ -676,7 +725,7 @@ curl -s -X POST http://localhost:8101/v1/embeddings \
 
 ```bash
 cd pymodules
-uv run uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8102 --reload
+uv run uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8004 --reload
 # 或沿用配置中的 host/port
 uv run python -m model_reranker_worker.api.service
 ```
@@ -693,11 +742,11 @@ uv run python -m model_reranker_worker.api.service
 **测试**：
 
 ```bash
-curl -s http://localhost:8102/health
-curl -s http://localhost:8102/ready
-curl -s http://localhost:8102/v1/model/info
+curl -s http://localhost:8004/health
+curl -s http://localhost:8004/ready
+curl -s http://localhost:8004/v1/model/info
 
-curl -s -X POST http://localhost:8102/v1/rerank \
+curl -s -X POST http://localhost:8004/v1/rerank \
   -H 'Content-Type: application/json' \
   -d '{"query":"烫金机","documents":["烫金机","吹风机","烫金机的使用方法"]}'
 # {"scores":[0.9999,0.1889,0.9874]}
@@ -710,7 +759,7 @@ curl -s -X POST http://localhost:8102/v1/rerank \
 | 配置键 | 默认值 | 说明 |
 |---|---|---|
 | `backend` | `offline` | `offline`（本地 bge-reranker-large）/ `online`（DashScope TextReRank） |
-| `host` / `port` | `0.0.0.0` / `8102` | 服务监听 |
+| `host` / `port` | `0.0.0.0` / `8004` | 服务监听 |
 | `max_documents` | `128` | 单请求最大文档条数，超限返回 413 |
 | `max_concurrency` | `1` | 推理并发上限 |
 | `offline.model_path` | `/app/models/bge-reranker-large` | 重排序模型目录 |
@@ -728,7 +777,7 @@ curl -s -X POST http://localhost:8102/v1/rerank \
 ### 7.1 目录结构
 
 ```text
-apps/model-embedding-worker/            # 端口 8101
+apps/model-embedding-worker/            # 端口 8003
 ├─ pyproject.toml
 ├─ Dockerfile
 └─ model_embedding_worker/
@@ -737,7 +786,7 @@ apps/model-embedding-worker/            # 端口 8101
    ├─ service.py                        # 后端门面：按 model_embedding_worker.backend 分派
    └─ api/service.py                    # FastAPI 接口（全异步）
 
-apps/model-reranker-worker/             # 端口 8102
+apps/model-reranker-worker/             # 端口 8004
 ├─ pyproject.toml
 ├─ Dockerfile
 └─ model_reranker_worker/
@@ -1037,10 +1086,10 @@ grep -rn "from aipaas_retrieval" packages/llm/
 ### 10.4 端点验证
 
 ```bash
-curl -s http://localhost:8000/health   # ingest-worker → {"status": "ok", "service": "svc-ingest"}
-curl -s http://localhost:8001/health   # query-worker → {"ok": true}
-curl -s http://localhost:8101/ready    # 嵌入模型 → 200 且含 backend / dim
-curl -s http://localhost:8102/ready    # 重排序模型 → 200 且含 backend / model
+curl -s http://localhost:8001/health   # ingest-worker → {"status": "ok", "service": "svc-ingest"}
+curl -s http://localhost:8002/health   # query-worker → {"ok": true}
+curl -s http://localhost:8003/ready    # 嵌入模型 → 200 且含 backend / dim
+curl -s http://localhost:8004/ready    # 重排序模型 → 200 且含 backend / model
 ```
 
 ### 10.5 日志文件验证
@@ -1048,7 +1097,7 @@ curl -s http://localhost:8102/ready    # 重排序模型 → 200 且含 backend 
 ```bash
 cd pymodules
 export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome
-uv run uvicorn ingest_worker.api.service:app --port 8000 &
+uv run uvicorn ingest_worker.api.service:app --port 8001 &
 
 # 查看日志文件是否按预期命名（前缀由模块名推导）
 ls -la logs/ingest-worker_*.log
@@ -1092,7 +1141,7 @@ export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome
 
 **原因**：把 `aipaas_config.*.yaml` 里的地址改成了 `localhost` / `127.0.0.1`（容器内指向自身）；或所选 `APP_ENV` 覆盖层指向了容器不可达的宿主机地址。
 
-**修复**：base 层已用容器名（`http://milvus:19530`、`minio:9000`、`http://svc-model-embedding:8101`）。容器部署时确认配置包正确挂载到 `/app/configs`，并按实际网络选择 `APP_ENV`。
+**修复**：base 层已用容器名（`http://milvus:19530`、`minio:9000`、`http://svc-model-embedding:8003`）。容器部署时确认配置包正确挂载到 `/app/configs`，并按实际网络选择 `APP_ENV`。
 
 ### Q4：容器启动后日志目录不存在或为空
 
@@ -1180,10 +1229,10 @@ uv lock --check                             # 校验锁文件
 export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome   # 配置包 + 环境覆盖层
 
 # ---------- 开发启动（先模型，后业务） ----------
-uv run uvicorn model_embedding_worker.api.service:app --port 8101 --reload
-uv run uvicorn model_reranker_worker.api.service:app  --port 8102 --reload
-uv run uvicorn ingest_worker.api.service:app --port 8000 --reload
-uv run uvicorn query_worker.api.service:app  --port 8001 --reload
+uv run uvicorn model_embedding_worker.api.service:app --port 8003 --reload
+uv run uvicorn model_reranker_worker.api.service:app  --port 8004 --reload
+uv run uvicorn ingest_worker.api.service:app --port 8001 --reload
+uv run uvicorn query_worker.api.service:app  --port 8002 --reload
 
 # ---------- 依赖变更 ----------
 uv add    --package aipaas-retrieval elasticsearch>=8.0.0

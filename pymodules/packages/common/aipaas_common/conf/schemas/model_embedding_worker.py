@@ -3,7 +3,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, SecretStr
 
-from aipaas_common.conf.schemas.common import CommonSettings, _Base
+from aipaas_common.conf.schemas.common import CommonSettings, HostPortSettings, _Base
 
 
 class OfflineEmbeddingSettings(_Base):
@@ -27,10 +27,8 @@ class OnlineEmbeddingSettings(_Base):
         return self.api_key.get_secret_value() if self.api_key else ""
 
 
-class ModelEmbeddingWorkerModule(_Base):
+class ModelEmbeddingWorkerModule(HostPortSettings):
     backend: Literal["offline", "online"]
-    host: str
-    port: int
     max_batch_size: int
     max_concurrency: int
     offline: OfflineEmbeddingSettings

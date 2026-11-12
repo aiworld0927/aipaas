@@ -1,5 +1,5 @@
 # ===========================================================================
-# AIPaaS 导入服务 Dockerfile（独立部署单元，端口 8000）
+# AIPaaS 导入服务 Dockerfile（独立部署单元，端口 8001）
 # ---------------------------------------------------------------------------
 # 构建：
 #   cd pymodules
@@ -7,14 +7,14 @@
 # ===========================================================================
 
 # ===========================================================================
-# AIPaaS 导入服务 Dockerfile（独立部署单元，端口 8000）
+# AIPaaS 导入服务 Dockerfile（独立部署单元，端口 8001）
 # ---------------------------------------------------------------------------
 # 构建：
 #   cd pymodules
 #   docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest:latest .
 #
 # 运行（配置包外部映射：部署时把宿主机配置目录挂到 /app/configs）：
-#   docker run -d --name svc-ingest -p 8000:8000 \
+#   docker run -d --name svc-ingest -p 8001:8001 \
 #     -v /host/path/logs:/app/logs \
 #     -v /host/path/aipaas-configs:/app/configs:ro \
 #     -e APP_ENV=devcompany -e CONFIG_DIR=/app/configs \
@@ -68,11 +68,9 @@ COPY pyproject.toml uv.lock ./
 # 数据卷声明：日志目录（由 compose 或 -v 挂载到宿主机）
 VOLUME ["/app/logs", "/app/models"]
 
-EXPOSE 8000
+EXPOSE 8001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD .venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+  CMD .venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:${INGEST_WORKER_PORT:-8001}/health')" || exit 1
 
-CMD [".venv/bin/python", "-m", "uvicorn", \
-     "ingest_worker.api.service:app", \
-     "--host", "0.0.0.0", "--port", "8000"]
+CMD [".venv/bin/python", "-m", "ingest_worker.api.service"]
