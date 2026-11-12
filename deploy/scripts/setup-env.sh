@@ -16,22 +16,34 @@ echo "AIPAAS 开发环境变量配置脚本"
 echo "当前环境: $ENV_NAME"
 echo "================================================"
 
-# 根据环境选择中间件地址
+# 根据环境选择中间件地址与部署参数
+#   TORCH_VARIANT            —— 模型镜像 torch 构建：gpu=CUDA 12.8 / cpu=纯 CPU
+#   DOCKER_VOLUME_DIRECTORY  —— 中间件数据卷根目录（base 编排按 ${DOCKER_VOLUME_DIRECTORY}/volumes 拼接）
+#   MODEL_BASE_DIR           —— 宿主机模型根目录（其下含 bge-m3 / bge-reranker-large）
 case $ENV_NAME in
     devhome)
         MIDDLEWARE_HOST=172.30.93.209
         NACOS_PORT=8848
+        DEFAULT_TORCH_VARIANT=gpu
+        DEFAULT_DOCKER_VOLUME_DIRECTORY=/home/aipaas/docker_hub
         ;;
     devcompany)
         MIDDLEWARE_HOST=192.168.222.188
         NACOS_PORT=8848
+        DEFAULT_TORCH_VARIANT=cpu
+        DEFAULT_DOCKER_VOLUME_DIRECTORY=/coding/docker_hub
         ;;
     *)
         echo "未知环境: $ENV_NAME，使用默认值"
         MIDDLEWARE_HOST=localhost
         NACOS_PORT=8848
+        DEFAULT_TORCH_VARIANT=gpu
+        DEFAULT_DOCKER_VOLUME_DIRECTORY=/home/aipaas/docker_hub
         ;;
 esac
+
+# 允许外部已导出的同名变量优先生效（便于临时覆盖）
+DEFAULT_MODEL_BASE_DIR=/coding/models/BAAI
 
 # ============================================
 # 1. 基础环境配置
@@ -163,6 +175,10 @@ echo "[6/7] 配置应用环境变量..."
 # JWT 密钥
 export JWT_SECRET=AIPAAS-secret-key-change-in-production
 
+# 配置包环境层（docker-compose.yaml 的 APP_ENV，选 pymodules/configs/aipaas_config.{APP_ENV}.yaml）
+# 与 ENV_NAME 保持一致，保证容器配置层随环境切换
+export APP_ENV=$ENV_NAME
+
 # Python 服务
 export PYTHON_SERVICE_URL=http://$MIDDLEWARE_HOST:$PYTHON_SERVICE_PORT
 
@@ -171,6 +187,7 @@ export NACOS_SERVER_ADDR=$NACOS_HOST:$NACOS_PORT
 export POSTGRES_URL=jdbc:postgresql://$POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB
 
 echo "  ✅ JWT_SECRET: 已配置"
+echo "  ✅ APP_ENV: $APP_ENV"
 echo "  ✅ PYTHON_SERVICE_URL: $PYTHON_SERVICE_URL"
 echo "  ✅ NACOS_SERVER_ADDR: $NACOS_SERVER_ADDR"
 
@@ -180,14 +197,23 @@ echo "  ✅ NACOS_SERVER_ADDR: $NACOS_SERVER_ADDR"
 echo ""
 echo "[7/7] 配置 Docker 环境变量..."
 
-# Docker 数据卷挂载目录（docker-compose.yaml 使用 ${DOCKER_VOLUME_DIRECTORY}）
-export DOCKER_VOLUME_DIRECTORY=/home/aipaas/docker_hub
+# 模型镜像 torch 构建（gpu=CUDA 12.8 / cpu=纯 CPU），按环境给默认值
+export TORCH_VARIANT=${TORCH_VARIANT:-$DEFAULT_TORCH_VARIANT}
+# 宿主机模型根目录（其下需有 bge-m3 / bge-reranker-large）
+export MODEL_BASE_DIR=${MODEL_BASE_DIR:-$DEFAULT_MODEL_BASE_DIR}
+# Docker 数据卷挂载目录（docker-compose.yaml 使用 ${DOCKER_VOLUME_DIRECTORY}），按环境给默认值
+export DOCKER_VOLUME_DIRECTORY=${DOCKER_VOLUME_DIRECTORY:-$DEFAULT_DOCKER_VOLUME_DIRECTORY}
 # 容器运行 uid/gid 与数据卷属主（跟随当前执行用户，docker-compose.yaml 中 ${HOST_UID}/${HOST_GID} 使用）
-export HOST_UID=$(id -u)
-export HOST_GID=$(id -g)
+export HOST_UID=$(id -u 2>/dev/null)
+export HOST_GID=$(id -g 2>/dev/null)
 # 各服务数据目录及属主由 docker-compose.yaml 中的 init-volumes 一次性初始化容器负责
-mkdir -p "$DOCKER_VOLUME_DIRECTORY"
+if ! mkdir -p "$DOCKER_VOLUME_DIRECTORY" 2>/dev/null; then
+    echo "  ⚠️  无法创建 $DOCKER_VOLUME_DIRECTORY（权限不足）"
+    echo "      请手动准备该目录，或先 export DOCKER_VOLUME_DIRECTORY=<可写路径> 再 source 本脚本"
+fi
 
+echo "  ✅ TORCH_VARIANT: $TORCH_VARIANT"
+echo "  ✅ MODEL_BASE_DIR: $MODEL_BASE_DIR"
 echo "  ✅ DOCKER_VOLUME_DIRECTORY: $DOCKER_VOLUME_DIRECTORY"
 echo "  ✅ HOST_UID/HOST_GID: $HOST_UID/$HOST_GID"
 
@@ -206,6 +232,8 @@ echo "使用方式："
 echo "  1. 执行 source setup-env.sh devhome        # 家庭环境"
 echo "  2. 执行 source setup-env.sh devcompany    # 公司环境"
 echo "  3. 或添加到 ~/.bashrc 或 ~/.zshrc 中"
+echo ""
+echo "注意：切换 TORCH_VARIANT 后需重建模型镜像：docker compose up -d --build"
 echo ""
 echo "验证配置："
 echo "  java -version         # 验证Java版本"

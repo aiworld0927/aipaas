@@ -50,9 +50,10 @@ services:
     user: root
     volumes:
       - ${DOCKER_LOG_DIRECTORY:-.}/logs:/logs
-    command: >
-      sh -c "mkdir -p /logs/svc-ingest /logs/svc-query /logs/svc-model-embedding /logs/svc-model-reranker
-        && chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} /logs"
+    command:
+      - sh
+      - -c
+      - mkdir -p /logs/svc-ingest /logs/svc-query /logs/svc-model-embedding /logs/svc-model-reranker && chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} /logs
     restart: "no"
 
   # =========================================================================
@@ -74,6 +75,7 @@ services:
       network: host
       args:
         # cpu = torch +cpu（无 CUDA）；gpu = torch +cu128
+        # 环境默认值由 setup-env.sh 提供：devhome=gpu  devcompany=cpu
         TORCH_VARIANT: ${TORCH_VARIANT:-gpu}
     image: aipaas/svc-model-embedding:latest
     container_name: aipaas-svc-model-embedding
@@ -92,6 +94,9 @@ services:
       - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-model-embedding:/app/logs
       - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
       - ${MODEL_BASE_DIR:-../../models}/bge-m3:/app/models/bge-m3:ro
+      # devcompany 等环境配置里 model_path 写的是宿主机绝对路径（/coding/models/BAAI/...），
+      # 按原路径透传挂载，保证容器内与裸机路径一致
+      - /coding/models:/coding/models:ro
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8101/health')"]
       interval: 30s
@@ -135,6 +140,9 @@ services:
       - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-model-reranker:/app/logs
       - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
       - ${MODEL_BASE_DIR:-../../models}/bge-reranker-large:/app/models/bge-reranker-large:ro
+      # devcompany 等环境配置里 model_path 写的是宿主机绝对路径（/coding/models/BAAI/...），
+      # 按原路径透传挂载，保证容器内与裸机路径一致
+      - /coding/models:/coding/models:ro
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8102/health')"]
       interval: 30s
