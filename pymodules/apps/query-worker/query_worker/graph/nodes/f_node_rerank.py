@@ -1,102 +1,62 @@
 # processor/query_processor/nodes/node_rerank.py
+import asyncio
 import json
 from typing import List, Dict, Any
 
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
-from aipaas_llm.lm.reranker_http_utils import rerank_documents
+from aipaas_model_clients.lm.reranker_http_utils import arerank_documents
 from aipaas_common.conf.settings import get_settings
 from query_worker.graph.state import QueryGraphState
 
 
 @node_log("node_rerank")
-def node_rerank( state: QueryGraphState) -> QueryGraphState:
-    """使用 Cross-Encoder 模型对 RRF 后的结果进行精确打分重排。
-    执行重排序
-    流程: 合并多源文档 → Reranker 计算相关性 → 断崖检测动态截断
-    :param state: 需包含 rrf_chunks、web_search_docs、rewritten_query
-    :return: 更新后的 state，包含 reranked_docs
-    """
+async def node_rerank(state: QueryGraphState) -> QueryGraphState:
+    """Cross-Encoder 对 RRF 结果精排（异步版）"""
 
-    # 1. 合并多源文档
     merged_multi_docs: List[Dict[str, Any]] = _step_1_merge_multi_source_docs(state)
-
-    # 2. Rerank 精排(精排打分)
-    reranked_docs: List[Dict[str, Any]] = _step_2_rerank_merged_docs(state, merged_multi_docs)
-
-    # 3. 动态 Top_K 截取(断崖检测)
+    reranked_docs: List[Dict[str, Any]] = await _step_2_rerank_merged_docs(state, merged_multi_docs)
     cutoff_docs = _step_3_cliff_cutoff(reranked_docs)
 
-    # 4. 更新state
-    state['reranked_docs'] = cutoff_docs
-
-    # 5. 返回state
+    state["reranked_docs"] = cutoff_docs
     return state
 
 
-def _step_1_merge_multi_source_docs( state: QueryGraphState) -> List[Dict[str, Any]]:
+def _step_1_merge_multi_source_docs(state: QueryGraphState) -> List[Dict[str, Any]]:
     """合并本地 RRF 结果和网络搜索结果为统一格式"""
 
     final_docs = []
 
-    # 1. 获取本地 RRF 的文档
-    for rrf_doc in state.get('rrf_chunks'):
-
-        format_rrf_doc = {
-            "content": rrf_doc.get('content'),
-            "title": rrf_doc.get('title'),
-            "chunk_id": rrf_doc.get('chunk_id'),
+    for rrf_doc in state.get("rrf_chunks"):
+        final_docs.append({
+            "content": rrf_doc.get("content"),
+            "title": rrf_doc.get("title"),
+            "chunk_id": rrf_doc.get("chunk_id"),
             "url": None,
-            "source": "milvus"
-        }
-        final_docs.append(format_rrf_doc)
+            "source": "milvus",
+        })
 
-    # 2. 获取 web 远程的文档
-    for web_doc in state.get('web_search_docs'):
-
-        format_web_doc = {
-            "content": web_doc.get('snippet'),
-            "title": web_doc.get('title'),
+    for web_doc in state.get("web_search_docs"):
+        final_docs.append({
+            "content": web_doc.get("snippet"),
+            "title": web_doc.get("title"),
             "chunk_id": None,
-            "url": web_doc.get('url'),
-            "source": "web"
-        }
-        final_docs.append(format_web_doc)
+            "url": web_doc.get("url"),
+            "source": "web",
+        })
 
     return final_docs
 
-def _step_2_rerank_merged_docs( state: QueryGraphState, merged_multi_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """使用 Reranker 模型对文档进行精排"""
 
+async def _step_2_rerank_merged_docs(state: QueryGraphState, merged_multi_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """使用 Reranker 模型对文档进行精排（异步版）"""
     try:
-        user_query = state.get('rewritten_query')
-        # 获取文档列表的conten字段组成列表
+        user_query = state.get("rewritten_query")
         contents = [doc.get("content") for doc in merged_multi_docs]
-        # 调用Rerank模型：交叉编码器（精排阶段）
-        # Query 和 Document 联合编码，精度更高
-        rerank_scores = rerank_documents(user_query, contents)
+        rerank_scores = await arerank_documents(user_query, contents)
 
         scored_docs = [{**doc, "score": score} for doc, score in zip(merged_multi_docs, rerank_scores)]
-        # 等同如下写法
-        # scored_docs = []
-        # for doc, score in zip(merged_multi_docs, rerank_scores):
-        #     scored_docs.append({
-        #         "content": doc.get("content"),
-        #         "title": doc.get("title"),
-        #         "chunk_id": doc.get("chunk_id"),
-        #         "url": doc.get("url"),
-        #         "source": doc.get("source"),
-        #         "score": float(score),
-        #     })
-
-
-        sorted_score_docs = sorted(
-            scored_docs,
-            key=lambda x: x["score"],
-            reverse=True
-        )
-
-        return sorted_score_docs
+        return sorted(scored_docs, key=lambda x: x["score"], reverse=True)
 
     except Exception as e:
         logger.error(f"Rerank 重排序失败: {str(e)}")

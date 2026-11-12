@@ -15,16 +15,15 @@ members = [
     "apps/model-embedding-worker",
     "apps/model-reranker-worker",
     "packages/common",
-    "packages/llm",
+    "packages/model-clients",
     "packages/retrieval",
     "packages/storage",
-    "packages/pipeline",
     "packages/mcp-agents1.0",
 ]
 # 说明：packages/mcp-agents2.0 不在 workspace 中
 #   mcp-agents1.0: mcp>=1.19.0,<2 + openai-agents<0.20.0（query-worker 使用）
 #   mcp-agents2.0: mcp>=2,<3 + openai-agents==0.23.1（暂未被任何成员依赖，独立管理）
-#   aipaas-llm 已移除 mcp/openai-agents 依赖，MCP 客户端统一由 mcp-agents 包提供
+#   aipaas-model-clients 提供 LLM / 嵌入 / 重排的 HTTP 客户端，MCP 客户端由 mcp-agents 包提供
 
 # ---------------------------------------------------------------------------
 # 机器环境分组（互斥，一次只同步其中一个）

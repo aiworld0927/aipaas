@@ -6,11 +6,7 @@
 
 from abc import ABC, abstractmethod
 from typing import TypeVar, Optional
-
 from aipaas_common.core.log import logger
-
-from aipaas_common.utils.task_utils import add_done_task, add_running_task
-
 T = TypeVar("T")  # 泛型状态类型
 
 """
@@ -27,13 +23,6 @@ T = TypeVar("T")  # 泛型状态类型
 9、封装了统一日志处理，使用logging、colorlog
     注意：使用日志记录器记录日志时一定要先激活日志setup_logging(logging.INFO)，并指定日志级别
 """
-
-class ImportProcessError(Exception):
-    """流程基类异常（公共库版本）"""
-    def __init__( message='', node_name='', cause=None):
-        self.node_name = node_name
-        self.cause = cause
-        super().__init__(message)
 
 class BaseNode(ABC):
     """
@@ -54,9 +43,7 @@ class BaseNode(ABC):
         node = MyNode()
         workflow.add_node("my_node", node)
     """
-
     name: str = "base_node"  # 节点名称，子类应覆盖
-
     def __init__(self):
         """
         初始化节点
@@ -109,14 +96,16 @@ class BaseNode(ABC):
         """
         pass
 
-    def log_step( step_name: str, message: str = ""):
-        """
-        记录步骤日志
-        Args:
-            step_name: 步骤名称
-            message: 附加信息
-        """
-        log_msg = f"[{step_name}]"
-        if message:
-            log_msg += f" {message}"
-        self.logger.info(log_msg)
+
+if __name__ == "__main__":
+    class MyNode(BaseNode):
+        name = "test_node"
+        def process(self,state):
+            print(f"调用了：process方法state：{state}")
+            # 实现具体逻辑
+            return state
+
+    # 作为 LangGraph 节点使用
+    node = MyNode()
+    node("hello world")
+    # workflow.add_node("my_node", node)

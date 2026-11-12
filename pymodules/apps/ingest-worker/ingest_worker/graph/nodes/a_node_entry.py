@@ -4,7 +4,7 @@ from ingest_worker.graph.state import ImportGraphState
 
 
 @node_log("node_entry")
-def node_entry(state: ImportGraphState):
+async def node_entry(state: ImportGraphState):
     """入口节点：任务分发
         1.接收状态: 获取 `import_file_path`。
         2.判断类型: 检查文件后缀是 `.pdf` 还是 `.md`。

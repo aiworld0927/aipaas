@@ -6,10 +6,9 @@ requires-python = ">=3.12"
 dependencies = [
     # 共享库（workspace 引用）
     "aipaas-common",
-    "aipaas-llm",
+    "aipaas-model-clients",
     "aipaas-retrieval",
     "aipaas-storage",
-    "aipaas-pipeline",
     # Web 框架
     "fastapi>=0.142.2",
     "python-multipart>=0.0.9",
@@ -28,10 +27,9 @@ dependencies = [
 
 [tool.uv.sources]
 aipaas-common = { workspace = true }
-aipaas-llm = { workspace = true }
+aipaas-model-clients = { workspace = true }
 aipaas-retrieval = { workspace = true }
 aipaas-storage = { workspace = true }
-aipaas-pipeline = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

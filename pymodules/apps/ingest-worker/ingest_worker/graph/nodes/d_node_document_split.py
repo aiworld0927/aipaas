@@ -1,3 +1,5 @@
+import asyncio
+import json
 import re
 from pathlib import Path
 from typing import Tuple, List, Dict
@@ -11,7 +13,7 @@ from aipaas_common.utils.table_utils import protect_tables
 from ingest_worker.graph.state import ImportGraphState
 
 @node_log("node_document_split")
-def node_document_split(state: ImportGraphState) -> ImportGraphState:
+async def node_document_split(state: ImportGraphState) -> ImportGraphState:
     """将长文档切分成小的 Chunks (切片) 以便检索。
     节点：文档切分（node_document_split）
     整体流程：加载输入→按MD标题初切→长切短合→统计输出→结果备份
@@ -41,8 +43,8 @@ def node_document_split(state: ImportGraphState) -> ImportGraphState:
     # 步骤5：输出文档切分统计信息
     _step_5_print_stats(lines_count, sections)
 
-    # 步骤6：Chunk结果本地JSON备份
-    _step_6_backup(state, sections)
+    # 步骤6：Chunk结果本地JSON备份（文件IO → to_thread）
+    await asyncio.to_thread(_step_6_backup, state, sections)
 
     # 写入状态字典
     state["chunks"] = sections

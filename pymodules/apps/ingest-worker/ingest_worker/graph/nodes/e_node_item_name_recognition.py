@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 from typing import List, Dict, Tuple
@@ -9,14 +10,14 @@ from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.load_prompt import load_prompt
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
-from aipaas_llm.lm.embedding_http_utils import generate_embeddings
-from aipaas_llm.lm.lm_utils import get_llm_client
+from aipaas_model_clients.lm.embedding_http_utils import agenerate_embeddings
+from aipaas_model_clients.lm.lm_utils import get_llm_client
 from aipaas_retrieval.milvus_utils import get_milvus_client, escape_milvus_string
 from ingest_worker.graph.state import ImportGraphState
 
 
 @node_log("node_item_name_recognition")
-def node_item_name_recognition(state: ImportGraphState) -> ImportGraphState:
+async def node_item_name_recognition(state: ImportGraphState) -> ImportGraphState:
     """主体识别与标签提取
     LangGraph 核心节点：商品主体名称识别
     流程总览：
@@ -40,18 +41,18 @@ def node_item_name_recognition(state: ImportGraphState) -> ImportGraphState:
     context = _step_2_build_context(chunks)
 
     # 步骤3：调用大模型识别商品名称
-    item_name = _step_3_call_llm(file_title, context)
+    item_name = await _step_3_call_llm(file_title, context)
 
     # 步骤4：回填商品名称到状态和切片
     _step_4_update_chunks(state, chunks, item_name)
 
     # 步骤5：为商品名称生成稠密/稀疏向量
-    dense_vector, sparse_vector = _step_5_generate_vectors(item_name)
+    dense_vector, sparse_vector = await _step_5_generate_vectors(item_name)
 
     # 步骤6：将数据存入Milvus向量数据库
-    _step_6_save_to_milvus(state, file_title, item_name, dense_vector, sparse_vector)
+    await _step_6_save_to_milvus(state, file_title, item_name, dense_vector, sparse_vector)
 
-    _step_7_backup_chunk_item(state,chunks)
+    await _step_7_backup_chunk_item(state, chunks)
     # 打印识别结果
     logger.info(f"--- 识别完成: {item_name} ---")
 
@@ -127,7 +128,7 @@ def _step_2_build_context(chunks: List[Dict]) -> str:
     return final_context
 
 
-def _step_3_call_llm(file_title: str, context: str) -> str:
+async def _step_3_call_llm(file_title: str, context: str) -> str:
     """
     步骤 3: 调用大模型实现商品名称/型号精准识别
     核心逻辑：
@@ -164,8 +165,8 @@ def _step_3_call_llm(file_title: str, context: str) -> str:
             HumanMessage(content=user_prompt)
         ]
 
-        # 5. 模型调用
-        response = llm.invoke(messages)
+        # 5. 模型调用（异步）
+        response = await llm.ainvoke(messages)
         item_name = getattr(response, "content", "").strip()
 
         # 6. 数据清洗
@@ -212,14 +213,14 @@ def _step_4_update_chunks(state: ImportGraphState, chunks: List[Dict[str, str]],
     state["item_name"] = item_name
 
 
-def _step_5_generate_vectors(item_name: str) -> Tuple[List, Dict]:
+async def _step_5_generate_vectors(item_name: str) -> Tuple[List, Dict]:
     """
     步骤 5: 为商品名称生成 BGE-M3 稠密 + 稀疏双向量（Milvus 向量检索核心）
     核心说明：
         - 稠密向量（dense_vector）：BGE-M3 固定 1024 维，记录文本深层语义信息
         - 稀疏向量（sparse_vector）：变长键值对，记录文本关键词/特征位置信息
     依赖工具：
-        generate_embeddings：封装 BGE-M3 模型，批量生成双向量，兼容单条/批量输入
+        agenerate_embeddings：封装 BGE-M3 模型，批量生成双向量，兼容单条/批量输入
     参数：
         item_name: 步骤 3 识别的商品名称（非空，空值时直接返回空向量）
     返回值：
@@ -231,11 +232,11 @@ def _step_5_generate_vectors(item_name: str) -> Tuple[List, Dict]:
         return [], {}
 
     # 2、调用向量生成工具：传入列表支持批量生成，单条数据仍用列表保证格式统一
-    vectors = generate_embeddings([item_name])
+    vectors = await agenerate_embeddings([item_name])
     return vectors["dense"][0], vectors["sparse"][0]
 
 
-def _step_6_save_to_milvus(state: ImportGraphState, file_title: str, item_name: str, dense_vector,
+async def _step_6_save_to_milvus(state: ImportGraphState, file_title: str, item_name: str, dense_vector,
                            sparse_vector):
     """
     步骤 6: 将商品名称、文件标题、双向量持久化到 Milvus 向量数据库
@@ -262,8 +263,9 @@ def _step_6_save_to_milvus(state: ImportGraphState, file_title: str, item_name: 
 
         # 2. 创建集合（如果不存在）
         collection_name = get_settings().common.milvus.item_name_collection  # 集合名称
-        if not milvus_client.has_collection(collection_name):
-            _create_item_name_collection(collection_name, milvus_client)
+        has_collection = await asyncio.to_thread(milvus_client.has_collection, collection_name)
+        if not has_collection:
+            await asyncio.to_thread(_create_item_name_collection, collection_name, milvus_client)
 
         # 3. 幂等性处理：删除同名商品数据（避免重复存储）
         # 转义商品名称（防止特殊字符导致filter解析失败）
@@ -271,7 +273,7 @@ def _step_6_save_to_milvus(state: ImportGraphState, file_title: str, item_name: 
         # 构建过滤表达式：item_name等于目标值
         filter_expr = f'item_name=="{safe_item_name}"'
         # 删除符合条件的数据
-        milvus_client.delete(collection_name=collection_name, filter=filter_expr)
+        await asyncio.to_thread(milvus_client.delete, collection_name=collection_name, filter=filter_expr)
 
         # 4. 准备插入Milvus的数据
         data = {
@@ -286,7 +288,7 @@ def _step_6_save_to_milvus(state: ImportGraphState, file_title: str, item_name: 
             data["sparse_vector"] = sparse_vector
 
         # 5. 插入数据（传入列表支持批量插入，这里仅1条）
-        milvus_client.insert(collection_name=collection_name, data=[data])
+        await asyncio.to_thread(milvus_client.insert, collection_name=collection_name, data=[data])
 
         # 6. 把商品名称存入state（供下游节点使用）
         state["item_name"] = item_name
@@ -368,7 +370,7 @@ def _create_item_name_collection(collection_name, milvus_client):
     )
 
 
-def _step_7_backup_chunk_item(state, chunks):
+async def _step_7_backup_chunk_item(state, chunks):
     """
     作用:作用备份chunk_item
     入参：file_title,chunks
@@ -377,7 +379,11 @@ def _step_7_backup_chunk_item(state, chunks):
     chunks_new_path = Path(state.get("md_path", "D:/output")).parent / "chunks_new.json"
     if chunks_new_path.parent.exists():
         chunks_new_path.parent.mkdir(parents=True, exist_ok=True)
-    chunks_new_path.write_text(json.dumps(chunks,indent=4,ensure_ascii=False),encoding="utf-8")
+
+    def _do_write():
+        chunks_new_path.write_text(json.dumps(chunks, indent=4, ensure_ascii=False), encoding="utf-8")
+
+    await asyncio.to_thread(_do_write)
 
 
 if __name__ == "__main__":

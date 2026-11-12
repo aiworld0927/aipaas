@@ -6,11 +6,8 @@ from query_worker.graph.state import QueryGraphState
 
 
 @node_log("node_rrf")
-def node_rrf( state: QueryGraphState) -> QueryGraphState:
-    """
-    节点功能：Reciprocal Rank Fusion
-    将多路召回的结果（向量、HyDE、Web）进行加权融合排序。
-    """
+async def node_rrf(state: QueryGraphState) -> QueryGraphState:
+    """Reciprocal Rank Fusion（异步版，内部为纯 CPU 计算，无阻塞 IO）"""
     # 1. 获取各路搜索的结果（排除网络搜索: reranK节点做）
     embedding_search_list = [
         doc.get('entity') for doc in (state.get('embedding_chunks') or []) if isinstance(doc, dict)

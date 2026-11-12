@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Dict, List, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -6,59 +7,47 @@ from aipaas_common.conf.settings import get_settings
 from aipaas_common.core.load_prompt import load_prompt
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
-from aipaas_llm.lm.embedding_http_utils import generate_embeddings
-from aipaas_llm.lm.lm_utils import get_llm_client
+from aipaas_model_clients.lm.embedding_http_utils import agenerate_embeddings
+from aipaas_model_clients.lm.lm_utils import get_llm_client
 from aipaas_retrieval.milvus_utils import get_milvus_client, create_hybrid_search_requests, hybrid_search
 from aipaas_storage.mongo_history_utils import save_chat_message, get_recent_messages, update_message_item_names
 from query_worker.graph.state import QueryGraphState
 
 
 @node_log("node_item_name_confirm")
-def node_item_name_confirm(state: QueryGraphState) -> QueryGraphState:
-    """确认用户问题中的核心商品名称
+async def node_item_name_confirm(state: QueryGraphState) -> QueryGraphState:
+    """确认用户问题中的核心商品名称（异步版）
     必要参数：session_id、original_query
     更新参数：history、rewritten_query、item_names、answer
-
-    :param state: 工作流状态对象
-    :return: 更新后的状态对象
     """
 
-    # 步骤1：校验参数
     session_id, original_query = _step_1_validate_param(state)
-    logger.info(f"步骤1：参数校验通过")
+    logger.info("步骤1：参数校验通过")
 
-    # 步骤2：获取历史记录
-    history = get_recent_messages(session_id)
+    history = await asyncio.to_thread(get_recent_messages, session_id)
     logger.info(f"步骤2：获取到 {len(history)} 条历史消息")
-    # 更新状态
     state["history"] = history
 
-    # 步骤3：用户初始消息保存
-    message_id = save_chat_message(session_id, "user", original_query)
+    message_id = await asyncio.to_thread(save_chat_message, session_id, "user", original_query)
     state["message_id"] = message_id
     logger.info(f"步骤3：用户消息已初始保存, ID: {message_id}")
 
-    # 步骤4：提取信息
-    extract_res = _step_4_extract_info(original_query, history)
+    extract_res = await _step_4_extract_info(original_query, history)
     item_names = extract_res.get("item_names")
     rewritten_query = extract_res.get("rewritten_query", original_query)
-    # 更新状态
     state["rewritten_query"] = rewritten_query
     state["item_names"] = item_names
 
-    # 5. & 6. 如果有提取到商品名，进行搜索和对齐
     align_result = {}
     if len(item_names) > 0:
-        query_results = _step_5_vectorize_and_query(item_names)
+        query_results = await _step_5_vectorize_and_query(item_names)
         align_result = _step_6_align_item_names(query_results)
     else:
         logger.info("Node: 未提取到商品名，跳过向量检索")
 
-    # 7. 检查确认状态
-    state = _step_7_check_confirmation(state, align_result, history)
+    state = await _step_7_check_confirmation(state, align_result, history)
 
-    # 8. 写入最终历史
-    _step_8_write_history(state, session_id, rewritten_query, message_id)
+    await _step_8_write_history(state, session_id, rewritten_query, message_id)
     return state
 
 
@@ -73,7 +62,7 @@ def _step_1_validate_param(state: QueryGraphState) -> Tuple[str, str]:
     return session_id, original_query
 
 
-def _step_4_extract_info(query, history) -> Dict:
+async def _step_4_extract_info(query, history) -> Dict:
     """
     利用LLM从当前问题以及历史会话中提取出主要询问的商品名称item_names（可多个，JSON列表形式）
     若商品名不够明确则返回空列表，同时根据上下文重新改写问题，保证问题独立完整
@@ -112,7 +101,7 @@ def _step_4_extract_info(query, history) -> Dict:
         ]
 
         # 5. 调用LLM客户端，发起请求获取结果
-        response = chat_model.invoke(messages)
+        response = await chat_model.ainvoke(messages)
         content = response.content
 
         # 6. 数据清洗：处理LLM可能返回的代码块格式（如```json ... ```），去除包裹符
@@ -146,7 +135,7 @@ def _step_4_extract_info(query, history) -> Dict:
         return {"item_names": [], "rewritten_query": query}
 
 
-def _step_5_vectorize_and_query(item_names) -> List[Dict]:
+async def _step_5_vectorize_and_query(item_names) -> List[Dict]:
     """
        把分析出的item_names逐个向量化（BGEM3模型），并在Milvus向量数据库(kb_item_names)中执行混合搜索，获取匹配评分
        :param item_names: 列表[字符串] - 步骤4中 提取的商品名列表（如["苹果15", "华为P60"]）
@@ -183,7 +172,7 @@ def _step_5_vectorize_and_query(item_names) -> List[Dict]:
 
     # 5、对所有商品名称批量生成BGEM3向量（稠密+稀疏），相比逐个生成提升处理效率
     # embeddings格式：{"dense": [向量1, 向量2,...], "sparse": [向量1, 向量2,...]}
-    embeddings = generate_embeddings(item_names)
+    embeddings = await agenerate_embeddings(item_names)
 
     # 6、遍历每个商品名称，逐个执行向量搜索（保证结果与原始商品名一一对应）
     for i in range(len(item_names)):
@@ -203,14 +192,15 @@ def _step_5_vectorize_and_query(item_names) -> List[Dict]:
 
             # 执行BGEM3混合向量搜索，获取数据库中的匹配结果和评分
             # 默认配置：稠/稀疏向量权重各0.8/0.2，开启评分归一化（将距离值转为0-1相似度评分）
-            search_res = hybrid_search(
-                client=client,  # Milvus客户端连接实例
-                collection_name=collection_name,  # 目标向量集合名（存储商品向量的表）
-                reqs=reqs,  # 混合搜索请求对象列表
-                ranker_weights=(0.8, 0.2),  # 稠/稀疏向量评分权重配比（和为1最佳）
-                limit=5,  # 最终返回Top5匹配结果
-                norm_score=True,  # 开启评分归一化，统一评分量级为0-1
-                output_fields=["item_name"]  # 指定返回Milvus中存储的商品名字段（业务字段）
+            search_res = await asyncio.to_thread(
+                hybrid_search,
+                client=client,
+                collection_name=collection_name,
+                reqs=reqs,
+                ranker_weights=(0.8, 0.2),
+                limit=5,
+                norm_score=True,
+                output_fields=["item_name"],
             )
 
             # 初始化当前商品名的匹配结果列表，存储匹配到的商品名+对应相似度评分
@@ -323,7 +313,7 @@ def _step_6_align_item_names(query_results) -> Dict:
     }
 
 
-def _step_7_check_confirmation(state, align_result, history):
+async def _step_7_check_confirmation(state, align_result, history):
     """
     7 检查step6对齐后的商品名状态，分3种分支更新state，并同步更新历史消息的商品名关联
     :param state: 字典 - 原始会话状态，包含session_id/original_query等核心字段
@@ -348,7 +338,7 @@ def _step_7_check_confirmation(state, align_result, history):
 
         # 若存在需更新的消息ID，批量更新历史消息的商品名关联
         if ids_to_update:
-            update_message_item_names(ids_to_update, confirmed)
+            await asyncio.to_thread(update_message_item_names, ids_to_update, confirmed)
 
         # 更新会话状态：设置确认商品名、改写后的查询
         state["item_names"] = confirmed
@@ -373,7 +363,7 @@ def _step_7_check_confirmation(state, align_result, history):
     return state
 
 
-def _step_8_write_history(state, session_id, rewritten_query, message_id):
+async def _step_8_write_history(state, session_id, rewritten_query, message_id):
     """
      8 把本次处理的核心信息（用户问题、助手答案、商品名、改写查询）写入MongoDB的会话历史
      包含2个核心操作：1. 写入助手答案（若有）；2. 更新用户原始问题的关联信息
@@ -383,24 +373,24 @@ def _step_8_write_history(state, session_id, rewritten_query, message_id):
      :param message_id: 字符串 - 本次用户问题的消息唯一ID
      :return:
      """
-    # 若会话状态中有助手答案（分支B/C），写入助手消息到历史
     if state.get("answer"):
-        save_chat_message(
-            session_id=session_id,  # 会话ID，关联所属会话
-            role="assistant",  # 消息角色：助手
-            text=state["answer"],  # 消息内容：向用户确认的提示语/无结果提示语
-            rewritten_query="",  # 助手消息无需改写查询，设为空
-            item_names=state.get("item_names", [])  # 关联的商品名列表（分支B/C均为空）
+        await asyncio.to_thread(
+            save_chat_message,
+            session_id=session_id,
+            role="assistant",
+            text=state["answer"],
+            rewritten_query="",
+            item_names=state.get("item_names", []),
         )
 
-    # 强制更新本次用户原始问题的关联信息（核心：补充改写查询、商品名）
-    save_chat_message(
-        session_id=session_id,  # 会话ID，关联所属会话
-        role="user",  # 消息角色：用户
-        text=state["original_query"],  # 消息内容：用户原始查询
-        rewritten_query=rewritten_query,  # 补充step3改写后的完整问题
-        item_names=state.get("item_names", []),  # 补充关联的商品名列表
-        message_id=message_id  # 消息ID，指定更新已存在的用户消息（而非新增）
+    await asyncio.to_thread(
+        save_chat_message,
+        session_id=session_id,
+        role="user",
+        text=state["original_query"],
+        rewritten_query=rewritten_query,
+        item_names=state.get("item_names", []),
+        message_id=message_id,
     )
 
     # 返回最终会话状态，供下游节点使用
@@ -409,14 +399,10 @@ def _step_8_write_history(state, session_id, rewritten_query, message_id):
 
 if __name__ == "__main__":
     from query_worker.graph.state import create_default_query_state
-    # 初始化图状态
-    init_state = {
-        "session_id": "test_session_id_001",
-        "original_query": "H3CLA2608室内无线网关怎么使用？"
-    }
-    init_state = create_default_query_state(**init_state)
-    # 执行节点的单元测试
-    result = node_item_name_confirm(init_state)
-    # 输出:将返回的图状态进行json序列化
+    init_state = create_default_query_state(
+        session_id="test_session_id_001",
+        original_query="H3CLA2608室内无线网关怎么使用？",
+    )
+    result = asyncio.run(node_item_name_confirm(init_state))
     logger.info(json.dumps(result, ensure_ascii=False, indent=4))
 

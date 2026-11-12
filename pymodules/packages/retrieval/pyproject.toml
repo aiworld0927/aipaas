@@ -1,22 +1,19 @@
 [project]
 name = "aipaas-retrieval"
 version = "0.1.0"
-description = "AIPaaS 检索层（Milvus / ES / Qdrant / Neo4j 适配与重排）"
+description = "AIPaaS 检索层（Milvus 适配）"
 requires-python = ">=3.12"
 dependencies = [
     "aipaas-common",
-    "aipaas-llm",
+    "aipaas-model-clients",
     # 向量库客户端（嵌入推理已迁至 model-embedding-worker，不再需要 [model] 本地推理扩展，
     # 该扩展会把 torch 拉进默认依赖树并与根 cpu/gpu 分组索引冲突）
     "pymilvus>=3.0.2",
-    "elasticsearch>=8.0.0",
-    "neo4j>=5.0.0",
-    "qdrant-client>=1.9.0",
 ]
 
 [tool.uv.sources]
 aipaas-common = { workspace = true }
-aipaas-llm = { workspace = true }
+aipaas-model-clients = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

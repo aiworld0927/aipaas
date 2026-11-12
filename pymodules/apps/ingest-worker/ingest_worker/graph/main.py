@@ -1,4 +1,6 @@
+import asyncio
 import json
+from typing import Optional
 
 from langgraph.constants import END
 from langgraph.graph import StateGraph
@@ -18,13 +20,19 @@ from ingest_worker.graph.nodes.g_node_import_milvus import node_import_milvus
 from ingest_worker.graph.state import ImportGraphState, create_default_ingest_state
 
 class KBImportWorkflow:
-    """知识库导入工作流"""
+    """知识库导入工作流。
 
-    def __init__(self,config=None):
+    所有节点均为 async def，LangGraph v1.2+ compile 后 graph 同时提供
+    同步 (.invoke/.stream) 和异步 (.ainvoke/.astream) API；本类对外暴露：
+    - run() 同步入口（内部走 asyncio.run，兼容 CLI / 测试）
+    - arun() 异步入口（FastAPI / 服务化链路首选）
+    """
+
+    def __init__(self, config=None):
         """
         初始化工作流
         """
-        self.__compiled_graph = None
+        self.__compiled_graph: Optional[object] = None
 
     @property  # 将方法封装为属性
     def graph(self):
@@ -62,7 +70,7 @@ class KBImportWorkflow:
         graph.add_node("node_document_split", node_document_split)
         graph.add_node("node_item_name_recognition", node_item_name_recognition)
         graph.add_node("node_bge_embedding", node_bge_embedding)
-        graph.add_node("node_import_milvus",node_import_milvus)
+        graph.add_node("node_import_milvus", node_import_milvus)
 
         # 3. 设置入口节点
         graph.set_entry_point("node_entry")
@@ -90,18 +98,45 @@ class KBImportWorkflow:
         # 6. 编译工作流
         return graph.compile()
 
+    # ---- 同步入口：给 CLI / 测试 / 没有 event loop 的场景 ----
     def run(self, state: ImportGraphState, stream: bool = False):
         """
-        统一执行入口，支持切换invoke/stream
+        同步执行入口，支持切换 invoke/stream
         :param state: 初始状态
         :param stream: 是否流式输出
         :return: 执行结果
         """
-        if stream:
-            # return self.graph.stream(state, stream_mode="values")
-            return self.graph.stream(state)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # 当前线程没有 event loop → 自己起一个
+            return asyncio.run(self._arun(state, stream))
         else:
-            return self.graph.invoke(state)
+            # 已经在 loop 里（FastAPI 服务链路），不能再起 loop
+            # 旧调用方兜底：asyncio.run_coroutine_threadsafe
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                return ex.submit(lambda: asyncio.run(self._arun(state, stream))).result()
+
+    # ---- 异步入口：服务化链路首选 ----
+    async def arun(self, state: ImportGraphState, stream: bool = False):
+        """
+        异步执行入口，FastAPI/服务化链路首选
+        :param state: 初始状态
+        :param stream: 是否流式输出
+        :return: 执行结果（stream=False 返回最终 state；stream=True 返回 event 列表）
+        """
+        return await self._arun(state, stream)
+
+    async def _arun(self, state: ImportGraphState, stream: bool):
+        app = self.graph
+        if stream:
+            result = []
+            async for event in app.astream(state):
+                result.append(event)
+            return result
+        else:
+            return await app.ainvoke(state)
 
     def print_ascii(self):
         self.graph.get_graph().print_ascii()

@@ -1,14 +1,15 @@
+import asyncio
 import json
 from pathlib import Path
 from typing import List, Dict
 
 from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
-from aipaas_llm.lm.embedding_http_utils import generate_embeddings
+from aipaas_model_clients.lm.embedding_http_utils import agenerate_embeddings
 from ingest_worker.graph.state import ImportGraphState
 
 @node_log("node_bge_embedding")
-def node_bge_embedding(state: ImportGraphState) -> ImportGraphState:
+async def node_bge_embedding(state: ImportGraphState) -> ImportGraphState:
     """使用 BGE-M3文本向量化处理
     流程总览：
         1. 输入校验：验证chunks有效性，核心数据缺失则终止当前节点
@@ -26,13 +27,13 @@ def node_bge_embedding(state: ImportGraphState) -> ImportGraphState:
     chunks = _step_1_validate_input(state)
 
     # 步骤2：批量生成双向量，为切片绑定向量字段
-    output_data = _step_2_generate_embeddings(chunks)
+    output_data = await _step_2_generate_embeddings(chunks)
 
     # 步骤3：更新全局状态，将带向量的chunks回传下游
     state['chunks'] = output_data
 
     # 步骤4：过程数据暂存【性能优化可去掉】
-    _step_7_backup_chunk_item(state,output_data)
+    await _step_7_backup_chunk_item(state, output_data)
     return state
 
 def _step_1_validate_input( state: ImportGraphState) -> List[Dict]:
@@ -59,7 +60,7 @@ def _step_1_validate_input( state: ImportGraphState) -> List[Dict]:
 
     return chunks
 
-def _step_2_generate_embeddings( chunks: List[Dict[str, str]]) -> List[Dict[str, str]]:
+async def _step_2_generate_embeddings( chunks: List[Dict[str, str]]) -> List[Dict[str, str]]:
 
     """
     步骤 2: 批量生成向量（核心业务逻辑）
@@ -87,7 +88,7 @@ def _step_2_generate_embeddings( chunks: List[Dict[str, str]]) -> List[Dict[str,
             content = doc["content"]
             input_texts.append(f"{item_name}\n{content}" if item_name else content)
 
-        docs_embeddings = generate_embeddings(input_texts)
+        docs_embeddings = await agenerate_embeddings(input_texts)
         for j, doc in enumerate(batch_texts):
             item = doc.copy()
             item["dense_vector"] = docs_embeddings["dense"][j]
@@ -99,7 +100,7 @@ def _step_2_generate_embeddings( chunks: List[Dict[str, str]]) -> List[Dict[str,
     # 返回带向量的文本切片列表（供后续存入Milvus）
     return output_data
 
-def _step_7_backup_chunk_item(state, chunks):
+async def _step_7_backup_chunk_item(state, chunks):
     """
     作用:作用备份chunk_item
     入参：file_title,chunks
@@ -108,7 +109,11 @@ def _step_7_backup_chunk_item(state, chunks):
     chunks_new_path = Path(state.get("md_path", "")).parent / "chunks_embed.json"
     if chunks_new_path.parent.exists():
         chunks_new_path.parent.mkdir(parents=True, exist_ok=True)
-    chunks_new_path.write_text(json.dumps(chunks,indent=4,ensure_ascii=False),encoding="utf-8")
+
+    def _do_write():
+        chunks_new_path.write_text(json.dumps(chunks, indent=4, ensure_ascii=False), encoding="utf-8")
+
+    await asyncio.to_thread(_do_write)
 
 
 if __name__ == "__main__":

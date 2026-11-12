@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 
@@ -62,12 +62,11 @@ async def get_import_page():
     return FileResponse(html_path)
 
 
-# 4. 后台任务：LangGraph全流程执行
-# 独立于主请求线程，由BackgroundTasks触发，避免阻塞接口响应
-def run_graph_task(task_id: str, file_dir: str, import_file_path: str):
+# 4. 后台任务：LangGraph全流程执行（异步）
+async def run_graph_task_async(task_id: str, file_dir: str, import_file_path: str):
     """
-    LangGraph全流程执行后台任务
-    核心流程：初始化状态 → 流式执行图节点 → 实时更新任务状态 → 异常捕获
+    LangGraph全流程执行异步后台任务
+    核心流程：初始化状态 → 流式异步执行图节点 → 实时更新任务状态 → 异常捕获
     任务状态更新：pending → processing → completed/failed
     节点进度更新：每完成一个节点，将节点名加入done_list，供前端轮询查看
 
@@ -86,9 +85,10 @@ def run_graph_task(task_id: str, file_dir: str, import_file_path: str):
             "import_file_path": import_file_path,
         }
 
-        # 3. 流式执行LangGraph全流程（stream模式：实时获取每个节点的执行结果）
+        # 3. 流式异步执行LangGraph全流程
         workflow = KBImportWorkflow()
-        for event in workflow.run(init_state, stream=True):
+        events = await workflow.arun(init_state, stream=True)
+        for event in events:
             for node_name, node_result in event.items():
                 # 将完成的节点名加入【已完成列表】，前端轮询/status/{task_id}可实时获取
                 add_done_task(task_id, node_name)
@@ -106,7 +106,7 @@ def run_graph_task(task_id: str, file_dir: str, import_file_path: str):
 # 支持多文件上传，核心流程：接收文件 → 本地保存 → MinIO上传 → 启动后台任务
 # 访问地址：http://localhost:8000/upload （POST请求，form-data格式传参）
 @app.post("/upload", summary="文件上传接口", description="支持多文件批量上传，自动触发知识库导入全流程")
-async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
+async def upload_files(files: List[UploadFile] = File(...)):
     """
     文件上传核心接口
     1. 接收前端上传的多文件（PDF/MD为主）
@@ -115,7 +115,6 @@ async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile
     4. 为每个文件生成唯一TaskID，启动独立的LangGraph后台处理任务
     5. 实时更新任务状态，供前端轮询监控进度
 
-    :param background_tasks: FastAPI后台任务对象，用于异步执行LangGraph流程
     :param files: 前端上传的文件列表（form-data格式）
     :return: 包含上传结果和所有任务ID的JSON响应
     """
@@ -123,9 +122,6 @@ async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile
     date_time_dir = datetime.now().strftime("%Y%m%d")
     data_dir = PROJECT_ROOT / 'output_files' / date_time_dir
     CHUNK_SIZE = 1024 * 1024  # 1M
-
-    def _write_chunk(f, chunk):
-        f.write(chunk)
 
     # 初始化任务ID列表，用于返回给前端（一个文件对应一个TaskID）
     task_ids = []
@@ -151,7 +147,7 @@ async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile
         # 5. 将上传的文件保存到本地临时目录（后续MinIO上传/文件解析均基于此文件）
         with open(import_file_path, "wb") as out_file:
             while chunk := await file.read(CHUNK_SIZE):
-                await asyncio.to_thread(_write_chunk, out_file, chunk)
+                out_file.write(chunk)
         logger.info(f"[{task_id}] 文件已保存至本地，路径：{import_file_path}")
 
         # 6. 将本地文件上传至MinIO对象存储，做持久化保存
@@ -164,8 +160,9 @@ async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile
             # 从环境变量获取MinIO的桶名配置
             minio_bucket_name = settings.common.minio.bucket_name
 
-            # 本地文件上传至MinIO（同名文件会自动覆盖，保证文件最新）
-            minio_client.fput_object(
+            # 本地文件上传至MinIO（同步driver → to_thread 包一层）
+            await asyncio.to_thread(
+                minio_client.fput_object,
                 bucket_name=minio_bucket_name,
                 object_name=minio_object_name,
                 file_path=import_file_path,
@@ -179,12 +176,13 @@ async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile
         # 7. 标记「文件上传」阶段为「已完成」，前端轮询可查
         add_done_task(task_id, "upload_file")
 
-        # 8. 将LangGraph全流程处理加入FastAPI后台任务（异步执行，不阻塞当前接口响应）
-        background_tasks.add_task(
-            run_graph_task,
-            task_id=task_id,
-            file_dir=str(local_dir_obj),
-            import_file_path=import_file_path,
+        # 8. 将LangGraph全流程处理用 asyncio.create_task 启动（不阻塞当前接口响应）
+        asyncio.create_task(
+            run_graph_task_async(
+                task_id=task_id,
+                file_dir=str(local_dir_obj),
+                import_file_path=import_file_path,
+            )
         )
         logger.info(f"[{task_id}] 已将LangGraph全流程加入后台任务，任务已启动")
 

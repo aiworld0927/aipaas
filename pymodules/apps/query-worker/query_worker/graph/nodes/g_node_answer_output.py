@@ -1,4 +1,5 @@
 # processor/query_processor/nodes/node_answer_output.py
+import asyncio
 import re
 from typing import List, Dict, Tuple
 
@@ -7,72 +8,37 @@ from aipaas_common.core.log import logger
 from aipaas_common.log_decorator import node_log
 from aipaas_common.utils.sse_utils import push_to_session, SSEEvent
 from aipaas_common.utils.task_utils import set_task_result
-from aipaas_llm.lm.lm_utils import get_llm_client
+from aipaas_model_clients.lm.lm_utils import get_llm_client
 from aipaas_storage.mongo_history_utils import save_chat_message
 from aipaas_common.conf.settings import get_settings
 from query_worker.graph.state import QueryGraphState
 
 
 @node_log("node_answer_output")
-def node_answer_output(state: QueryGraphState) -> QueryGraphState:
-    """节点功能: 答案输出：流程: 检查已有答案 → 构建提示词 → LLM 生成 → 写入历史 → 发送结束事件
-    1 判断state 中的answer是否已经存在，如果存在直接输出answer中的答案，注意判断是否需要流式输出需要则流式输出
-    2 根据state中的问题、重新问题、历史对话、提问商品（item_names）、 重排内容 组织prompt 并调用llm 生成答案
-    3 调用大模型输出答案 注意判断是否需要流式输出需要则流式输出
-    4 把答案写入到mongodb的history中 利用utils/mongo_history_utils.py中的save_chat_message方法
-    5 做最后一次push操作（主要是为了触发前端图片渲染)
-         {
-            "answer": "HAK 180 烫金机的操作面板位于...（大模型生成的纯文本）...",
-            "status": "completed",
-            "image_urls": [
-                "http://local-server/images/panel_view.jpg",
-                "http://local-server/images/button_detail.jpg"
-            ]
-          }
-    """
-    # 阶段一：检查answer是否存在,如果存在直接输出answer中的答案
-    answer_exists = _step_1_check_answer(state)
+async def node_answer_output(state: QueryGraphState) -> QueryGraphState:
+    """答案输出节点（异步版）。
 
-    # 阶段二  如果没有answer则 构建 Prompt
+    链路：检查已有答案 → 构建 Prompt → LLM ainvoke/astream → 写入历史 → 结束。
+    """
+    answer_exists = await _step_1_check_answer(state)
+
     if not answer_exists:
         prompt = _step_2_construct_prompt(state)
         state["prompt"] = prompt
+        await _step_3_generate_response(state, prompt)
 
-        # 阶段三：  如果没有answer则 调用大模型输出答案
-        _step_3_generate_response(state, prompt)
-
-        # 提取图片URL（用于历史记录和前端展示）
     image_urls = _extract_images_from_docs(state.get("reranked_docs") or [])
 
-    # 阶段四：把答案写入到mongodb的history中
     if state.get("answer"):
         logger.info("---写入MongoDB历史记录---")
-        _step_4_write_history(state, image_urls=image_urls)
+        await _step_4_write_history(state, image_urls=image_urls)
 
-    # 阶段五: 流式输出结束，发送 final 事件 [最后兜底，确保图片都能争取渲染和结束] 移到函数外部
-    # logger.info(f"---发送 final 事件---图片为：{image_urls}")
-    # if state.get("is_stream"):
-    #     push_to_session(
-    #         state['session_id'],
-    #         SSEEvent.FINAL,
-    #         {
-    #             "answer": state["answer"],
-    #             "status": "completed",
-    #             "image_urls": image_urls  # 发送图片URL给前端
-    #         }
-    #     )
-    import sys
-    print([k for k in sys.modules if 'sse_utils' in k or 'task_utils' in k])
     logger.info("---node_answer_output 节点处理结束---")
     return state
 
 
-def _step_1_check_answer(state) -> bool:
-    """
-    阶段一：检查 state 中是否已有 answer。
-    - 若已存在：按需推送流式 delta（用于 SSE），并返回 True
-    - 若不存在：返回 False
-    """
+async def _step_1_check_answer(state) -> bool:
+    """检查 state 中是否已有 answer；若已存在则按需推 delta / set_task_result。"""
     answer = state.get("answer")
     is_stream = state.get("is_stream")
     if answer:
@@ -82,8 +48,7 @@ def _step_1_check_answer(state) -> bool:
         else:
             set_task_result(state["session_id"], "answer", answer)
         return True
-    else:
-        return False
+    return False
 
 
 def _step_2_construct_prompt(state: QueryGraphState) -> str:
@@ -192,19 +157,11 @@ def _format_chat_history(chat_history: List[Dict], char_budget: int) -> Tuple[st
     return "\n".join(formatted_lines), char_budget - used_chars
 
 
-def _step_3_generate_response(state: QueryGraphState, prompt: str) -> QueryGraphState:
-    """
-    阶段三：生成回答
-    调用llm生成答案，支持流式输出
-    """
+async def _step_3_generate_response(state: QueryGraphState, prompt: str) -> QueryGraphState:
+    """调用 LLM 生成答案（异步版）：astream 流式 / ainvoke 非流式。"""
     logger.info("---Step 3: 开始生成回答 (LLM Generation)---")
 
-    # 获取 LLM 客户端
-    # 注意：这里我们使用统一的 get_llm_client 获取实例
     llm = get_llm_client()
-
-    # 判断是否需要流式输出
-    # 通常 state 中会注入 stream_queue 用于 SSE 推送
     session_id = state.get("session_id")
     is_stream = state.get("is_stream")
 
@@ -212,27 +169,23 @@ def _step_3_generate_response(state: QueryGraphState, prompt: str) -> QueryGraph
         logger.info(f"模式: 流式输出 (Streaming), Session: {session_id}")
         final_text = ""
         try:
-            # 使用 stream 方法进行流式生成
-            for chunk in llm.stream(prompt):
+            async for chunk in llm.astream(prompt):
                 delta = getattr(chunk, "content", "") or ""
                 if delta:
                     final_text += delta
-                    # 将增量内容放入队列
                     push_to_session(session_id, SSEEvent.DELTA, {"delta": delta})
 
             logger.info(f"流式输出完成，总长度: {len(final_text)}")
 
         except Exception as e:
             logger.error(f"流式生成出错: {e}", exc_info=True)
-            # 发生错误时，尝试推送到前端
             push_to_session(session_id, SSEEvent.ERROR, {"error": str(e)})
 
         state["answer"] = final_text
     else:
-        # 非流式直接调用
         logger.info(f"模式: 非流式输出 (Blocking), Session: {session_id}")
         try:
-            response = llm.invoke(prompt)
+            response = await llm.ainvoke(prompt)
             content = response.content
             state["answer"] = content
             set_task_result(session_id, "answer", content)
@@ -310,28 +263,25 @@ def _extract_images_from_docs(docs):
     return images
 
 
-def _step_4_write_history(state: QueryGraphState, image_urls=None) -> QueryGraphState:
-    """
-    阶段四：把本轮答案写入 MongoDB history。
-    利用 utils/mongo_history_utils.py 中的 save_chat_messages 方法。
-    """
+async def _step_4_write_history(state: QueryGraphState, image_urls=None) -> QueryGraphState:
+    """把答案写入 MongoDB history（pymongo 为同步 driver，放线程池）。"""
     session_id = state.get("session_id", "default")
     answer = (state.get("answer") or "").strip()
     item_names = state.get("item_names") or []
 
     try:
         if answer:
-            save_chat_message(
+            await asyncio.to_thread(
+                save_chat_message,
                 session_id=session_id,
                 role="assistant",
                 text=answer,
                 rewritten_query="",
                 item_names=item_names,
                 image_urls=image_urls,
-                message_id=None
+                message_id=None,
             )
     except Exception as e:
-        # 写历史失败不应影响主链路
         logger.error(f"写入Mongo历史记录失败: {e}")
 
     return state
