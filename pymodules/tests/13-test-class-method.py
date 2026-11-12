@@ -5,8 +5,10 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import TypeVar, Optional
+from typing import TypeVar
+
 from aipaas_common.core.log import logger
+
 T = TypeVar("T")  # 泛型状态类型
 
 """
@@ -23,6 +25,7 @@ T = TypeVar("T")  # 泛型状态类型
 9、封装了统一日志处理，使用logging、colorlog
     注意：使用日志记录器记录日志时一定要先激活日志setup_logging(logging.INFO)，并指定日志级别
 """
+
 
 class BaseNode(ABC):
     """
@@ -44,6 +47,7 @@ class BaseNode(ABC):
         workflow.add_node("my_node", node)
     """
     name: str = "base_node"  # 节点名称，子类应覆盖
+
     def __init__(self):
         """
         初始化节点
@@ -53,7 +57,7 @@ class BaseNode(ABC):
         # self.config = config or get_config()
         self.logger = logger
 
-    def __call__( state: T) -> T:
+    def __call__(self, state: T) -> T:
         """
         节点执行入口
         LangGraph 调用节点时会调用此方法。
@@ -70,22 +74,19 @@ class BaseNode(ABC):
             is_stream = state.get("is_stream")
             # 1. 开始：记录节点运行状态
             self.logger.info(f"--- {self.name} 开始 ---")
-            add_running_task(task_id, self.name,is_stream=is_stream)
 
             # 2. 执行节点
             result = self.process(state)
 
             # 3. 结束：记录节点完成状态
-            add_done_task(task_id, self.name,is_stream=is_stream)
             self.logger.info(f"--- {self.name} 完成 ---")
 
             return result
         except Exception as e:
             self.logger.error(f"{self.name} 执行失败: {e}")
-            raise ImportProcessError(message=str(e), node_name=self.name, cause=e)
 
     @abstractmethod
-    def process( state: T) -> T:
+    def process(state: T) -> T:
         """
         节点核心处理逻辑
         子类必须实现此方法。
@@ -99,13 +100,16 @@ class BaseNode(ABC):
 
 if __name__ == "__main__":
     class MyNode(BaseNode):
-        name = "test_node"
-        def process(self,state):
-            print(f"调用了：process方法state：{state}")
+        name = {"task_id": "task_id-001"}
+
+        def process(self, state):
+            self.logger.info(f"调用了：process方法state：{state}")
             # 实现具体逻辑
             return state
 
+
     # 作为 LangGraph 节点使用
+    mystate = {"task_id": "task_id-001"}
     node = MyNode()
-    node("hello world")
+    node(mystate)
     # workflow.add_node("my_node", node)

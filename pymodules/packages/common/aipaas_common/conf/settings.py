@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from aipaas_common.conf.schemas import MODULE_SCHEMAS
 
-VALID_APP_ENVS = ("devhome", "devcompany")
+VALID_APP_ENVS = ("devhome", "devcompany","dev_win11","dev_win10")
 BASE_CONFIG_FILE = "aipaas_config.base.yaml"
 
 
