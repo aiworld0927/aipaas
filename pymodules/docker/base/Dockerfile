@@ -46,6 +46,8 @@ COPY pyproject.toml uv.lock ./
 RUN case "${TORCH_VARIANT}" in cpu|gpu) ;; \
       *) echo "TORCH_VARIANT 只能是 cpu 或 gpu，收到: ${TORCH_VARIANT}" >&2; exit 1 ;; \
     esac && \
+    echo ">>> Building with TORCH_VARIANT=${TORCH_VARIANT}" && \
+    echo ">>> uv sync --frozen --no-dev --all-packages --no-install-workspace --group ${TORCH_VARIANT}" && \
     uv sync --frozen --no-dev --all-packages --no-install-workspace --group "${TORCH_VARIANT}"
 
 # 校验 torch 构建与变体一致（cpu → torch.version.cuda is None；gpu → CUDA 12.8）
