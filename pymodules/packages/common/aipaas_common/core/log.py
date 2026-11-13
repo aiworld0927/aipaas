@@ -25,12 +25,6 @@ if TYPE_CHECKING:
 LOG_DIR = PROJECT_ROOT / "logs"
 
 # -------------------------- 日志格式（彩色、结构化、易读） --------------------------
-LOG_FORMAT = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-    "<level>{level: <8}</level> | "
-    "<cyan>{name: <20}</cyan>:<cyan>{function: <15}</cyan>:<cyan>{line: <4}</cyan> - "
-    "<level>{message}</level>"
-)
 LOG_FORMAT_REQUEST_ID = (
     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
     "<level>{level: <8}</level> | "
@@ -55,7 +49,7 @@ def _add_file_sink(level: str, retention: str, prefix: str) -> None:
     _loguru_logger.add(
         sink=LOG_DIR / f"{prefix}_{{time:YYYYMMDD}}.log",
         level=level,
-        format=LOG_FORMAT,
+        format=LOG_FORMAT_REQUEST_ID,
         rotation="00:00",
         retention=retention,
         encoding="utf-8",
@@ -97,6 +91,7 @@ logger = base_logger.patch(inject_request_id)
 
 # -------------------------- 测试代码 --------------------------
 if __name__ == '__main__':
+    print(TYPE_CHECKING)
     async def print_log(request: str):
         logger.info(f"{request}")
 
