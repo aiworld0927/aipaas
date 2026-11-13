@@ -20,7 +20,8 @@ server {
     # 配合下面 proxy_pass 里的变量，实现运行时解析。
     resolver 127.0.0.11 valid=10s ipv6=off;
     resolver_timeout 5s;
-
+    client_max_body_size 100m;
+    
     # SPA 单页应用路由：任何未命中的路径都返回 index.html，
     # 让前端 react-router 在浏览器端处理
     location / {

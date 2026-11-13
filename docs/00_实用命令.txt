@@ -1,0 +1,21 @@
+
+# 关闭并删除所有容器
+docker stop $(docker ps -aq) 2>&1; docker rm $(docker ps -aq) 2>&1; echo "--- 剩余容器 ---"; docker ps -a 2>&1
+
+前端构建：
+cd /coding/aipaas/web
+# 1. 确保拿到最新文件（Dockerfile + .dockerignore 都在 git 里了）
+git pull
+# 2. 关键！清理旧缓存（旧缓存里有污染的 COPY . . 层）
+docker builder prune -af        # buildkit（你那边用的）
+# 3. 重建
+docker build -t aipaas/frontend:latest .
+
+# python 单工程构建
+# 1. 仅重新构建指定服务的镜像
+docker compose build svc-ingest
+# 2. 仅重建并启动该服务（--no-deps 防止连带重启依赖服务）
+docker compose up --no-deps -d svc-ingest
+# docker compose build svc-ingest && docker compose up --no-deps -d svc-ingest
+
+# 模型工程

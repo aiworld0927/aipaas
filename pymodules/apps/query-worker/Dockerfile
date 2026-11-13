@@ -36,11 +36,32 @@ WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
+# ------------------------------------------------------------
+# 核心：把「装第三方依赖」和「editable install 本地包」拆成两层
+#       改源码时只让第二层失效，第一层（下载依赖）缓存命中
+# ------------------------------------------------------------
+
+# 第 1 层：只 COPY 锁文件 → uv sync 只装第三方依赖
+# --no-install-workspace  跳过 workspace 成员（editable install 在第 2 层做）
+# --all-packages          读取所有 workspace 成员的 pyproject.toml 装齐传递依赖
+# --frozen                严格按 uv.lock，不重新解析
+# --no-dev                不装开发依赖
+# 这层只在 pyproject.toml / uv.lock 变更时失效（改源码不会让它失效）
 COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-workspace --all-packages \
+ && uv pip install --python /app/.venv/bin/python hatchling editables
+
+# 第 2 层：COPY 本地包源码 → editable install
+# 改 packages/ 或 apps/ 里的源码只让这层失效，第 1 层缓存命中
 COPY packages ./packages
 COPY apps/query-worker ./apps/query-worker
-
-RUN uv sync --package svc-query --no-dev --frozen 2>&1
+RUN uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation \
+      -e packages/common \
+      -e packages/model-clients \
+      -e packages/retrieval \
+      -e packages/storage \
+      -e packages/mcp-agents1.0 \
+      -e apps/query-worker
 
 # ---- 阶段 2：运行时 ----
 FROM python:3.12-slim AS runtime
