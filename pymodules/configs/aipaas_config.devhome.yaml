@@ -4,20 +4,6 @@
 # 注意：模型路径/集合名按 devcompany 同构生成，首次在该环境启动时需人工验证
 # =============================================================================
 
-common:
-  milvus:
-    url: http://192.168.5.18:19530
-    chunks_collection: kb_chunks        # 待验证：devhome Milvus 实际集合名
-  minio:
-    endpoint: 192.168.5.18:9000
-    bucket_name: knowledge-base-files   # 待验证：devhome MinIO 实际桶名
-  mongo:
-    db_name: kb002                      # 待验证：devhome Mongo 实际库名
-  embedding_service:
-    url: http://192.168.5.18:8003
-  rerank_service:
-    url: http://192.168.5.18:8004
-
 model_embedding_worker:
   offline:
     model_path: /home/aipaas/models/BAAI/bge-m3   # 待验证：devhome 模型目录

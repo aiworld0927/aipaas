@@ -21,14 +21,14 @@ common:
   # ---- Milvus 向量库 ----
   milvus:
     url: http://milvus:19530
-    chunks_collection: chunks
+    chunks_collection: ku_chunks
     item_name_collection: kb_item_names
     entity_name_collection: kb_graph_entity_names   # 预留
   # ---- MinIO 对象存储（endpoint 为 host:port，不带 scheme；scheme 由 secure 推导）----
   minio:
     endpoint: minio:9000
     secure: false
-    bucket_name: aipaas
+    bucket_name: knowledge-base-files   # 待验证：devhome MinIO 实际桶名
     img_dir: upload-images
     access_key: ${oc.env:MINIO_ACCESS_KEY,null}
     secret_key: ${oc.env:MINIO_SECRET_KEY,null}
