@@ -1,0 +1,21 @@
+[project]
+name = "aipaas-nacos"
+version = "0.1.0"
+description = "AIPaaS Nacos 接入层（服务实例注册/注销，供业务 worker 共用）"
+requires-python = ">=3.12"
+dependencies = [
+    "aipaas-common",
+    # Nacos 官方 Python SDK（v2 异步 API：NacosNamingService）
+    "nacos-sdk-python>=3.2.0,<4",
+    "fastapi>=0.142.2",
+]
+
+[tool.uv.sources]
+aipaas-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aipaas_nacos"]

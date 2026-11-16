@@ -25,9 +25,22 @@ from aipaas_common.utils.task_utils import (
     update_task_status, TASK_STATUS_PROCESSING, get_task_result,
     TASK_STATUS_COMPLETED, TASK_STATUS_FAILED, clear_task, get_done_task_list,
 )
+from aipaas_common.core.lifespan import AppLifespan
 from aipaas_common.core.log import logger
 
-app = FastAPI(title="金融标准知识库-查询API", description="此文档是金融标准化知识库查询流程的API接口说明")
+# 生命周期编排：按注册顺序启动、逆序关闭；后续 MySQL / Elasticsearch 等组件继续 add
+app_lifespan = AppLifespan()
+if settings.common.nacos is not None and settings.common.nacos.enabled:
+    # 开关打开时才加载 Nacos 对接包，未启用环境不引入 Nacos SDK
+    from aipaas_nacos import nacos_lifespan
+
+    app_lifespan.add(nacos_lifespan("svc-query"))
+
+app = FastAPI(
+    title="金融标准知识库-查询API",
+    description="此文档是金融标准化知识库查询流程的API接口说明",
+    lifespan=app_lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,

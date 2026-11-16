@@ -22,6 +22,15 @@ docker compose up --no-deps -d svc-ingest
 
 # 模型工程
 
+# 重新构建基座镜像
+docker build --network host --build-arg TORCH_VARIANT=gpu \
+     -f docker/base/Dockerfile -t aipaas/aipaas-torch-gpu-base:local .
+
+docker build --network host \
+     --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local \
+     -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding:latest .
+
+
 
 # 停止并删除容器及关联数据卷：
 docker compose down -v

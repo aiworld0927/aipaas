@@ -13,6 +13,8 @@ common:
     bucket_name: knowledge-base-files
   mongo:
     db_name: kb002
+  nacos:
+    server_address: 192.168.222.188:8848   # 注册中心（与中间件同主机）
   embedding_service:
     url: http://192.168.222.188:8003
   rerank_service:

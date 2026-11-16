@@ -22,6 +22,8 @@ _ENV_KEYS = [
     "OPENAI_API_KEY", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
     "MONGO_URL", "MINERU_API_TOKEN",
     "EMBEDDING_ONLINE_API_KEY", "TEXT_RERANK_API_KEY",
+    "NACOS_ENABLED", "NACOS_SERVER_ADDR", "NACOS_NAMESPACE",
+    "NACOS_GROUP", "NACOS_USERNAME", "NACOS_PASSWORD", "NACOS_REGISTER_IP",
 ]
 
 MINIMAL_COMMON = """
@@ -43,6 +45,18 @@ common:
   mongo: {url: "${oc.env:MONGO_URL,null}", db_name: d}
   mineru: {base_url: http://mineru.local, api_token: "${oc.env:MINERU_API_TOKEN,null}"}
   mcp: {mcp_base_url: http://mcp.local, api_key: "${oc.env:OPENAI_API_KEY,null}"}
+  nacos:
+    enabled: false
+    server_address: nacos.local:8848
+    namespace: public
+    group_name: DEFAULT_GROUP
+    username: "${oc.env:NACOS_USERNAME,null}"
+    password: "${oc.env:NACOS_PASSWORD,null}"
+    cluster_name: DEFAULT
+    weight: 1.0
+    register_ip: null
+    log_level: INFO
+    grpc_timeout_ms: 5000
   embedding_service: {url: http://e.local:8101, timeout: 120}
   rerank_service: {url: http://r.local:8102, timeout: 60}
   logging:

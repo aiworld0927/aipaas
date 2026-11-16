@@ -58,6 +58,7 @@ COPY apps/query-worker ./apps/query-worker
 RUN uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation \
       -e packages/common \
       -e packages/model-clients \
+      -e packages/nacos \
       -e packages/retrieval \
       -e packages/storage \
       -e packages/mcp-agents1.0 \

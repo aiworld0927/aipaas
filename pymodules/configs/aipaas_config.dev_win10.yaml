@@ -13,6 +13,8 @@ common:
     bucket_name: knowledge-base-files   # 待验证：devhome MinIO 实际桶名
   mongo:
     db_name: kb002                      # 待验证：devhome Mongo 实际库名
+  nacos:
+    server_address: 192.168.222.188:8848   # 注册中心（与中间件同主机）
   embedding_service:
     url: http://192.168.222.188:8003
   rerank_service:

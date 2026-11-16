@@ -16,6 +16,7 @@ members = [
     "apps/model-reranker-worker",
     "packages/common",
     "packages/model-clients",
+    "packages/nacos",
     "packages/retrieval",
     "packages/storage",
     "packages/mcp-agents1.0",

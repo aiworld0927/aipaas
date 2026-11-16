@@ -14,6 +14,7 @@
     "pymodules/packages/mcp-agents1.0",
     "pymodules/packages/mcp-agents2.0",
     "pymodules/packages/model-clients",
+    "pymodules/packages/nacos",
     "pymodules/packages/pipeline",
     "pymodules/packages/retrieval",
     "pymodules/packages/storage",

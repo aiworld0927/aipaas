@@ -97,6 +97,34 @@ class HttpServiceSettings(_Base):
     timeout: float
 
 
+class NacosSettings(_Base):
+    """Nacos 注册中心配置（业务 worker 启动时注册服务实例）。
+
+    enabled 为 false 时跳过注册；注册失败只记 warning，不影响服务启动。
+    register_ip 为空时由代码自动探测本机默认出口网卡地址。
+    """
+
+    enabled: bool = True
+    server_address: str
+    namespace: str = "public"
+    group_name: str = "DEFAULT_GROUP"
+    username: SecretStr | None = None
+    password: SecretStr | None = None
+    cluster_name: str = "DEFAULT"
+    weight: float = 1.0
+    register_ip: str | None = None
+    log_level: str = "INFO"
+    grpc_timeout_ms: int = 5000
+
+    @property
+    def username_str(self) -> str:
+        return self.username.get_secret_value() if self.username else ""
+
+    @property
+    def password_str(self) -> str:
+        return self.password.get_secret_value() if self.password else ""
+
+
 class LoggingSettings(_Base):
     console_enable: bool
     console_level: str
@@ -115,6 +143,8 @@ class CommonSettings(_Base):
     mongo: MongoSettings
     mineru: MineruSettings
     mcp: McpSettings
+    # 未配置该节点视为不启用 Nacos（对应模块不会被加载）
+    nacos: NacosSettings | None = None
     embedding_service: HttpServiceSettings
     rerank_service: HttpServiceSettings
     logging: LoggingSettings

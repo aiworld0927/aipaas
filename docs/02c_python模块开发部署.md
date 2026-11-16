@@ -37,6 +37,7 @@ pymodules/
 │   ├── retrieval/          # 检索层（Milvus / ES / Qdrant / Neo4j）
 │   ├── storage/            # 存储层（Mongo / MinIO / MySQL / K8s）
 │   ├── pipeline/           # RAG 流程编排基类
+│   ├── nacos/              # Nacos 注册中心对接（服务注册 + 接口 metadata）
 │   ├── mcp-agents1.0/      # MCP 客户端（v1: mcp<2）
 │   └── mcp-agents2.0/      # MCP 客户端（mcp≥2 版本，不在 workspace）
 ├── configs/                # 配置包（aipaas_config.base/devhome/devcompany.yaml、prompts）
@@ -63,6 +64,7 @@ pymodules/
 | `packages/retrieval` | `aipaas_retrieval` | 检索层：Milvus、Elasticsearch、Qdrant、Neo4j 客户端 |
 | `packages/storage` | `aipaas_storage` | 存储层：MongoDB（含历史记录）、MinIO、MySQL、Kubernetes 客户端 |
 | `packages/pipeline` | `aipaas_pipeline` | RAG 流程编排基类 |
+| `packages/nacos` | `aipaas_nacos` | Nacos 注册中心对接：服务实例注册/注销、FastAPI lifespan、接口 metadata 自动收集（见 3.5） |
 | `packages/mcp-agents1.0` | `aipaas_mcp_agents` | MCP 客户端（v1 版本：`mcp>=1.19.0,<2` + `openai-agents<0.20.0`） |
 
 ### 1.4 依赖方向（严格遵守，禁止反向）
@@ -76,6 +78,8 @@ apps（svc-ingest / svc-query）
         ├─► aipaas-storage
         │     └─► aipaas-common
         ├─► aipaas-pipeline
+        │     └─► aipaas-common
+        ├─► aipaas-nacos
         │     └─► aipaas-common
         └─► aipaas-mcp-agent1
               └─► aipaas-common
@@ -92,7 +96,7 @@ apps（svc-ingest / svc-query）
 |------|------|----------|
 | 一、总览 | 工程结构、部署单元、共享包、依赖方向 | 新人上手 / 全局对照 |
 | 二、开发环境搭建 | uv workspace 安装、IDE 解释器 | 首次搭建环境 |
-| 三、开发模式启动服务 | 四个服务的启动命令、配置与环境变量 | 日常开发调试 |
+| 三、开发模式启动服务 | 四个服务的启动命令、配置与环境变量、Nacos 接口注册 | 日常开发调试 |
 | 四、依赖管理 | 第三方依赖、包间依赖、新增包、CPU/GPU 分组 | 改动依赖时 |
 | 五、镜像构建与运行 | Dockerfile、单机运行、docker compose | 打包发布 / 联调 |
 | 六、四个模块独立说明 | 各模块职责、快速启动、接口清单、curl、配置项 | 开发联调 / 接口对接 |
@@ -238,6 +242,131 @@ curl -s http://localhost:8004/ready    # 重排序模型
 curl -s http://localhost:8001/health   # ingest-worker
 curl -s http://localhost:8002/health   # query-worker
 ```
+
+### 3.5 Nacos 服务与接口注册
+
+业务服务通过 `aipaas_nacos` 把「服务实例 + 接口清单」注册到 Nacos：启动注册、退出注销（临时实例），接口清单自动写入实例 metadata，供网关 / 调用方发现。
+
+#### 开关与配置
+
+配置节点 `common.nacos`（`configs/aipaas_config.base.yaml`）：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `enabled` | `true` | 总开关；`false` 或删除该节点时**不会加载** `aipaas_nacos`，也不做注册 |
+| `server_address` | `nacos:8848` | 注册中心地址，多地址逗号分隔；环境变量 `NACOS_SERVER_ADDR` |
+| `namespace` | `public` | 命名空间 ID |
+| `group_name` | `DEFAULT_GROUP` | 服务分组，需与 Java 侧配置一致 |
+| `username` / `password` | 空 | Nacos 开启鉴权时必填；compose 默认注入 `nacos/nacos` |
+| `cluster_name` | `DEFAULT` | 集群名 |
+| `weight` | `1.0` | 实例权重 |
+| `register_ip` | 空 | 为空时自动探测本机出口网卡 IP，NAT 环境可手工指定 |
+| `grpc_timeout_ms` | `5000` | SDK gRPC 超时 |
+
+#### 服务入口接入方式
+
+lifespan 统一由 `AppLifespan` 编排（后续 MySQL / ES 等组件继续 `add`）：
+
+```python
+from aipaas_common.core.lifespan import AppLifespan
+
+app_lifespan = AppLifespan()
+if settings.common.nacos is not None and settings.common.nacos.enabled:
+    # 开关关闭时不 import aipaas_nacos，Nacos SDK 完全不加载
+    from aipaas_nacos import nacos_lifespan
+
+    app_lifespan.add(nacos_lifespan("svc-ingest"))
+
+app = FastAPI(..., lifespan=app_lifespan)
+```
+
+> 不要再用 `@app.on_event("startup")` 注册；初始化逻辑统一收敛到 lifespan，避免多组件启动/关闭顺序混乱。
+
+#### 接口如何进入 Nacos
+
+注册时自动执行 `collect_interface_metadata(app)`：
+
+1. 遍历 `app.routes`，只取 `APIRoute`
+2. 跳过 `/openapi.json`、`/docs`、`/redoc` 等内置路由
+3. 跳过声明了 `include_in_schema=False` 的内部接口
+4. 每个接口写入一条 metadata：`interface.<处理函数名> = "METHODS path | summary"`
+
+接口声明示例：
+
+```python
+@app.post("/upload", summary="文件上传接口")
+async def upload_files(...): ...
+
+@app.get("/status/{task_id}", summary="任务状态查询")
+async def get_task_progress(...): ...
+```
+
+`svc-ingest` 注册后的实例 metadata：
+
+```
+interface_count = 4
+openapi_path = /openapi.json
+interface.health = GET /health
+interface.get_import_page = GET /import.html
+interface.get_task_progress = GET /status/{task_id} | 任务状态查询
+interface.upload_files = POST /upload | 文件上传接口
+```
+
+`svc-query` 注册后的实例 metadata：
+
+```
+interface_count = 6
+openapi_path = /openapi.json
+interface.chat = GET /chat.html
+interface.health = GET /health
+interface.clear_chat_history = DELETE /history/{session_id}
+interface.history = GET /history/{session_id}
+interface.query = POST /query
+interface.stream = GET /stream/{session_id}
+```
+
+`summary` 会作为接口描述写入；未声明 summary 时只记录方法和路径。
+
+#### 新增接口 / 新增服务的步骤
+
+1. **新增接口**：正常用 `@app.get/post` 定义即可，重启后自动注册，无需改 Nacos 代码
+2. **隐藏接口**：加 `include_in_schema=False`，既不出现在 OpenAPI 文档，也不注册到 Nacos
+3. **新增服务**：复制 service.py 的 `AppLifespan` 装配片段，`nacos_lifespan("<部署单元名>")` 传入服务名；端口自动取模块配置 `port`
+4. 确认该环境 `common.nacos.enabled=true`，且 Nacos 开启鉴权时 `username/password` 正确
+
+#### 验证
+
+启动日志应出现：
+
+```
+Nacos 服务注册成功 | service=svc-ingest ip=... port=8001 group=DEFAULT_GROUP namespace=public ... interfaces=4
+```
+
+Nacos 控制台：服务管理 → 服务列表 → `svc-ingest` → 详情 → 元数据。
+
+#### 客户端调用示例（`tests/15-test-nacos-client.py`）
+
+脚本演示完整链路：连 Nacos → 拉取服务实例 → 解析实例 metadata 中的接口清单 → 用注册的 `ip:port` + 接口路径发起调用。
+
+```bash
+cd pymodules
+
+# 1) 查看注册信息：服务列表 + 实例 + 接口清单
+uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 list
+
+# 2) svc-ingest：按注册清单调用 POST /upload，并轮询 GET /status/{task_id}
+uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 ingest --file ./doc/xxx.pdf --wait 30
+
+# 3) svc-query：按注册清单调用 POST /query（非流式，直接返回 answer）
+uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 query --query "金融标准知识库支持哪些业务？"
+
+# 4) svc-query：流式调用 POST /query，再订阅 GET /stream/{session_id} 打印 SSE 事件
+uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 query --query "..." --stream
+```
+
+连接参数默认读 `NACOS_SERVER_ADDR` / `NACOS_NAMESPACE` / `NACOS_GROUP` / `NACOS_USERNAME` / `NACOS_PASSWORD` 环境变量，本机调试可用 `--nacos-address 127.0.0.1:8848` 显式覆盖。
+
+> Nacos 以服务实例为注册粒度，接口清单存放在实例 metadata；网关按服务名发现实例，调用方可用 `openapi_path` 拉取完整接口定义。Nacos 不可达或注册失败只记 warning，不阻断服务启动。
 
 ---
 
@@ -552,6 +681,8 @@ deploy/docker/
 
 依赖链：`init-app-dirs` → `milvus（来自 base 编排，依赖 etcd + minio）/ minio / mongodb` → `svc-model-embedding / svc-model-reranker` → `svc-ingest / svc-query` → `frontend`。**编排依赖 base 编排的 milvus / minio / mongodb**，主编排通过 `depends_on`（`service_healthy`）等待它们就绪；两个业务服务还会等待两个模型服务 `healthy` 后再启动。
 
+另有一条可选依赖：启用 `nacos` profile 时，`svc-ingest` / `svc-query` 还会等待 `nacos` 服务 `healthy` 后再启动（对应 `common.nacos.enabled=true`，见 [3.5](#35-nacos-服务与接口注册)）。该依赖声明为 `required: false`，因此**未启用 profile 时 compose 会自动忽略它**，不影响无 Nacos 的部署方式。
+
 推荐启动步骤：
 
 ```bash
@@ -568,6 +699,8 @@ docker compose up -d svc-model-embedding svc-model-reranker
 # 3. 启动 Python AI 服务
 #    depends_on 会自动拉起 base 编排的 milvus / minio / mongodb 及 init 容器，
 #    并等待 milvus / minio / 两个模型服务 healthy 后再启动
+#    需要注册到 Nacos 时追加 nacos profile，业务服务会等 nacos healthy 后再启动：
+#      COMPOSE_PROFILES=nacos docker compose up -d svc-ingest svc-query
 docker compose up -d svc-ingest svc-query
 
 # 4. 查看状态

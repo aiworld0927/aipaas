@@ -17,6 +17,7 @@ from aipaas_common.conf.settings import load_settings
 # 配置引导：必须在导入业务模块前完成加载（唯一权威来源，失败即终止启动）
 settings = load_settings("ingest_worker")
 
+from aipaas_common.core.lifespan import AppLifespan
 from aipaas_common.core.log import logger
 from aipaas_common.utils.path_util import PROJECT_ROOT
 from aipaas_common.utils.task_utils import add_running_task, add_done_task, update_task_status, get_task_status, \
@@ -25,11 +26,19 @@ from aipaas_common.utils.task_utils import add_running_task, add_done_task, upda
 from aipaas_storage.minio_utils import get_minio_client
 from ingest_worker.graph.main import KBImportWorkflow
 
+# 生命周期编排：按注册顺序启动、逆序关闭；后续 MySQL / Elasticsearch 等组件继续 add
+app_lifespan = AppLifespan()
+if settings.common.nacos is not None and settings.common.nacos.enabled:
+    # 开关打开时才加载 Nacos 对接包，未启用环境不引入 Nacos SDK
+    from aipaas_nacos import nacos_lifespan
+    app_lifespan.add(nacos_lifespan("svc-ingest"))
+
 # 1. 创建应用
 # 标题和描述会在Swagger文档中展示
 app = FastAPI(
     title="金融标准化-导入API",
-    description="此文档是金融标准化知识库导入流程的API接口说明"
+    description="此文档是金融标准化知识库导入流程的API接口说明",
+    lifespan=app_lifespan,
 )
 
 # 2. 跨域

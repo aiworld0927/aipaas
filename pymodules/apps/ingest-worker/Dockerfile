@@ -58,6 +58,7 @@ COPY apps/ingest-worker ./apps/ingest-worker
 RUN uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation \
       -e packages/common \
       -e packages/model-clients \
+      -e packages/nacos \
       -e packages/retrieval \
       -e packages/storage \
       -e apps/ingest-worker

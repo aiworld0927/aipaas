@@ -189,6 +189,10 @@ services:
       # 下游模型服务地址跟随其端口变量，换端口时无需再改这里
       EMBEDDING_SERVICE_URL: http://svc-model-embedding:${MODEL_EMBEDDING_WORKER_PORT:-8003}
       RERANKER_SERVICE_URL: http://svc-model-reranker:${MODEL_RERANKER_WORKER_PORT:-8004}
+      # Nacos 注册中心（common.nacos.enabled 控制是否实际注册）
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
       # 监听端口：统一由 INGEST_WORKER_PORT 决定（容器监听 + 宿主机映射同源）
       INGEST_WORKER_PORT: ${INGEST_WORKER_PORT:-8001}
       TZ: Asia/Shanghai
@@ -216,6 +220,10 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_started
+      # Nacos 注册中心启动后再启动（nacos profile 未启用时 required:false 自动忽略）
+      nacos:
+        condition: service_healthy
+        required: false
     <<: [*default-restart, *default-logging]
 
   svc-query:
@@ -236,6 +244,10 @@ services:
       # 下游模型服务地址跟随其端口变量，换端口时无需再改这里
       EMBEDDING_SERVICE_URL: http://svc-model-embedding:${MODEL_EMBEDDING_WORKER_PORT:-8003}
       RERANKER_SERVICE_URL: http://svc-model-reranker:${MODEL_RERANKER_WORKER_PORT:-8004}
+      # Nacos 注册中心（common.nacos.enabled 控制是否实际注册）
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
       # 监听端口：统一由 QUERY_WORKER_PORT 决定（容器监听 + 宿主机映射同源）
       QUERY_WORKER_PORT: ${QUERY_WORKER_PORT:-8002}
       TZ: Asia/Shanghai
@@ -261,6 +273,10 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      # Nacos 注册中心启动后再启动（nacos profile 未启用时 required:false 自动忽略）
+      nacos:
+        condition: service_healthy
+        required: false
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
