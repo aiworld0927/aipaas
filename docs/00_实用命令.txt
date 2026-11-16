@@ -10,6 +10,8 @@ git pull
 docker builder prune -af        # buildkit（你那边用的）
 # 3. 重建
 docker build -t aipaas/frontend:latest .
+docker compose build frontend && docker compose up --no-deps -d frontend
+
 
 # python 单工程构建
 # 1. 仅重新构建指定服务的镜像
@@ -19,3 +21,4 @@ docker compose up --no-deps -d svc-ingest
 # docker compose build svc-ingest && docker compose up --no-deps -d svc-ingest
 
 # 模型工程
+
