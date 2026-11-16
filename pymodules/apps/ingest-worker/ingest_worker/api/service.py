@@ -11,7 +11,8 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
-
+from urllib.request import Request
+from aipaas_common.core.context import request_id_ctx_var
 from aipaas_common.conf.settings import load_settings
 
 # 配置引导：必须在导入业务模块前完成加载（唯一权威来源，失败即终止启动）
@@ -49,6 +50,15 @@ app.add_middleware(
     allow_methods=["*"],  # 允许的请求方法
     allow_headers=["*"],  # 允许的请求头
 )
+# 添加中间件，在每个请求中生成唯一的request_id
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    # 调用路径函数之前
+    request_id_ctx_var.set("ingest_" + str(uuid.uuid4()))
+    # 调用路径函数
+    response = await call_next(request)
+    # 调用路径函数之后
+    return response
 
 
 # 健康检查端点（供 Docker healthcheck / 编排系统使用）

@@ -49,15 +49,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# 添加中间件，在每个请求中生成唯一的request_id
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    # 调用路径函数之前
+    request_id_ctx_var.set("query_" + str(uuid.uuid4()))
+    # 调用路径函数
+    response = await call_next(request)
+    # 调用路径函数之后
+    return response
 
 
-@app.get("/chat.html")
-async def chat():
-    current_dir_parent_path = Path(__file__).absolute().parents[3]
-    html_path = current_dir_parent_path / "pages" / "chat.html"
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail=f"没有查询到页面，地址为：{html_path}")
-    return FileResponse(html_path)
+# @app.get("/chat.html")
+# async def chat():
+#     current_dir_parent_path = Path(__file__).absolute().parents[3]
+#     html_path = current_dir_parent_path / "pages" / "chat.html"
+#     if not html_path.exists():
+#         raise HTTPException(status_code=404, detail=f"没有查询到页面，地址为：{html_path}")
+#     return FileResponse(html_path)
 
 
 class QueryRequest(BaseModel):
@@ -74,7 +83,7 @@ async def query(request: QueryRequest):
       客户端随后订阅 /stream/{session_id}。
     - 非流式分支：直接 await run_query_graph_async，同步拿到答案。
     """
-    request_id_ctx_var.set(uuid.uuid4())
+    # request_id_ctx_var.set(uuid.uuid4())
 
     user_query = request.query.strip()
     session_id = request.session_id if request.session_id else str(uuid.uuid4())
