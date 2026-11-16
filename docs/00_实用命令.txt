@@ -22,3 +22,7 @@ docker compose up --no-deps -d svc-ingest
 
 # 模型工程
 
+
+# 停止并删除容器及关联数据卷：
+docker compose down -v
+docker compose up -d

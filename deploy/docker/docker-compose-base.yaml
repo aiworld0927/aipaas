@@ -188,10 +188,9 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
-      - ./data/postgres:/var/lib/postgresql/data
-      - ./sql/01_create_nacos_user.sql:/docker-entrypoint-initdb.d/01_create_nacos_user.sql
-      - ./sql/02_pg_schema.sql:/docker-entrypoint-initdb.d/02_pg_schema.sql
-      - ./sql/03_pg_grant.sql:/docker-entrypoint-initdb.d/03_pg_grant.sql
+      - ./nacos/sql/01_create_nacos_user.sql:/docker-entrypoint-initdb.d/01_create_nacos_user.sql
+      - ./nacos/sql/02_pg_schema.sql:/docker-entrypoint-initdb.d/02_pg_schema.sql
+      - ./nacos/sql/03_pg_grant.sql:/docker-entrypoint-initdb.d/03_pg_grant.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nacos}"]
       interval: 10s
