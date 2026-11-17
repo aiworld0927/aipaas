@@ -3,6 +3,7 @@ import inspect
 import time
 from typing import Mapping
 
+from aipaas_common.core.exceptions import BusinessError
 from aipaas_common.core.log import logger
 from aipaas_common.utils.task_utils import add_running_task, add_done_task
 
@@ -36,6 +37,10 @@ def node_log(node_name: str):
                     cost_ms = int((time.time() - start_ts) * 1000)
                     logger.info(f"[{node_name}] 节点完成，追踪ID={trace_id}，耗时={cost_ms}ms")
                     return result
+                except BusinessError as exc:
+                    # 可预期失败（如文件本身无法解析）：只打印原因，不打印堆栈
+                    logger.error(f"[{node_name}] 节点失败，追踪ID={trace_id}，原因：{exc}")
+                    raise
                 except Exception:
                     logger.exception(f"[{node_name}] 节点异常，追踪ID={trace_id}")
                     raise
@@ -55,6 +60,10 @@ def node_log(node_name: str):
                     cost_ms = int((time.time() - start_ts) * 1000)
                     logger.info(f"[{node_name}] 节点完成，追踪ID={trace_id}，耗时={cost_ms}ms")
                     return result
+                except BusinessError as exc:
+                    # 可预期失败（如文件本身无法解析）：只打印原因，不打印堆栈
+                    logger.error(f"[{node_name}] 节点失败，追踪ID={trace_id}，原因：{exc}")
+                    raise
                 except Exception:
                     logger.exception(f"[{node_name}] 节点异常，追踪ID={trace_id}")
                     raise

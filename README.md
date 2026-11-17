@@ -32,8 +32,8 @@ docker-compose -f docker-compose.yaml up -d
 ```bash
 cd pymodules
 uv sync --all-packages
-uv run uvicorn query_worker.api.service:app --port 8001      # 查询服务 http://127.0.0.1:8001
-uv run uvicorn ingest_worker.api.service:app --port 8000     # 导入服务 http://127.0.0.1:8000
+uv run uvicorn query_worker.api.app:app --port 8001      # 查询服务 http://127.0.0.1:8001
+uv run uvicorn ingest_worker.api.app:app --port 8000     # 导入服务 http://127.0.0.1:8000
 ```
 
 ### 3. 启动前端

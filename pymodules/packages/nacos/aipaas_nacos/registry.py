@@ -19,7 +19,7 @@ import asyncio
 import socket
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
-from typing import AsyncIterator, Callable
+from typing import Any, AsyncIterator, Callable, Iterable, Iterator
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -113,6 +113,26 @@ async def _server_reachable(server_address: str) -> bool:
     return False
 
 
+def _iter_route_views(routes: Iterable[Any]) -> Iterator[Any]:
+    """展开应用路由树，产出带 path/methods/summary/name 的路由视图。
+
+    FastAPI 新版本的 ``include_router`` 是惰性的：``app.routes`` 中存放的是
+    ``_IncludedRouter``，真正路由要调用 ``effective_candidates()`` 才展开。
+    这里统一展开，避免按 APIRouter 组织代码后接口元数据丢失。
+    """
+    for route in routes:
+        if isinstance(route, APIRoute):
+            yield route
+            continue
+        expand = getattr(route, "effective_candidates", None)
+        if callable(expand):
+            yield from _iter_route_views(expand())
+            continue
+        # 已展开的路由上下文（非 APIRoute，但具备同样的关键属性）
+        if hasattr(route, "path") and hasattr(route, "methods"):
+            yield route
+
+
 def collect_interface_metadata(app: FastAPI) -> dict[str, str]:
     """收集应用对外 HTTP 接口，用于写入 Nacos 实例 metadata。
 
@@ -124,8 +144,8 @@ def collect_interface_metadata(app: FastAPI) -> dict[str, str]:
     声明了 ``include_in_schema=False`` 的内部接口不会被注册。
     """
     routes: list[tuple[str, str, str, str]] = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or route.path in _EXCLUDED_PATHS:
+    for route in _iter_route_views(app.routes):
+        if route.path in _EXCLUDED_PATHS:
             continue
         if not route.include_in_schema:
             continue

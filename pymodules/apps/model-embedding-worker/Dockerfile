@@ -37,4 +37,4 @@ EXPOSE 8003
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
   CMD .venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:${MODEL_EMBEDDING_WORKER_PORT:-8003}/health')" || exit 1
 
-CMD [".venv/bin/python", "-m", "model_embedding_worker.api.service"]
+CMD [".venv/bin/python", "-m", "model_embedding_worker.api.app"]

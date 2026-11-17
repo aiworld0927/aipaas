@@ -7,9 +7,14 @@ from pathlib import Path
 import httpx
 
 from aipaas_common.conf.settings import get_settings
+from aipaas_common.core.exceptions import BusinessError
 from aipaas_common.log_decorator import node_log
 from aipaas_common.core.log import logger
 from ingest_worker.graph.state import ImportGraphState
+
+
+class MinerUParseError(BusinessError):
+    """MinerU 无法解析该文件（文件损坏、加密或格式不支持等），需修复后重传。"""
 
 
 @node_log("node_pdf_to_md")
@@ -107,8 +112,11 @@ async def _step_2_upload_and_poll(pdf_path_obj: Path) -> str:
                 logger.info(f"【任务轮询】返回ZIP包下载链接：{full_zip_url}，batch_id：{batch_id}")
                 return full_zip_url
             elif data_state == "failed":
-                err_msg = result_item.get("err_msg", "未知错误，无具体信息")
-                raise ValueError(f"【任务轮询】解析任务失败！batch_id：{batch_id}，错误信息：{err_msg}")
+                err_msg = result_item.get("err_msg") or "未知错误，无具体信息"
+                raise MinerUParseError(
+                    f"文件导入失败：MinerU 无法解析此文件，请尝试修复后重新上传"
+                    f"（文件：{pdf_path_obj.name}，batch_id：{batch_id}，MinerU 返回：{err_msg}）"
+                )
             else:
                 logger.info(f"【任务轮询】处理中... 已耗时{int(elapsed_time)}s，状态：{data_state}，batch_id：{batch_id}")
                 await asyncio.sleep(poll_interval)

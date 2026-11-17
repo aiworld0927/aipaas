@@ -50,10 +50,10 @@ pymodules/
 
 | App | 端口 | 职责 | 入口模块 | 配置命名空间 |
 |-----|------|------|----------|--------------|
-| `svc-ingest`（`apps/ingest-worker`） | 8001 | 接收文档上传 → LangGraph 流程编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus） | `ingest_worker.api.service:app` | `ingest_worker` |
-| `svc-query`（`apps/query-worker`） | 8002 | 接收用户查询 → LangGraph 流程编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出） | `query_worker.api.service:app` | `query_worker` |
-| `svc-model-embedding`（`apps/model-embedding-worker`） | 8003 | 嵌入模型独立推理服务：离线 BGE-M3（dense + sparse）/ 在线 DashScope 兼容接口（仅 dense） | `model_embedding_worker.api.service:app` | `model_embedding_worker` |
-| `svc-model-reranker`（`apps/model-reranker-worker`） | 8004 | 重排序模型独立推理服务：离线 bge-reranker-large / 在线 DashScope TextReRank | `model_reranker_worker.api.service:app` | `model_reranker_worker` |
+| `svc-ingest`（`apps/ingest-worker`） | 8001 | 接收文档上传 → LangGraph 流程编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus） | `ingest_worker.api.app:app` | `ingest_worker` |
+| `svc-query`（`apps/query-worker`） | 8002 | 接收用户查询 → LangGraph 流程编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出） | `query_worker.api.app:app` | `query_worker` |
+| `svc-model-embedding`（`apps/model-embedding-worker`） | 8003 | 嵌入模型独立推理服务：离线 BGE-M3（dense + sparse）/ 在线 DashScope 兼容接口（仅 dense） | `model_embedding_worker.api.app:app` | `model_embedding_worker` |
+| `svc-model-reranker`（`apps/model-reranker-worker`） | 8004 | 重排序模型独立推理服务：离线 bge-reranker-large / 在线 DashScope TextReRank | `model_reranker_worker.api.app:app` | `model_reranker_worker` |
 
 ### 1.3 共享能力（`packages/`）
 
@@ -167,23 +167,23 @@ uv lock && uv sync --all-packages --group cpu
 
 | 服务 | 端口 | 启动命令（在 `pymodules/` 下执行） |
 |------|------|------|
-| 嵌入模型 | 8003 | `uv run uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8003 --reload` |
-| 重排序模型 | 8004 | `uv run uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8004 --reload` |
-| 导入服务 | 8001 | `uv run uvicorn ingest_worker.api.service:app --host 0.0.0.0 --port 8001 --reload` |
-| 查询服务 | 8002 | `uv run uvicorn query_worker.api.service:app --host 0.0.0.0 --port 8002 --reload` |
+| 嵌入模型 | 8003 | `uv run uvicorn model_embedding_worker.api.app:app --host 0.0.0.0 --port 8003 --reload` |
+| 重排序模型 | 8004 | `uv run uvicorn model_reranker_worker.api.app:app --host 0.0.0.0 --port 8004 --reload` |
+| 导入服务 | 8001 | `uv run uvicorn ingest_worker.api.app:app --host 0.0.0.0 --port 8001 --reload` |
+| 查询服务 | 8002 | `uv run uvicorn query_worker.api.app:app --host 0.0.0.0 --port 8002 --reload` |
 
 ```bash
 # 终端 1：嵌入模型
-cd pymodules && uv run uvicorn model_embedding_worker.api.service:app --port 8003 --reload
+cd pymodules && uv run uvicorn model_embedding_worker.api.app:app --port 8003 --reload
 
 # 终端 2：重排序模型
-cd pymodules && uv run uvicorn model_reranker_worker.api.service:app --port 8004 --reload
+cd pymodules && uv run uvicorn model_reranker_worker.api.app:app --port 8004 --reload
 
 # 终端 3：导入服务
-cd pymodules && uv run uvicorn ingest_worker.api.service:app --port 8001 --reload
+cd pymodules && uv run uvicorn ingest_worker.api.app:app --port 8001 --reload
 
 # 终端 4：查询服务
-cd pymodules && uv run uvicorn query_worker.api.service:app --port 8002 --reload
+cd pymodules && uv run uvicorn query_worker.api.app:app --port 8002 --reload
 ```
 
 `--reload` 会监听源码变更并自动重启，开发时务必加上。各模块的接口与配置细节见 [第六章](#六四个模块独立说明)。
@@ -195,7 +195,7 @@ cd pymodules && uv run uvicorn query_worker.api.service:app --port 8002 --reload
 uv run --package svc-ingest python -m ingest_worker.graph.main
 
 # 或执行 svc-query
-uv run --package svc-query python -c "from query_worker.api.service import app; print(app.title)"
+uv run --package svc-query python -c "from query_worker.api.app import app; print(app.title)"
 ```
 
 ### 3.3 配置加载与环境变量
@@ -265,19 +265,30 @@ curl -s http://localhost:8002/health   # query-worker
 
 #### 服务入口接入方式
 
-lifespan 统一由 `AppLifespan` 编排（后续 MySQL / ES 等组件继续 `add`）：
+四个应用统一为「入口装配 / 依赖注入 / 路由 / 业务服务」分层：
+
+```
+<包>/api/
+├── app.py          # 应用入口：load_settings + lifespan + FastAPI 装配 + uvicorn.run
+├── dependencies.py # 依赖注入提供者（模型服务直接复用 service 门面，无此文件）
+├── *_service.py    # 业务服务（路由层只做协议转换）
+└── routers/        # APIRouter：健康检查与业务接口按领域合并
+```
+
+lifespan 统一由 `AppLifespan` 编排（后续 MySQL / ES 等组件继续 `add`），以 `svc-ingest` 为例：
 
 ```python
-from aipaas_common.core.lifespan import AppLifespan
+# apps/ingest-worker/ingest_worker/api/app.py
+def build_lifespan() -> AppLifespan:
+    settings = get_ingest_settings()
+    lifespan = AppLifespan()
+    if settings.common.nacos is not None and settings.common.nacos.enabled:
+        # 开关关闭时不 import aipaas_nacos，Nacos SDK 完全不加载
+        from aipaas_nacos import nacos_lifespan
 
-app_lifespan = AppLifespan()
-if settings.common.nacos is not None and settings.common.nacos.enabled:
-    # 开关关闭时不 import aipaas_nacos，Nacos SDK 完全不加载
-    from aipaas_nacos import nacos_lifespan
-
-    app_lifespan.add(nacos_lifespan("svc-ingest"))
-
-app = FastAPI(..., lifespan=app_lifespan)
+        lifespan.add(nacos_lifespan("svc-ingest"))
+    lifespan.add_hooks(shutdown=background_tasks.aclose)
+    return lifespan
 ```
 
 > 不要再用 `@app.on_event("startup")` 注册；初始化逻辑统一收敛到 lifespan，避免多组件启动/关闭顺序混乱。
@@ -286,27 +297,31 @@ app = FastAPI(..., lifespan=app_lifespan)
 
 注册时自动执行 `collect_interface_metadata(app)`：
 
-1. 遍历 `app.routes`，只取 `APIRoute`
+1. 遍历 `app.routes` 并展开 `include_router` 注册的路由（兼容 FastAPI 新版惰性路由）
 2. 跳过 `/openapi.json`、`/docs`、`/redoc` 等内置路由
 3. 跳过声明了 `include_in_schema=False` 的内部接口
 4. 每个接口写入一条 metadata：`interface.<处理函数名> = "METHODS path | summary"`
 
-接口声明示例：
+接口声明示例（在 `api/routers/*.py` 中）：
 
 ```python
-@app.post("/upload", summary="文件上传接口")
+router = APIRouter(tags=["导入任务"])
+
+@router.post("/upload", summary="文件上传接口")
 async def upload_files(...): ...
 
-@app.get("/status/{task_id}", summary="任务状态查询")
+@router.get("/status/{task_id}", summary="任务状态查询")
 async def get_task_progress(...): ...
 ```
+
+并在 `api/app.py` 的 `create_app()` 中 `app.include_router(...)`。
 
 `svc-ingest` 注册后的实例 metadata：
 
 ```
 interface_count = 4
 openapi_path = /openapi.json
-interface.health = GET /health
+interface.health = GET /health | 健康检查
 interface.get_import_page = GET /import.html
 interface.get_task_progress = GET /status/{task_id} | 任务状态查询
 interface.upload_files = POST /upload | 文件上传接口
@@ -315,9 +330,8 @@ interface.upload_files = POST /upload | 文件上传接口
 `svc-query` 注册后的实例 metadata：
 
 ```
-interface_count = 6
+interface_count = 5
 openapi_path = /openapi.json
-interface.chat = GET /chat.html
 interface.health = GET /health
 interface.clear_chat_history = DELETE /history/{session_id}
 interface.history = GET /history/{session_id}
@@ -329,9 +343,9 @@ interface.stream = GET /stream/{session_id}
 
 #### 新增接口 / 新增服务的步骤
 
-1. **新增接口**：正常用 `@app.get/post` 定义即可，重启后自动注册，无需改 Nacos 代码
+1. **新增接口**：在对应应用的 `api/routers/` 下新建或复用一个 `APIRouter`，在 `api/app.py` 中 `include_router`，重启后自动注册，无需改 Nacos 代码
 2. **隐藏接口**：加 `include_in_schema=False`，既不出现在 OpenAPI 文档，也不注册到 Nacos
-3. **新增服务**：复制 service.py 的 `AppLifespan` 装配片段，`nacos_lifespan("<部署单元名>")` 传入服务名；端口自动取模块配置 `port`
+3. **新增服务**：复制 `api/app.py` 中的 `build_lifespan` + `create_app` 装配片段，`nacos_lifespan("<部署单元名>")` 传入服务名；端口自动取模块配置 `port`
 4. 确认该环境 `common.nacos.enabled=true`，且 Nacos 开启鉴权时 `username/password` 正确
 
 #### 验证
@@ -750,7 +764,7 @@ docker compose down
 
 ```bash
 # 裸机 / 容器通用
-INGEST_WORKER_PORT=9000 .venv/bin/python -m ingest_worker.api.service
+INGEST_WORKER_PORT=9000 .venv/bin/python -m ingest_worker.api.app
 
 # compose：改 deploy/docker/.env，容器监听、宿主机映射、服务间调用地址会一起变
 INGEST_WORKER_PORT=9000 docker-compose up -d
@@ -766,13 +780,13 @@ INGEST_WORKER_PORT=9000 docker-compose up -d
 
 ### 6.1 ingest-worker（端口 8001）
 
-**职责**：接收文档上传 → LangGraph 编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus）；入口 `ingest_worker.api.service:app`。
+**职责**：接收文档上传 → LangGraph 编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus）；入口 `ingest_worker.api.app:app`。
 
 **快速启动**：
 
 ```bash
 cd pymodules
-uv run uvicorn ingest_worker.api.service:app --host 0.0.0.0 --port 8001 --reload
+uv run uvicorn ingest_worker.api.app:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 **接口清单**：
@@ -810,13 +824,13 @@ curl -s http://localhost:8001/status/<task_id>
 
 ### 6.2 query-worker（端口 8002）
 
-**职责**：接收用户查询 → LangGraph 编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出）；入口 `query_worker.api.service:app`。
+**职责**：接收用户查询 → LangGraph 编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出）；入口 `query_worker.api.app:app`。
 
 **快速启动**：
 
 ```bash
 cd pymodules
-uv run uvicorn query_worker.api.service:app --host 0.0.0.0 --port 8002 --reload
+uv run uvicorn query_worker.api.app:app --host 0.0.0.0 --port 8002 --reload
 ```
 
 **接口清单**：
@@ -867,15 +881,15 @@ curl -s -X DELETE http://localhost:8002/history/demo-1
 
 ### 6.3 model-embedding-worker（端口 8003）
 
-**职责**：嵌入模型独立推理服务——离线 BGE-M3（dense + sparse）或在线 DashScope / OpenAI 兼容接口（仅 dense）；入口 `model_embedding_worker.api.service:app`。
+**职责**：嵌入模型独立推理服务——离线 BGE-M3（dense + sparse）或在线 DashScope / OpenAI 兼容接口（仅 dense）；入口 `model_embedding_worker.api.app:app`。
 
 **快速启动**：
 
 ```bash
 cd pymodules
-uv run uvicorn model_embedding_worker.api.service:app --host 0.0.0.0 --port 8003 --reload
+uv run uvicorn model_embedding_worker.api.app:app --host 0.0.0.0 --port 8003 --reload
 # 或沿用配置中的 host/port
-uv run python -m model_embedding_worker.api.service
+uv run python -m model_embedding_worker.api.app
 ```
 
 **接口清单**：
@@ -922,15 +936,15 @@ curl -s -X POST http://localhost:8003/v1/embeddings \
 
 ### 6.4 model-reranker-worker（端口 8004）
 
-**职责**：重排序模型独立推理服务——离线 bge-reranker-large 或在线 DashScope `TextReRank`；入口 `model_reranker_worker.api.service:app`。
+**职责**：重排序模型独立推理服务——离线 bge-reranker-large 或在线 DashScope `TextReRank`；入口 `model_reranker_worker.api.app:app`。
 
 **快速启动**：
 
 ```bash
 cd pymodules
-uv run uvicorn model_reranker_worker.api.service:app --host 0.0.0.0 --port 8004 --reload
+uv run uvicorn model_reranker_worker.api.app:app --host 0.0.0.0 --port 8004 --reload
 # 或沿用配置中的 host/port
-uv run python -m model_reranker_worker.api.service
+uv run python -m model_reranker_worker.api.app
 ```
 
 **接口清单**：
@@ -987,7 +1001,9 @@ apps/model-embedding-worker/            # 端口 8003
    ├─ model_service.py                  # 离线后端：BGE-M3 单例 + dense/sparse 编码
    ├─ online_service.py                 # 在线后端：OpenAI 兼容接口（仅 dense，sparse 预留）
    ├─ service.py                        # 后端门面：按 model_embedding_worker.backend 分派
-   └─ api/service.py                    # FastAPI 接口（全异步）
+   └─ api/
+      ├─ app.py                        # 应用入口：生命周期 + FastAPI 装配 + uvicorn
+      └─ routers/                      # 健康检查与推理接口
 
 apps/model-reranker-worker/             # 端口 8004
 ├─ pyproject.toml
@@ -996,7 +1012,9 @@ apps/model-reranker-worker/             # 端口 8004
    ├─ model_service.py                  # 离线后端：FlagReranker 单例 + 归一化打分
    ├─ online_service.py                 # 在线后端：DashScope TextReRank
    ├─ service.py                        # 后端门面：按 model_reranker_worker.backend 分派
-   └─ api/service.py                    # FastAPI 接口（全异步）
+   └─ api/
+      ├─ app.py                        # 应用入口：生命周期 + FastAPI 装配 + uvicorn
+      └─ routers/                      # 健康检查与推理接口
 ```
 
 两个模块的配置 schema 在 `packages/common/aipaas_common/conf/schemas/`，默认值与覆盖在 `configs/aipaas_config.*.yaml`。
@@ -1300,7 +1318,7 @@ curl -s http://localhost:8004/ready    # 重排序模型 → 200 且含 backend 
 ```bash
 cd pymodules
 export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome
-uv run uvicorn ingest_worker.api.service:app --port 8001 &
+uv run uvicorn ingest_worker.api.app:app --port 8001 &
 
 # 查看日志文件是否按预期命名（前缀由模块名推导）
 ls -la logs/ingest-worker_*.log
@@ -1433,10 +1451,10 @@ uv lock --check                             # 校验锁文件
 export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome   # 配置包 + 环境覆盖层
 
 # ---------- 开发启动（先模型，后业务） ----------
-uv run uvicorn model_embedding_worker.api.service:app --port 8003 --reload
-uv run uvicorn model_reranker_worker.api.service:app  --port 8004 --reload
-uv run uvicorn ingest_worker.api.service:app --port 8001 --reload
-uv run uvicorn query_worker.api.service:app  --port 8002 --reload
+uv run uvicorn model_embedding_worker.api.app:app --port 8003 --reload
+uv run uvicorn model_reranker_worker.api.app:app  --port 8004 --reload
+uv run uvicorn ingest_worker.api.app:app --port 8001 --reload
+uv run uvicorn query_worker.api.app:app  --port 8002 --reload
 
 # ---------- 依赖变更 ----------
 uv add    --package aipaas-retrieval elasticsearch>=8.0.0

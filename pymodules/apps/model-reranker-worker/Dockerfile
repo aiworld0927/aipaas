@@ -37,4 +37,4 @@ EXPOSE 8004
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
   CMD .venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:${MODEL_RERANKER_WORKER_PORT:-8004}/health')" || exit 1
 
-CMD [".venv/bin/python", "-m", "model_reranker_worker.api.service"]
+CMD [".venv/bin/python", "-m", "model_reranker_worker.api.app"]

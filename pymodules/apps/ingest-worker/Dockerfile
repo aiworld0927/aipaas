@@ -93,4 +93,4 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD .venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:${INGEST_WORKER_PORT:-8001}/health')" || exit 1
 
-CMD [".venv/bin/python", "-m", "ingest_worker.api.service"]
+CMD [".venv/bin/python", "-m", "ingest_worker.api.app"]

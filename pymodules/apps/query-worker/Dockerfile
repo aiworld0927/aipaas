@@ -94,4 +94,4 @@ EXPOSE 8002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD .venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:${QUERY_WORKER_PORT:-8002}/health')" || exit 1
 
-CMD [".venv/bin/python", "-m", "query_worker.api.service"]
+CMD [".venv/bin/python", "-m", "query_worker.api.app"]
