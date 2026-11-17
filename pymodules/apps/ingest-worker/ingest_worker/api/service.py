@@ -24,7 +24,7 @@ from aipaas_common.utils.path_util import PROJECT_ROOT
 from aipaas_common.utils.task_utils import add_running_task, add_done_task, update_task_status, get_task_status, \
     get_done_task_list, \
     get_running_task_list
-from aipaas_storage.minio_utils import get_minio_client
+from aipaas_storage.minio_utils import aupload_file_to_minio
 from ingest_worker.graph.main import KBImportWorkflow
 
 # 生命周期编排：按注册顺序启动、逆序关闭；后续 MySQL / Elasticsearch 等组件继续 add
@@ -169,25 +169,16 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 out_file.write(chunk)
         logger.info(f"[{task_id}] 文件已保存至本地，路径：{import_file_path}")
 
-        # 6. 将本地文件上传至MinIO对象存储，做持久化保存
+        # 6. 将本地文件上传至MinIO对象存储，做持久化保存（公共方法，见 aipaas_storage.minio_utils）
         # 构建MinIO中的文件对象名：pdf_files/YYYYMMDD/文件名（按日期分层，和本地一致）
-        minio_object_name = f"pdf_files/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
+        minio_object_name = f"pdf_files/{date_time_dir}/{file.filename}"
         try:
-            # 获取MinIO客户端实例
-            minio_client = get_minio_client()
-
-            # 从环境变量获取MinIO的桶名配置
-            minio_bucket_name = settings.common.minio.bucket_name
-
-            # 本地文件上传至MinIO（同步driver → to_thread 包一层）
-            await asyncio.to_thread(
-                minio_client.fput_object,
-                bucket_name=minio_bucket_name,
-                object_name=minio_object_name,
+            await aupload_file_to_minio(
                 file_path=import_file_path,
-                content_type=str(file.content_type)  # 传递文件原始MIME类型
+                object_name=minio_object_name,
+                content_type=str(file.content_type),  # 传递文件原始MIME类型
             )
-            logger.info(f"[{task_id}] 文件已成功上传至MinIO，桶名：{minio_bucket_name}，对象名：{minio_object_name}")
+            logger.info(f"[{task_id}] 文件已成功上传至MinIO，对象名：{minio_object_name}")
         except Exception as e:
             # MinIO上传失败，记录警告日志（不中断后续流程，本地文件仍可继续处理）
             logger.warning(f"[{task_id}] 文件上传MinIO失败，将继续执行本地处理流程，异常信息：{str(e)}", exc_info=True)

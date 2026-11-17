@@ -1,6 +1,8 @@
 # 导入Python内置模块
+import asyncio
 import os
 import json
+from pathlib import Path
 
 # 导入MinIO官方Python SDK核心类（用于MinIO对象存储的客户端操作）
 from minio import Minio
@@ -94,3 +96,32 @@ def get_minio_client() -> Minio:
 
     # 复用全局客户端实例，直接返回
     return _minio_client
+
+
+async def aupload_file_to_minio(
+    file_path: str | Path,
+    object_name: str,
+    content_type: str | None = None,
+    bucket_name: str | None = None,
+) -> str:
+    """
+    异步将本地文件上传至 MinIO（供各 worker 共用）
+
+    :param file_path: 本地文件的绝对/相对路径
+    :param object_name: MinIO 中的对象名（可含目录前缀，如 pdf_files/YYYYMMDD/a.pdf）
+    :param content_type: 文件 MIME 类型，缺省由 MinIO 自行推断
+    :param bucket_name: 目标桶名，缺省取配置 common.minio.bucket_name
+    :return: 实际上传的对象名
+    :raises Exception: 上传失败时不吞异常，由调用方决定是否中断流程
+    """
+    # MinIO SDK 为同步 driver，统一用 to_thread 转成异步，避免阻塞事件循环
+    client = await asyncio.to_thread(get_minio_client)
+    bucket = bucket_name or get_settings().common.minio.bucket_name
+    await asyncio.to_thread(
+        client.fput_object,
+        bucket_name=bucket,
+        object_name=object_name,
+        file_path=str(file_path),
+        content_type=content_type,
+    )
+    return object_name

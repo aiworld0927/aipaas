@@ -33,6 +33,12 @@ x-logging: &default-logging
 x-restart: &default-restart
   restart: unless-stopped
 
+# ---------- 资源限制说明（各服务 deploy.resources）----------
+# limits        硬上限，docker compose 单机模式下直接落为 cgroup 限制（cpus 单位：核心数，可为小数）
+# reservations  尽力保证：memory 落为 memory-reservation（内存紧张时才回收），cpus 仅 swarm 调度使用、单机不生效
+# 取值依据：8 核 / 8G 宿主机，按实测常驻占用留 2~4 倍余量；可选组件按各自 JVM/服务特征设定
+
+
 services:
   # =========================================================================
   # 层 0：一次性初始化 —— 预创建中间件数据卷目录（跑完即退出）
@@ -70,6 +76,15 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    # etcd：只存 Milvus 元数据，实测常驻约 43MB
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
     <<: [*default-restart, *default-logging]
 
   minio:
@@ -93,6 +108,15 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    # MinIO：对象存储，实测常驻约 112MB
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
     <<: [*default-restart, *default-logging]
 
   milvus:
@@ -126,6 +150,15 @@ services:
         condition: service_started
       minio:
         condition: service_started
+    # Milvus：向量检索主力，实测常驻约 206MB，检索/构建索引时内存抬升明显
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.2'
+          memory: 512M
     <<: [*default-restart, *default-logging]
 
   mongodb:
@@ -150,6 +183,15 @@ services:
     depends_on:
       init-volumes:
         condition: service_completed_successfully
+    # MongoDB：任务/历史记录，实测常驻约 100MB
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
@@ -170,6 +212,15 @@ services:
         condition: service_completed_successfully
       milvus:
         condition: service_started
+    # Attu：Milvus 管理 UI，实测常驻约 56MB
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
@@ -197,6 +248,15 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    # PostgreSQL：Nacos 主库，实测常驻约 28MB
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
     <<: [*default-restart, *default-logging]
   
   nacos:
@@ -244,11 +304,14 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+    # Nacos：注册/配置中心，JVM_XMX=512m → 实测常驻约 750MB（堆外+元空间），故限额 768M
     deploy:
       resources:
         limits:
+          cpus: '1.0'
           memory: 768M
         reservations:
+          cpus: '0.1'
           memory: 256M
     <<: [*default-restart, *default-logging]
 
@@ -270,6 +333,15 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    # Redis：缓存，轻量组件
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
@@ -291,6 +363,15 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    # RocketMQ NameServer：JVM_XMX=256m，限额留出堆外开销
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
     <<: [*default-restart, *default-logging]
 
   rocketmq-broker:
@@ -308,6 +389,15 @@ services:
     depends_on:
       rocketmq-namesrv:
         condition: service_healthy
+    # RocketMQ Broker：JVM_XMX=512m，限额 1G 覆盖堆外与页缓存
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.2'
+          memory: 256M
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
@@ -348,7 +438,12 @@ services:
       start_period: 300s
     deploy:
       resources:
+        # vLLM 只限 CPU：内存占用与模型/并发强相关，硬限会直接 OOM；
+        # 显存侧由 --gpu-memory-utilization 控制，不做 memory 上限
+        limits:
+          cpus: '4.0'
         reservations:
+          cpus: '1.0'
           devices:
             - driver: nvidia
               count: 1

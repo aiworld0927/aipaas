@@ -35,3 +35,9 @@ docker build --network host \
 # 停止并删除容器及关联数据卷：
 docker compose down -v
 docker compose up -d
+
+
+docker compose stats
+docker compose stats --no-stream
+# 输出一次当前资源使用
+docker stats --no-stream

@@ -38,6 +38,11 @@ x-logging: &default-logging
 x-restart: &default-restart
   restart: unless-stopped
 
+# ---------- 资源限制说明（各服务 deploy.resources）----------
+# limits        硬上限，docker compose 单机模式下直接落为 cgroup 限制（cpus 单位：核心数，可为小数）
+# reservations  尽力保证：memory 落为 memory-reservation（内存紧张时才回收），cpus 仅 swarm 调度使用、单机不生效
+# 取值依据：8 核 / 8G 宿主机；模型服务加载 BGE 模型峰值高，单独放宽；其余按最小可用配置
+
 services:
 
   # =========================================================================
@@ -108,14 +113,23 @@ services:
     depends_on:
       init-app-dirs:
         condition: service_completed_successfully
-    # GPU 部署时按需放开（需已安装 nvidia-container-toolkit）
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    # 模型服务：离线加载 BGE-M3（峰值内存高），限额单独放宽
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'          # 最多 4 个 CPU 核心
+          memory: 4G           # 最多 4GB 内存
+        reservations:
+          cpus: '1.0'          # 软性预留，尽力保证
+          memory: 1G
+    # GPU 部署时在上面的 deploy 里补 devices（需已安装 nvidia-container-toolkit）：
+    #   reservations:
+    #     cpus: '1.0'
+    #     memory: 1G
+    #     devices:
+    #       - driver: nvidia
+    #         count: 1
+    #         capabilities: [gpu]
     <<: [*default-restart, *default-logging]
 
   svc-model-reranker:
@@ -156,14 +170,23 @@ services:
     depends_on:
       init-app-dirs:
         condition: service_completed_successfully
-    # GPU 部署时按需放开（需已安装 nvidia-container-toolkit）
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    # 模型服务：离线加载 bge-reranker-large（峰值内存高），限额单独放宽
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'          # 最多 4 个 CPU 核心
+          memory: 4G           # 最多 4GB 内存
+        reservations:
+          cpus: '1.0'          # 软性预留，尽力保证
+          memory: 1G
+    # GPU 部署时在上面的 deploy 里补 devices（需已安装 nvidia-container-toolkit）：
+    #   reservations:
+    #     cpus: '1.0'
+    #     memory: 1G
+    #     devices:
+    #       - driver: nvidia
+    #         count: 1
+    #         capabilities: [gpu]
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
@@ -224,6 +247,15 @@ services:
       nacos:
         condition: service_healthy
         required: false
+    # 业务服务：最小可用配置（实测常驻约 270MB，留出文档解析峰值余量）
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 256M
     <<: [*default-restart, *default-logging]
 
   svc-query:
@@ -277,6 +309,15 @@ services:
       nacos:
         condition: service_healthy
         required: false
+    # 业务服务：最小可用配置（实测常驻约 300MB）
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 256M
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
@@ -299,6 +340,15 @@ services:
         condition: service_healthy
       svc-query:
         condition: service_healthy
+    # 静态站点 + 反向代理：最小配置（实测常驻约 15MB）
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
     <<: [*default-restart, *default-logging]
 
 # =============================================================================
