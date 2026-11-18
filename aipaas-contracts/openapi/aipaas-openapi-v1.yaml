@@ -1,0 +1,4296 @@
+openapi: 3.1.0
+
+info:
+  title: AIPaaS 金融标准 RAG 平台 API
+  summary: P0（第 1 期 · 引擎奠基）冻结契约，覆盖 10 个功能域、44 项 P0 功能。
+  version: 1.1.0-p0
+  description: |
+    # 契约定位
+    本文件是 AIPaaS P0 阶段跨语言接口的单一事实来源（Single Source of Truth）。
+    Java（`javaplat/`）与 Python（`pymodules/`）实现、Web（`web/`）调用、Mock（`aipaas-contracts/mock/`）
+    均以本文件为准。契约冻结后，任何破坏性变更必须走版本兼容流程（见 `VERSIONING.md` 与
+    `x-compatibility-policy`）。
+
+    # 统一约定
+    - **BasePath**：业务接口统一为 `/api/v1`；`/healthz`、`/readyz` 为基础设施探针，不带前缀、不包信封。
+    - **响应信封**：`{code, message, data, traceId}`。成功 `code = "OK"`；失败 `code` 采用分段错误码。
+    - **错误码分段**：`AUTH.*` / `PERM.*` / `PARAM.*` / `BIZ.*` / `SYS.*` / `RATE.*`，与 HTTP 状态码映射见
+      `x-error-code-policy`。
+    - **鉴权**：`Authorization: Bearer <JWT>`。P0 仅账号密码登录（#166），SSO 属 P1，不实现。
+    - **链路标识**：请求可带 `X-Request-Id`；服务端始终回写 `X-Trace-Id`，并与信封 `traceId` 一致。
+    - **分页**：`page` 从 1 开始，`pageSize` 默认 20、最大 100；响应 `data = {items,total,page,pageSize}`。
+    - **幂等**：写接口以 `Idempotency-Key` 去重，24h 内同 key + 同请求体返回首次结果；
+      同 key 不同请求体返回 409 `BIZ.CONFLICT`。需要幂等的接口标记 `x-idempotency: required`。
+    - **SSE**：`text/event-stream`，事件名固定为 `meta` / `delta` / `citation` / `done` / `error` / `ping`；
+      每条事件 `data:` 为单行 JSON；流结束以 `done` 或 `error` 收尾。
+    - **多租户**：所有领域模型自 P0 起携带 `tenantId`（默认租户 `default`），为 P1 #131 预留。
+    - **时间**：RFC 3339 UTC 字符串；金额/大小类字段使用整数（字节）。
+
+    # 版本与兼容策略
+    - URL 主版本：`/api/v1`。新增可选字段、新增接口、新增错误码分段内码为**兼容变更**。
+    - 删除/重命名字段、收紧校验、修改语义、删除枚举值为**破坏性变更**：
+      至少提前 **2 个次版本**通过 `Deprecation` 与 `Sunset` 响应头告警（对齐 NFR #31）。
+    - 客户端必须容忍未知枚举值与未知响应字段（前向兼容），服务端不得依赖客户端忽略行为。
+    - P1/P2 字段在本契约中以 `nullable` + `x-reserved-for` 声明，P0 不参与业务计算。
+
+    # P0 明确不建设
+    - 统一 API 网关（Spring Cloud Gateway、分布式限流、灰度路由）→ P1 #204–#210；
+      P0 仅由反向代理 + Resilience4j 提供最小限流/熔断/降级。
+    - 混合检索（BM25）、Cross-Encoder 重排、多轮对话、SSO、多租户隔离、定时调度（XXL-JOB）→ P1。
+    - P0 任务调度仅事件驱动队列；`/ingest/tasks` 为幂等状态机，不做 cron。
+  contact:
+    name: AIPaaS 架构组
+    url: https://aipaas.local/docs/architecture/01-p0-api-review.md
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  x-contract-status: frozen
+  x-p0-feature-count: 44
+  x-p0-domains:
+    - 数据接入与解析
+    - 知识构建与索引
+    - 检索引擎
+    - 生成与推理
+    - 知识治理
+    - 安全与合规
+    - 可观测与质量评估
+    - 平台与管理
+    - 用户界面与体验
+    - 模型服务
+  x-compatibility-policy:
+    breaking-change-notice-versions: 2
+    deprecation-headers: [Deprecation, Sunset, Link]
+    unknown-enum-tolerance: required
+    additive-change-compatible: true
+  x-error-code-policy:
+    pattern: '^(AUTH|PERM|PARAM|BIZ|SYS|RATE)\.[A-Z0-9_]+$'
+    http-mapping:
+      AUTH: 401
+      PERM: 403
+      PARAM: 400
+      BIZ: 404/409/422
+      SYS: 500/501/503
+      RATE: 429
+
+servers:
+  - url: https://localhost:18443/api/v1
+    description: P0 统一 HTTPS 入口（Nginx 终止 TLS，Java 平台统一鉴权与安全检查）
+  - url: http://localhost:4010/api/v1
+    description: 契约 Mock Server（仅用于前端/后端独立联调，不承载真实数据）
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: 系统
+    description: 探针、契约元信息（不承载业务）
+  - name: 数据接入与解析
+    description: 上传、接入任务、清洗、PDF/Word/Excel/Markdown 解析（P0 #1/#10/#14/#18/#19/#20/#21/#252）
+  - name: 知识构建与索引
+    description: 分块、向量化、索引构建、元数据标注（P0 #36/#37/#44/#49/#57/#404）
+  - name: 检索引擎
+    description: 查询理解、向量召回、权限过滤（P0 #63/#70/#88）
+  - name: 生成与推理
+    description: LLM 调用、Prompt、幻觉抑制、拒答、格式化、流式、标准简介、标准问答（P0 #98/#103/#106/#108/#110/#113/#114/#405/#407）
+  - name: 知识治理
+    description: 知识库/文档管理、权限、审计、条目化导出（P0 #130/#134/#139/#144/#406）
+  - name: 安全与合规
+    description: 身份认证、传输/存储加密态势、双向内容审核、Prompt 注入防护（P0 #153/#154/#156/#157/#159/#166）
+  - name: 可观测与质量评估
+    description: 请求日志、全链路 Trace、基础指标（P0 #173/#175/#177）
+  - name: 平台与管理
+    description: 用户、系统配置、管理总览（P0 #193）
+  - name: 用户界面与体验
+    description: 对话界面、知识库界面所需配置与能力选择器（P0 #242/#246/#402）
+  - name: 模型服务
+    description: LLM 提供商、模型调用、Embedding 服务（P0 #98/#44）
+
+x-owner-map:
+  java: [系统, 数据接入与解析, 知识治理, 安全与合规, 可观测与质量评估, 平台与管理, 用户界面与体验]
+  python: [知识构建与索引, 检索引擎, 生成与推理, 模型服务]
+  web: [用户界面与体验]
+  note: Java 对外统一暴露 /api/v1；Python 仅在直连调试端口暴露同名契约，生产流量由 Java 反向代理。
+
+paths:
+
+  # =========================================================================
+  # 系统
+  # =========================================================================
+  /healthz:
+    get:
+      tags: [系统]
+      operationId: healthz
+      summary: 存活探针
+      description: 返回 200 即进程存活。不鉴权、不包信封、不写审计。
+      security: []
+      x-owner: all
+      responses:
+        '200':
+          description: 进程存活
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, const: UP}
+  /readyz:
+    get:
+      tags: [系统]
+      operationId: readyz
+      summary: 就绪探针
+      description: 返回 200 表示可接收流量；依赖不可用时返回 503 并列出 checks。
+      security: []
+      x-owner: all
+      responses:
+        '200':
+          description: 就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: 未就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+  /system/info:
+    get:
+      tags: [系统]
+      operationId: getSystemInfo
+      summary: 契约与运行时元信息
+      x-owner: java
+      x-p0-feature: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemInfoResponse'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  # =========================================================================
+  # 安全与合规（认证）
+  # =========================================================================
+  /auth/login:
+    post:
+      tags: [安全与合规]
+      operationId: login
+      summary: 账号密码登录（P0 #166）
+      description: |
+        用户名密码认证，密码强度校验，失败计数与锁定基线；认证失败写审计。
+        会话超时由 JWT `exp` 控制（P0 基线 30 分钟）。SSO/OAuth2 属 P1，不在本契约。
+      security: []
+      x-owner: java
+      x-p0-feature: ['#166']
+      x-permission: none
+      x-audit: {required: true, actions: [auth.login, auth.login.failed]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LoginResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /auth/refresh:
+    post:
+      tags: [安全与合规]
+      operationId: refreshToken
+      summary: 刷新访问令牌并轮换刷新令牌（P0 #166）
+      description: 刷新令牌一次性使用；轮换后旧令牌立即失效。绝对会话期默认 7 天，访问令牌默认 30 分钟。
+      security: []
+      x-owner: java
+      x-p0-feature: ['#166']
+      x-permission: none
+      x-audit: {required: true, actions: [auth.token.refresh, auth.token.refresh.failed]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TokenRefreshRequest'}
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LoginResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /auth/logout:
+    post:
+      tags: [安全与合规]
+      operationId: logout
+      summary: 注销会话
+      x-owner: java
+      x-p0-feature: ['#166']
+      x-permission: authenticated
+      x-audit: {required: true, actions: [auth.logout]}
+      responses:
+        '200': {$ref: '#/components/responses/Ok'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /auth/me:
+    get:
+      tags: [安全与合规]
+      operationId: getCurrentUser
+      summary: 当前用户与权限
+      x-owner: java
+      x-p0-feature: ['#166', '#139']
+      x-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CurrentUserResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /permissions:
+    get:
+      tags: [知识治理]
+      operationId: listPermissions
+      summary: 权限点清单（角色配置界面用）
+      x-owner: java
+      x-p0-feature: ['#139']
+      x-permission: role:read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PermissionListResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /roles:
+    get:
+      tags: [知识治理]
+      operationId: listRoles
+      summary: 角色列表
+      x-owner: java
+      x-p0-feature: ['#139']
+      x-permission: role:read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RolePageResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [知识治理]
+      operationId: createRole
+      summary: 创建角色
+      x-owner: java
+      x-p0-feature: ['#139']
+      x-permission: role:write
+      x-audit: {required: true, actions: [role.create]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RoleCreateRequest'}
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RoleResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /roles/{roleId}/permissions:
+    put:
+      tags: [知识治理]
+      operationId: updateRolePermissions
+      summary: 更新角色-权限矩阵（≤1 分钟生效）
+      x-owner: java
+      x-p0-feature: ['#139']
+      x-permission: role:write
+      x-audit: {required: true, actions: [role.permission.update]}
+      parameters:
+        - $ref: '#/components/parameters/RoleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RolePermissionUpdateRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RoleResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  # =========================================================================
+  # 数据接入与解析
+  # =========================================================================
+  /knowledge-bases:
+    get:
+      tags: [知识治理]
+      operationId: listKnowledgeBases
+      summary: 知识库列表与状态（P0 #130）
+      x-owner: java
+      x-p0-feature: ['#130']
+      x-permission: kb:read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: keyword
+          in: query
+          schema: {type: string, maxLength: 100}
+        - name: domain
+          in: query
+          description: 标准域（P0 精确匹配）
+          schema: {type: string, nullable: true}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KnowledgeBasePageResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [知识治理]
+      operationId: createKnowledgeBase
+      summary: 创建知识库（P0 #130）
+      x-owner: java
+      x-p0-feature: ['#130']
+      x-permission: kb:write
+      x-audit: {required: true, actions: [kb.create]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KnowledgeBaseCreateRequest'}
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KnowledgeBaseResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /knowledge-bases/{kbId}:
+    get:
+      tags: [知识治理]
+      operationId: getKnowledgeBase
+      summary: 知识库详情
+      x-owner: java
+      x-p0-feature: ['#130']
+      x-permission: kb:read
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KnowledgeBaseResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [知识治理]
+      operationId: updateKnowledgeBase
+      summary: 重命名/修改知识库配置
+      x-owner: java
+      x-p0-feature: ['#130']
+      x-permission: kb:write
+      x-audit: {required: true, actions: [kb.update]}
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KnowledgeBaseUpdateRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KnowledgeBaseResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [知识治理]
+      operationId: deleteKnowledgeBase
+      summary: 删除知识库（不影响其他库）
+      x-owner: java
+      x-p0-feature: ['#130']
+      x-permission: kb:write
+      x-audit: {required: true, actions: [kb.delete]}
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+      responses:
+        '200': {$ref: '#/components/responses/Ok'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /knowledge-bases/{kbId}/documents:
+    post:
+      tags: [数据接入与解析]
+      operationId: uploadDocument
+      summary: 上传金融标准文档（P0 #1 / #252）
+      description: |
+        支持 pdf/doc/docx/xls/xlsx/ppt/pptx/md/txt，首期 PDF 为主。服务端做格式与大小校验、
+        上传权限校验（实时权限，越权拦截并告警），保存对象存储后立即创建接入任务。
+        大文件（≥100MB）走分片/流式上传，不中断。
+      x-owner: java
+      x-p0-feature: ['#1', '#252']
+      x-permission: doc:upload
+      x-audit: {required: true, actions: [doc.upload, permission.denied]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 单文件，≤ 100MB（P0 上限；P1 #253 扩展 GB 级）
+                standardNo:
+                  type: string
+                  description: 可选，标准编号（如 JR/T 0088）
+                autoParse:
+                  type: boolean
+                  default: true
+                  description: 上传后是否自动进入解析流程（默认 true）
+      responses:
+        '202':
+          description: 已接收并创建接入任务
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentUploadResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+  /knowledge-bases/{kbId}/documents/uploads:init:
+    post:
+      tags: [数据接入与解析]
+      operationId: initDocumentUpload
+      summary: 分片上传初始化（P0 #1；P1 #253 断点续传复用同一路径）
+      description: |
+        客户端提交 fileName、sizeBytes、fileHash（SHA-256）。服务端按 fileHash 幂等：
+        已存在同哈希文档时返回 duplicate=true 与 documentId；存在未完成会话时返回
+        receivedParts/missingParts/offset 以支持续传。字段与路径在 P1 #253 保持不变。
+      x-owner: java
+      x-p0-feature: ['#1']
+      x-permission: doc:upload
+      x-audit: {required: true, actions: [doc.upload]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DocumentUploadInitRequest'}
+      responses:
+        '200':
+          description: 会话已创建或复用
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentUploadSessionResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+  /knowledge-bases/{kbId}/documents/uploads/{uploadId}:
+    get:
+      tags: [数据接入与解析]
+      operationId: getDocumentUpload
+      summary: 查询分片进度与缺失分片（P0 #1；P1 #253 断点续传）
+      x-owner: java
+      x-p0-feature: ['#1']
+      x-permission: doc:upload
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+        - $ref: '#/components/parameters/UploadId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentUploadSessionResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /knowledge-bases/{kbId}/documents/uploads/{uploadId}/parts/{partNo}:
+    put:
+      tags: [数据接入与解析]
+      operationId: uploadDocumentPart
+      summary: 上传单个分片（P0 #1；P1 #253 断点续传）
+      description: |
+        原始二进制分片，单片 5MB（末片按实际大小）。offset 为预留字段，用于 P1 续传校验；
+        partNo 天然幂等，重复上传覆盖同一分片。完成时统一写审计，避免分片级审计放大。
+      x-owner: java
+      x-p0-feature: ['#1']
+      x-permission: doc:upload
+      x-audit: {required: false, reason: 分片按 partNo 幂等，合并完成时统一留痕}
+      x-idempotency: optional
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+        - $ref: '#/components/parameters/UploadId'
+        - $ref: '#/components/parameters/PartNo'
+        - name: offset
+          in: query
+          required: false
+          description: P1 #253 续传预留，分片起始字节偏移
+          schema: {type: integer, minimum: 0}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200':
+          description: 分片已接收
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentUploadSessionResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /knowledge-bases/{kbId}/documents/uploads/{uploadId}:complete:
+    post:
+      tags: [数据接入与解析]
+      operationId: completeDocumentUpload
+      summary: 合并分片并创建解析任务（P0 #1）
+      description: 校验缺失分片、大小与 SHA-256；合并为单一 AES-256 密文对象后创建 ingest 任务。
+      x-owner: java
+      x-p0-feature: ['#1']
+      x-permission: doc:upload
+      x-audit: {required: true, actions: [doc.upload]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+        - $ref: '#/components/parameters/UploadId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 已合并并创建接入任务
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentUploadResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /documents:
+    get:
+      tags: [数据接入与解析]
+      operationId: listDocuments
+      summary: 文档列表/分页搜索（P0 #134）
+      x-owner: java
+      x-p0-feature: ['#134']
+      x-permission: doc:read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: kbId
+          in: query
+          required: false
+          schema: {type: string}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/DocumentStatus'}
+        - name: keyword
+          in: query
+          schema: {type: string, maxLength: 100}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentPageResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /documents/{documentId}:
+    get:
+      tags: [数据接入与解析]
+      operationId: getDocument
+      summary: 文档详情与状态（解析中/已入库/失败）
+      x-owner: java
+      x-p0-feature: ['#134']
+      x-permission: doc:read
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [数据接入与解析]
+      operationId: deleteDocument
+      summary: 删除文档并同步清理索引（删除即时生效）
+      x-owner: java
+      x-p0-feature: ['#134']
+      x-permission: doc:delete
+      x-audit: {required: true, actions: [doc.delete]}
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': {$ref: '#/components/responses/Ok'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /documents/{documentId}:reparse:
+    post:
+      tags: [数据接入与解析]
+      operationId: reparseDocument
+      summary: 重新解析（解析失败重试入口，≤2 次）
+      x-owner: python
+      x-p0-feature: ['#18', '#19', '#20', '#21']
+      x-permission: doc:write
+      x-audit: {required: true, actions: [doc.reparse]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 已重新排队
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IngestTaskResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /documents/{documentId}/parse-result:
+    get:
+      tags: [数据接入与解析]
+      operationId: getParseResult
+      summary: 解析产物（章节树/表格/条款锚点/失败标识）
+      x-owner: python
+      x-p0-feature: ['#18', '#19', '#20', '#21']
+      x-permission: doc:read
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ParseResultResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /documents/{documentId}/cleaning-report:
+    get:
+      tags: [数据接入与解析]
+      operationId: getCleaningReport
+      summary: 清洗报告（清洗前后差异可追踪，P0 #14）
+      x-owner: python
+      x-p0-feature: ['#14']
+      x-permission: doc:read
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CleaningReportResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /documents/{documentId}/metadata:
+    get:
+      tags: [知识构建与索引]
+      operationId: getDocumentMetadata
+      summary: 文档标准元数据（标准编号/名称/机构/日期）
+      x-owner: python
+      x-p0-feature: ['#57']
+      x-permission: doc:read
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StandardMetaResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      tags: [知识构建与索引]
+      operationId: updateDocumentMetadata
+      summary: 人工修正元数据（准确率兜底，可审计）
+      x-owner: python
+      x-p0-feature: ['#57']
+      x-permission: meta:write
+      x-audit: {required: true, actions: [meta.update]}
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StandardMetaUpdateRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StandardMetaResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /documents/{documentId}/chunks:
+    get:
+      tags: [知识构建与索引]
+      operationId: listDocumentChunks
+      summary: 分块结果预览（固定/结构化/条目化）
+      description: 分块结果可预览、边界可核对；条目化分块条目数与文档条款数一致。
+      x-owner: python
+      x-p0-feature: ['#36', '#37', '#404']
+      x-permission: doc:read
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: chunkType
+          in: query
+          schema: {$ref: '#/components/schemas/ChunkType'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChunkPageResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /documents/{documentId}/chunks:preview:
+    post:
+      tags: [知识构建与索引]
+      operationId: previewDocumentChunks
+      summary: 按策略预览分块（不落库）
+      x-owner: python
+      x-p0-feature: ['#36', '#37', '#404']
+      x-permission: doc:read
+      x-audit: {required: false, reason: read-only-compute}
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChunkPreviewRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChunkPreviewResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /documents/{documentId}/clauses:
+    get:
+      tags: [知识构建与索引]
+      operationId: listDocumentClauses
+      summary: 条目化条款清单（导出与溯源复用）
+      x-owner: python
+      x-p0-feature: ['#404']
+      x-permission: doc:read
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: tenant_id
+          in: query
+          required: false
+          description: 内部调用租户校验（外部请求由 Java 网关注入，用户无需传）
+          schema: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ClausePageResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  # =========================================================================
+  # 接入任务（P0 仅事件驱动，不做定时调度）
+  # =========================================================================
+  /ingest/tasks:
+    get:
+      tags: [数据接入与解析]
+      operationId: listIngestTasks
+      summary: 接入任务列表（排队/运行/成功/失败）
+      x-owner: java
+      x-p0-feature: ['#10']
+      x-permission: ingest:read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: kbId
+          in: query
+          schema: {type: string}
+        - name: documentId
+          in: query
+          schema: {type: string}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/IngestTaskStatus'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IngestTaskPageResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /ingest/tasks/{taskId}:
+    get:
+      tags: [数据接入与解析]
+      operationId: getIngestTask
+      summary: 任务状态（实时可见）
+      x-owner: java
+      x-p0-feature: ['#10']
+      x-permission: ingest:read
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IngestTaskResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ingest/tasks/{taskId}:retry:
+    post:
+      tags: [数据接入与解析]
+      operationId: retryIngestTask
+      summary: 失败任务一键重试（不产生重复数据）
+      x-owner: java
+      x-p0-feature: ['#10']
+      x-permission: ingest:retry
+      x-audit: {required: true, actions: [ingest.retry]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 已重新排队
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IngestTaskResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ingest/tasks/{taskId}/events:
+    get:
+      tags: [数据接入与解析]
+      operationId: streamIngestTaskEvents
+      summary: 任务状态变更推送（SSE）
+      description: |
+        SSE 事件：`meta` 首次快照；`status` 状态变更；`done` 终态；`error` 异常；`ping` 心跳。
+      x-owner: java
+      x-p0-feature: ['#10']
+      x-permission: ingest:read
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: SSE 事件流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                status:
+                  summary: 状态事件
+                  value: |
+                    event: meta
+                    data: {"taskId":"task_x","status":"RUNNING","stage":"PARSE","progress":20,"at":"2026-11-17T10:00:00Z"}
+
+                    event: status
+                    data: {"taskId":"task_x","status":"SUCCEEDED","stage":"DONE","progress":100,"at":"2026-11-17T10:01:00Z"}
+
+                    event: done
+                    data: {"taskId":"task_x","status":"SUCCEEDED"}
+          x-sse-event-schemas:
+            meta: {$ref: '#/components/schemas/IngestTaskEvent'}
+            status: {$ref: '#/components/schemas/IngestTaskEvent'}
+            done: {$ref: '#/components/schemas/IngestTaskEvent'}
+            error: {$ref: '#/components/schemas/SseError'}
+            ping: {type: object, properties: {at: {type: string, format: date-time}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  # =========================================================================
+  # 知识构建与索引
+  # =========================================================================
+  /index/embedding-jobs:
+    post:
+      tags: [知识构建与索引]
+      operationId: createEmbeddingJob
+      summary: 批量向量化任务（P0 #44）
+      description: 条款批量向量化，失败 chunk 可定位重试；进度可见、可暂停恢复。
+      x-owner: python
+      x-p0-feature: ['#44']
+      x-permission: index:write
+      x-audit: {required: true, actions: [index.embed]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmbeddingJobCreateRequest'}
+      responses:
+        '202':
+          description: 已创建
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmbeddingJobResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /index/embedding-jobs/{jobId}:
+    get:
+      tags: [知识构建与索引]
+      operationId: getEmbeddingJob
+      summary: 向量化任务进度与失败定位
+      x-owner: python
+      x-p0-feature: ['#44']
+      x-permission: index:read
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmbeddingJobResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /index/embedding-jobs/{jobId}:pause:
+    post:
+      tags: [知识构建与索引]
+      operationId: pauseEmbeddingJob
+      summary: 暂停向量化任务
+      x-owner: python
+      x-p0-feature: ['#44']
+      x-permission: index:write
+      x-audit: {required: true, actions: [index.embed.pause]}
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmbeddingJobResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /index/embedding-jobs/{jobId}:resume:
+    post:
+      tags: [知识构建与索引]
+      operationId: resumeEmbeddingJob
+      summary: 恢复向量化任务
+      x-owner: python
+      x-p0-feature: ['#44']
+      x-permission: index:write
+      x-audit: {required: true, actions: [index.embed.resume]}
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmbeddingJobResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /index/builds:
+    post:
+      tags: [知识构建与索引]
+      operationId: createIndexBuild
+      summary: 构建向量索引（HNSW，P0 #49）
+      description: |
+        P0 固定 HNSW 向量索引，构建完成后检索立即生效；失败可重试/回退旧索引。
+        `indexType/metric/params/indexSlot/alias` 为 P2 预留，P0 可空且不参与逻辑。
+      x-owner: java
+      x-p0-feature: ['#49']
+      x-permission: index:build
+      x-audit: {required: true, actions: [index.build]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/IndexBuildRequest'}
+      responses:
+        '202':
+          description: 已创建
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexBuildResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /index/builds/{buildId}:
+    get:
+      tags: [知识构建与索引]
+      operationId: getIndexBuild
+      summary: 索引构建进度/耗时/资源
+      x-owner: java
+      x-p0-feature: ['#49']
+      x-permission: index:read
+      parameters:
+        - $ref: '#/components/parameters/BuildId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexBuildResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /index/builds/{buildId}:retry:
+    post:
+      tags: [知识构建与索引]
+      operationId: retryIndexBuild
+      summary: 重试/回退索引构建
+      x-owner: java
+      x-p0-feature: ['#49']
+      x-permission: index:build
+      x-audit: {required: true, actions: [index.build.retry]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/BuildId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 已重新排队
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexBuildResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /knowledge-bases/{kbId}/index-status:
+    get:
+      tags: [知识构建与索引]
+      operationId: getKnowledgeBaseIndexStatus
+      summary: 知识库索引状态（文档数/索引状态）
+      x-owner: java
+      x-p0-feature: ['#130', '#49']
+      x-permission: kb:read
+      parameters:
+        - $ref: '#/components/parameters/KbId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexStatusResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  # =========================================================================
+  # 检索引擎
+  # =========================================================================
+  /retrieve:
+    post:
+      tags: [检索引擎]
+      operationId: retrieve
+      summary: 向量语义召回（P0 #70，含权限过滤 #88）
+      description: |
+        P0 仅向量召回（`retrievalMode=vector`），`rerank=false`。
+        召回结果必须已按角色与知识库权限过滤，越权/密级不符条款 0 泄露；
+        单路召回超时自动降级并返回 `degraded=true`。
+        `latencyMs` 覆盖查询处理 + 向量召回 + 权限复核，检索 P95 ≤ 500ms。
+      x-owner: python
+      x-p0-feature: ['#63', '#70', '#88']
+      x-permission: retrieval:query
+      x-audit: {required: true, actions: [retrieval.query, permission.denied]}
+      x-p95-ms: 500
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RetrieveRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RetrieveResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /retrieve/query-understanding:
+    post:
+      tags: [检索引擎]
+      operationId: understandQuery
+      summary: 查询归一与清洗预览（P0 #63）
+      description: 标准编号（JR/T 0088）与条款编号（4.1.1）归一、清洗/分词/标准化；空查询/超长/特殊字符给出兜底。
+      x-owner: python
+      x-p0-feature: ['#63']
+      x-permission: retrieval:query
+      x-audit: {required: false, reason: read-only-compute}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QueryUnderstandingRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QueryUnderstandingResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  # =========================================================================
+  # 生成与推理 / 问答
+  # =========================================================================
+  /chat:
+    post:
+      tags: [生成与推理]
+      operationId: chat
+      summary: 金融标准问答（非流式，P0 #407）
+      description: |
+        标准编号直达、条款编号定位、按标准域/发布机构筛选；回答引用条款编号与原文；
+        无依据时拒答或兜底，不编造。Java 统一入口先执行输入违规检查，再执行 Prompt 注入/越狱检测，
+        通过后才构造并转发内部 Python 问答请求；检出即阻断或净化并告警。
+        `sessionId`、`conversationMode` 为 P1 多轮预留，P0 传入也不保持上下文。
+      x-owner: java
+      x-p0-feature: ['#98', '#103', '#106', '#108', '#110', '#114', '#407']
+      x-permission: chat:use
+      x-audit: {required: true, actions: [chat.query, security.input.blocked, security.prompt_injection.blocked]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChatRequest'}
+      responses:
+        '200':
+          description: 回答（含引用）
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChatResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/ServerError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /chat/stream:
+    post:
+      tags: [生成与推理]
+      operationId: chatStream
+      summary: 金融标准问答（SSE 流式，P0 #113）
+      description: |
+        `Content-Type: text/event-stream`。事件顺序：
+        1. `meta`：answerId/traceId/retrievalMode；
+        2. 0..n 个 `citation`：命中的条款引用；
+        3. n 个 `delta`：增量 token（首 token ≤1s，对齐 NFR #3）；
+        4. `done`：最终状态与用量；或 `error`。
+        断线重连：每条事件带 `id: <streamKey>:<seq>`；客户端断线后原样回传
+        `Last-Event-ID`，服务端从该序号之后续传（P0 单实例内存缓冲，缓冲过期则重新生成）。
+        客户端收到 `done.content` 后应以该正文覆盖流式预览，保证最终答案完整且与非流式一致。
+        与 `/chat` 相同，Java 统一入口在任何内部问答调用前完成输入违规与 Prompt 注入检查。
+      x-owner: java
+      x-p0-feature: ['#113', '#407', '#108', '#156', '#159']
+      x-permission: chat:use
+      x-audit: {required: true, actions: [chat.query, security.input.blocked, security.prompt_injection.blocked]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: {type: string}
+          description: SSE 断线续传序号
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChatRequest'}
+      responses:
+        '200':
+          description: SSE 事件流
+          content:
+            text/event-stream:
+              schema: {type: string}
+              examples:
+                stream:
+                  summary: 完整事件序列
+                  value: |
+                    event: meta
+                    data: {"answerId":"ans_1","traceId":"tr_1","retrievalMode":"vector","startedAt":"2026-11-17T10:00:00Z"}
+
+                    event: citation
+                    data: {"answerId":"ans_1","citations":[{"chunkId":"c1","documentId":"d1","standardNo":"JR/T 0088","clauseNo":"4.1.1","pageNo":12,"score":0.92}]}
+
+                    event: delta
+                    data: {"answerId":"ans_1","seq":1,"delta":"根据"}
+
+                    event: done
+                    data: {"answerId":"ans_1","finishReason":"STOP","refused":false,"usage":{"promptTokens":900,"completionTokens":120,"totalTokens":1020}}
+
+          x-sse-event-schemas:
+            meta: {$ref: '#/components/schemas/SseMeta'}
+            delta: {$ref: '#/components/schemas/SseDelta'}
+            citation: {$ref: '#/components/schemas/SseCitation'}
+            done: {$ref: '#/components/schemas/SseDone'}
+            error: {$ref: '#/components/schemas/SseError'}
+            ping: {type: object, properties: {at: {type: string, format: date-time}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /documents/{documentId}/summaries:
+    post:
+      tags: [生成与推理]
+      operationId: generateSummary
+      summary: 标准简介自动生成（P0 #405）
+      description: |
+        从条目化条款与标准元数据抽取五要素：标准编号、标准名称、适用范围、主要技术内容概述、实施日期。
+        抽取优先、不编造；缺失要素返回“未识别”，每个要素附 sourceClauseNo/sourceQuote 供核对。
+        Java 网关负责文档归属与 KB 权限校验，并写 summary.generate 审计。
+      x-owner: python
+      x-p0-feature: ['#405']
+      x-permission: doc:read
+      x-audit: {required: true, actions: [summary.generate]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SummaryCreateRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SummaryResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /documents/{documentId}/summaries/latest:
+    get:
+      tags: [生成与推理]
+      operationId: getLatestSummary
+      summary: 最新标准简介
+      x-owner: python
+      x-p0-feature: ['#405']
+      x-permission: doc:read
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SummaryResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /prompts/templates:
+    get:
+      tags: [生成与推理]
+      operationId: listPromptTemplates
+      summary: Prompt 模板与版本（P0 #103）
+      x-owner: python
+      x-p0-feature: ['#103']
+      x-permission: chat:use
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PromptTemplateListResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /prompts/templates/{templateName}/versions:
+    get:
+      tags: [生成与推理]
+      operationId: listPromptTemplateVersions
+      summary: Prompt 模板版本可追溯
+      x-owner: python
+      x-p0-feature: ['#103']
+      x-permission: chat:use
+      parameters:
+        - name: templateName
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PromptTemplateListResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  # =========================================================================
+  # 知识治理：导出与审计
+  # =========================================================================
+  /kbs/{kbId}/exports:
+    post:
+      tags: [知识治理]
+      operationId: createKbExport
+      summary: 创建条目化标准/标准简介导出任务（P0 #406 / #405）
+      description: |
+        资源化导出入口：创建 → 查询 → 下载，三者路径固定，P2 #272 仅扩展多格式/水印/审批。
+        创建时与下载时均校验 KB 权限；导出记录含操作人、范围、条款数与文件 SHA-256。
+      x-owner: java
+      x-p0-feature: ['#406', '#405']
+      x-permission: export:create
+      x-audit: {required: true, actions: [export.create, export.download]}
+      x-idempotency: required
+      parameters:
+        - name: kbId
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExportCreateRequest'}
+      responses:
+        '202':
+          description: 已创建导出任务
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExportJobResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /exports:
+    get:
+      tags: [知识治理]
+      operationId: listExports
+      summary: 导出任务列表
+      x-owner: java
+      x-p0-feature: ['#406']
+      x-permission: export:read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExportJobPageResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [知识治理]
+      operationId: createExport
+      summary: 条目化金融标准/标准简介导出（P0 #406）
+      description: |
+        兼容入口：kbId 放在请求体；推荐使用 `POST /kbs/{kbId}/exports`。
+        导出条款编号、条款标题、条款正文、所属章节（或标准简介），格式 PDF/XLSX/DOCX。
+        导出受权限控制并写审计，不泄露未授权条款。P0 不含审批与水印（P2 #272）。
+      x-owner: java
+      x-p0-feature: ['#406', '#405']
+      x-permission: export:create
+      x-audit: {required: true, actions: [export.create]}
+      x-idempotency: required
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExportCreateRequest'}
+      responses:
+        '202':
+          description: 已创建导出任务
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExportJobResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /exports/{exportId}:
+    get:
+      tags: [知识治理]
+      operationId: getExport
+      summary: 导出任务状态
+      x-owner: java
+      x-p0-feature: ['#406']
+      x-permission: export:read
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExportJobResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /exports/{exportId}:retry:
+    post:
+      tags: [知识治理]
+      operationId: retryExport
+      summary: 重试失败或已过期的导出任务
+      x-owner: java
+      x-p0-feature: ['#406']
+      x-permission: export:create
+      x-audit: {required: true, actions: [export.retry]}
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: 已重新排队
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExportJobResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /exports/{exportId}/download:
+    get:
+      tags: [知识治理]
+      operationId: downloadExport
+      summary: 下载导出文件（审计留痕）
+      x-owner: java
+      x-p0-feature: ['#406']
+      x-permission: export:download
+      x-audit: {required: true, actions: [export.download]}
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: 文件流
+          headers:
+            Content-Disposition:
+              schema: {type: string}
+          content:
+            application/pdf:
+              schema: {type: string, format: binary}
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /audit-logs:
+    get:
+      tags: [知识治理]
+      operationId: listAuditLogs
+      summary: 操作审计日志检索/导出（P0 #144）
+      description: 登录/上传/删除/导出/权限变更/模型调用全量留痕；写后追加不可篡改；保留≥180 天。
+      x-owner: java
+      x-p0-feature: ['#144']
+      x-permission: audit:read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: action
+          in: query
+          schema: {type: string}
+        - name: actorId
+          in: query
+          schema: {type: string}
+        - name: objectType
+          in: query
+          schema: {type: string}
+        - name: objectId
+          in: query
+          schema: {type: string}
+        - name: result
+          in: query
+          schema: {$ref: '#/components/schemas/AuditResult'}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - name: format
+          in: query
+          schema: {type: string, enum: [json, csv], default: json}
+          description: csv 时下载脱敏审计 CSV，并写 export.audit 审计
+        - name: archive
+          in: query
+          schema: {type: boolean, default: false}
+          description: P2 #281 长期存档预留；P0 仅接受 false
+          x-reserved-for: P2
+        - name: env
+          in: query
+          schema: {type: string, default: prod}
+          description: P2 #286 多环境预留；P0 只按当前环境精确过滤，不跨环境聚合
+          x-reserved-for: P2
+      responses:
+        '200':
+          description: JSON 分页结果或 CSV 文件
+          headers:
+            Content-Disposition:
+              schema: {type: string}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditLogPageResponse'}
+            text/csv:
+              schema: {type: string}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  # =========================================================================
+  # 安全与合规
+  # =========================================================================
+  /security/posture:
+    get:
+      tags: [安全与合规]
+      operationId: getSecurityPosture
+      summary: 传输/存储加密态势（P0 #153 / #154）
+      description: 只读姿态查询；证书过期、密钥轮换状态可用于告警。
+      x-owner: java
+      x-p0-feature: ['#153', '#154']
+      x-permission: security:read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityPostureResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /security/policies:
+    get:
+      tags: [安全与合规]
+      operationId: getSecurityPolicies
+      summary: 内容审核与注入防护规则（可配置）
+      x-owner: java
+      x-p0-feature: ['#156', '#157', '#159']
+      x-permission: security:read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityPolicyResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    put:
+      tags: [安全与合规]
+      operationId: updateSecurityPolicies
+      summary: 更新审核规则（热更新）
+      x-owner: java
+      x-p0-feature: ['#156', '#157', '#159']
+      x-permission: security:write
+      x-audit: {required: true, actions: [security.policy.update]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SecurityPolicyUpdateRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityPolicyResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /security/checks:
+    post:
+      tags: [安全与合规]
+      operationId: runSecurityCheck
+      summary: 双向内容审核 / Prompt 注入检测（P0 #156/#157/#159）
+      description: |
+        `type=INPUT_CONTENT`：输入敏感词/违规内容拦截，命中即 BLOCK；
+        `type=OUTPUT_CONTENT`：输出合规检查，可 BLOCK/REPLACE；
+        `type=PROMPT_INJECTION`：注入/越狱检测，检出后 BLOCK 或净化并告警。
+      x-owner: java
+      x-p0-feature: ['#156', '#157', '#159']
+      x-permission: security:check
+      x-audit: {required: true, actions: [security.check, security.check.blocked]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SecurityCheckRequest'}
+      responses:
+        '200':
+          description: 检测结果
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityCheckResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+
+  # =========================================================================
+  # 可观测与质量评估
+  # =========================================================================
+  /observability/request-logs:
+    get:
+      tags: [可观测与质量评估]
+      operationId: listRequestLogs
+      summary: 基础请求日志（P0 #173）
+      description: |
+        成功与失败请求统一留痕：时间、用户、接口、耗时、状态码、TraceID。
+        不记录请求/响应正文、Header 与令牌；客户端 IP 仅保存 SHA-256 摘要。
+        保留期由 `aipaas.observability.request-log-retention-days` 控制，到期由定时任务清理。
+      x-owner: java
+      x-p0-feature: ['#173']
+      x-permission: obs:read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: traceId
+          in: query
+          schema: {type: string}
+        - name: userId
+          in: query
+          schema: {type: string}
+        - name: path
+          in: query
+          description: 接口路径（不含 query string）
+          schema: {type: string}
+        - name: status
+          in: query
+          schema: {type: integer}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RequestLogPageResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /observability/traces/{traceId}:
+    get:
+      tags: [可观测与质量评估]
+      operationId: getTrace
+      summary: 单次问答跨模块全链路 Trace（P0 #175）
+      description: |
+        合并 Java 本地 Span 与 Python（解析→分块→向量化→索引→检索→生成）Span，
+        按开始时间升序返回；某个下游服务不可用时仍返回已采集部分，并在
+        `unavailableSources` 中标记来源。TraceID 由 `traceparent` / `X-Trace-Id` /
+        `X-Request-Id` 逐层透传。
+      x-owner: java
+      x-p0-feature: ['#175']
+      x-permission: obs:read
+      parameters:
+        - name: traceId
+          in: path
+          required: true
+          description: 请求 TraceID（`tr_` 前缀或 W3C 32 位十六进制）
+          schema: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TraceResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /observability/metrics/summary:
+    get:
+      tags: [可观测与质量评估]
+      operationId: getMetricsSummary
+      summary: QPS/延迟/成功率/资源占用汇总（P0 #177）
+      x-owner: java
+      x-p0-feature: ['#177']
+      x-permission: obs:read
+      parameters:
+        - name: window
+          in: query
+          schema: {type: string, enum: ['5m', '15m', '1h', '24h'], default: 15m}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MetricsSummaryResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  # =========================================================================
+  # 平台与管理
+  # =========================================================================
+  /admin/users:
+    get:
+      tags: [平台与管理]
+      operationId: listUsers
+      summary: 用户列表（P0 #193）
+      x-owner: java
+      x-p0-feature: ['#193']
+      x-permission: user:read
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: keyword
+          in: query
+          schema: {type: string, maxLength: 100}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/UserStatus'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserPageResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [平台与管理]
+      operationId: createUser
+      summary: 管理员创建用户
+      x-owner: java
+      x-p0-feature: ['#193']
+      x-permission: user:write
+      x-audit: {required: true, actions: [user.create]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UserCreateRequest'}
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /admin/users/{userId}:
+    patch:
+      tags: [平台与管理]
+      operationId: updateUser
+      summary: 修改用户资料/状态/角色
+      x-owner: java
+      x-p0-feature: ['#193']
+      x-permission: user:write
+      x-audit: {required: true, actions: [user.update]}
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UserUpdateRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /admin/system-config:
+    get:
+      tags: [平台与管理]
+      operationId: getSystemConfig
+      summary: 系统配置
+      x-owner: java
+      x-p0-feature: ['#193', '#402']
+      x-permission: config:read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SystemConfigResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    put:
+      tags: [平台与管理]
+      operationId: updateSystemConfig
+      summary: 更新系统配置（默认能力、上传限制等）
+      x-owner: java
+      x-p0-feature: ['#193', '#402']
+      x-permission: config:write
+      x-audit: {required: true, actions: [config.update]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SystemConfigUpdateRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SystemConfigResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /admin/overview:
+    get:
+      tags: [平台与管理]
+      operationId: getAdminOverview
+      summary: 管理后台总览（数据与前端一致）
+      x-owner: java
+      x-p0-feature: ['#193']
+      x-permission: admin:read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminOverviewResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  # =========================================================================
+  # 用户界面与体验（供 Web 渲染的配置型接口）
+  # =========================================================================
+  /ui/capabilities:
+    get:
+      tags: [用户界面与体验]
+      operationId: getCapabilities
+      summary: 对话能力选择器（P0 #402）
+      description: P0 仅 RAG 可用；Skill 明确 disabled，P3 能力建立后启用。
+      x-owner: java
+      x-p0-feature: ['#402']
+      x-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CapabilityConfigResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /ui/config:
+    get:
+      tags: [用户界面与体验]
+      operationId: getUIConfig
+      summary: 对话/上传界面配置（格式、大小、默认能力）
+      x-owner: java
+      x-p0-feature: ['#242', '#246', '#402', '#1']
+      x-permission: authenticated
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UIConfigResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  # =========================================================================
+  # 模型服务
+  # =========================================================================
+  /models/providers:
+    get:
+      tags: [模型服务]
+      operationId: listModelProviders
+      summary: LLM 提供商列表（P0 至少 2 家可接入）
+      x-owner: python
+      x-p0-feature: ['#98']
+      x-permission: model:read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelProviderListResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /models/chat:
+    post:
+      tags: [模型服务]
+      operationId: invokeModelChat
+      summary: LLM 基础调用通道（P0 #98）
+      description: 内部模型网关；上游 `/chat` 使用。密钥不落日志，失败明确错误码。
+      x-owner: python
+      x-p0-feature: ['#98']
+      x-permission: model:invoke
+      x-audit: {required: true, actions: [model.invoke]}
+      x-internal: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ModelChatRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelChatResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /models/embeddings:
+    post:
+      tags: [模型服务]
+      operationId: createEmbeddings
+      summary: Embedding 批量计算（P0 #44）
+      x-owner: python
+      x-p0-feature: ['#44']
+      x-permission: model:invoke
+      x-audit: {required: true, actions: [model.embed]}
+      x-internal: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmbeddingRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmbeddingResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /models/health:
+    get:
+      tags: [模型服务]
+      operationId: getModelHealth
+      summary: 模型提供商健康状态
+      x-owner: python
+      x-p0-feature: ['#98']
+      x-permission: model:read
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelHealthResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+  /internal/llm/chat/completions:
+    post:
+      tags: [模型服务]
+      operationId: internalChatCompletion
+      summary: '内部 LLM 调用通道（P0 #98）'
+      description: |
+        生成链路固定使用的内部路径，与对外 OpenAI 兼容 `/v1/chat/completions`（P1 #411）不共用路径。
+        至少两家 OpenAI 兼容供应商直连；`provider` 可手动切换，未指定时使用当前激活供应商；
+        主供应商失败时按优先级做简单故障切换，通过 `data.degraded` 与 `data.warnings` 给出降级提示。
+        全部供应商失败返回 503 `MODEL_UNAVAILABLE` 与脱敏的 `attempts`；密钥不落日志。
+      x-owner: python
+      x-p0-feature: ['#98']
+      x-permission: model:invoke
+      x-audit: {required: true, actions: [model.invoke]}
+      x-internal: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ModelChatRequest'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelChatResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /internal/generation/stats:
+    get:
+      tags: [生成与推理]
+      operationId: getGenerationStats
+      summary: '拒答统计（P0 #108）'
+      description: 按拒答原因与租户累计，用于观察拒答率；不包含问题或答案正文。
+      x-owner: python
+      x-p0-feature: ['#108']
+      x-permission: stats:read
+      x-internal: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RefusalStatsResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        P0 使用账号密码登录签发的 JWT（HS256，30 分钟），JWT 仅证明身份与会话有效性。
+        每个请求均由服务端实时查询数据库中的用户状态、角色、权限和知识库授权，不采用 JWT 中的历史权限副本；
+        权限变更在下一请求生效。P1 SSO/网关统一鉴权不在 P0 范围。
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: 页码，从 1 开始
+      schema: {type: integer, minimum: 1, default: 1}
+    PageSize:
+      name: pageSize
+      in: query
+      description: 每页条数
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    KbId:
+      name: kbId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    PartNo:
+      name: partNo
+      in: path
+      required: true
+      description: 分片序号，从 1 开始
+      schema: {type: integer, minimum: 1, maximum: 20000}
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    BuildId:
+      name: buildId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    RoleId:
+      name: roleId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        幂等键，UUID/业务唯一串，24h 内有效。同 key + 同请求体返回首次结果；
+        同 key + 不同请求体返回 409 `BIZ.CONFLICT`。
+      schema: {type: string, minLength: 8, maxLength: 128}
+
+  responses:
+    Ok:
+      description: 操作成功
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OkResponse'
+    BadRequest:
+      description: 参数错误（PARAM.*）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          examples:
+            invalid:
+              value:
+                code: PARAM.INVALID
+                message: 请求参数不合法
+                data: {reason: 'query: must not be blank', retryable: false}
+                traceId: tr_01HXYZ
+    Unauthorized:
+      description: 未认证（AUTH.*）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          examples:
+            unauthenticated:
+              value:
+                code: AUTH.UNAUTHENTICATED
+                message: 未提供有效凭证
+                data: {retryable: false}
+                traceId: tr_01HXYZ
+    Forbidden:
+      description: 无权限（PERM.*）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          examples:
+            forbidden:
+              value:
+                code: PERM.FORBIDDEN
+                message: 无权执行该操作
+                data: {reason: 'missing permission: doc:upload', retryable: false}
+                traceId: tr_01HXYZ
+    NotFound:
+      description: 资源不存在（BIZ.NOT_FOUND）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          examples:
+            notFound:
+              value:
+                code: BIZ.NOT_FOUND
+                message: 资源不存在
+                data: {retryable: false}
+                traceId: tr_01HXYZ
+    Conflict:
+      description: 状态冲突/幂等冲突（BIZ.CONFLICT / BIZ.TASK_NOT_RETRYABLE）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unprocessable:
+      description: 业务语义不可处理（BIZ.NO_ANSWER / BIZ.CONTENT_BLOCKED / BIZ.PROMPT_INJECTION）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    PayloadTooLarge:
+      description: 文件超过限制（PARAM.FILE_TOO_LARGE）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    RateLimited:
+      description: 限流（RATE.LIMITED）
+      headers:
+        Retry-After:
+          schema: {type: integer}
+          description: 建议重试秒数
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    ServerError:
+      description: 服务内部错误（SYS.*）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    ServiceUnavailable:
+      description: 依赖不可用/降级（SYS.DEPENDENCY_UNAVAILABLE / SYS.DEGRADED）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+
+  schemas:
+
+    # ------------------------------------------------------------------
+    # 公共信封 / 分页 / 错误
+    # ------------------------------------------------------------------
+    ApiEnvelope:
+      type: object
+      description: 统一响应信封
+      required: [code, message, data, traceId]
+      properties:
+        code:
+          type: string
+          description: 成功固定为 OK；失败为分段错误码（见 x-error-code-policy）
+          examples: [OK]
+        message: {type: string, description: 人类可读信息}
+        data: {description: 业务数据；失败时为 ErrorInfo}
+        traceId: {type: string, description: 与响应头 X-Trace-Id 一致}
+    ErrorInfo:
+      type: object
+      properties:
+        reason: {type: string, description: 失败原因（不含敏感信息）}
+        details:
+          type: array
+          items: {$ref: '#/components/schemas/ValidationIssue'}
+        retryable: {type: boolean, default: false}
+        retryAfterSeconds: {type: integer, minimum: 0}
+    ErrorEnvelope:
+      description: 失败信封
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            code:
+              type: string
+              pattern: '^(AUTH|PERM|PARAM|BIZ|SYS|RATE)\.[A-Z0-9_]+$'
+            data: {$ref: '#/components/schemas/ErrorInfo'}
+    ValidationIssue:
+      type: object
+      required: [field, code, message]
+      properties:
+        field: {type: string}
+        code: {type: string}
+        message: {type: string}
+    OkResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/OkData'}
+    OkData:
+      type: object
+      required: [ok]
+      properties:
+        ok: {type: boolean, const: true}
+        message: {type: string}
+    Readiness:
+      type: object
+      required: [status, checks]
+      properties:
+        status: {type: string, enum: [UP, DOWN]}
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status: {type: string, enum: [UP, DOWN, UNKNOWN]}
+              detail: {type: string}
+    TenantId:
+      type: string
+      description: 租户标识；P0 恒为 default，P1 #131 多租户后由鉴权上下文注入
+      default: default
+      examples: [default]
+    ResourceBase:
+      type: object
+      required: [id, tenantId, createdAt, updatedAt]
+      properties:
+        id: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    PageMeta:
+      type: object
+      required: [total, page, pageSize]
+      properties:
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        pageSize: {type: integer, minimum: 1, maximum: 100}
+
+    # ------------------------------------------------------------------
+    # 系统
+    # ------------------------------------------------------------------
+    SystemInfo:
+      type: object
+      required: [service, version, apiVersion, contractVersion, env, p0FeatureCount, domains]
+      properties:
+        service: {type: string, examples: [platform-api]}
+        version: {type: string, examples: [0.1.0]}
+        apiVersion: {type: string, examples: [v1]}
+        contractVersion: {type: string, examples: [1.1.0-p0]}
+        contractStatus: {type: string, enum: [draft, frozen, deprecated], examples: [frozen]}
+        env: {type: string, examples: [dev]}
+        p0FeatureCount: {type: integer, const: 44}
+        domains:
+          type: array
+          items: {type: string}
+        capabilities:
+          type: array
+          items: {type: string}
+        startedAt: {type: string, format: date-time}
+    SystemInfoResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/SystemInfo'}
+
+    # ------------------------------------------------------------------
+    # 认证 / 角色 / 用户
+    # ------------------------------------------------------------------
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: {type: string, minLength: 3, maxLength: 64}
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: 传输必须 TLS；服务端仅存哈希
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, tokenType, expiresIn, refreshExpiresIn]
+      properties:
+        accessToken: {type: string}
+        refreshToken: {type: string, description: 一次性刷新令牌；仅在登录/刷新响应返回，禁止写日志}
+        tokenType: {type: string, const: Bearer}
+        expiresIn: {type: integer, description: 秒}
+        refreshExpiresIn: {type: integer, description: 秒}
+    TokenRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: {type: string, minLength: 32, maxLength: 256, description: 禁止写日志}
+    LoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/TokenPair'
+                - type: object
+                  properties:
+                    user: {$ref: '#/components/schemas/CurrentUser'}
+    CurrentUser:
+      type: object
+      required: [userId, tenantId, username, displayName, roles, permissions]
+      properties:
+        userId: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        username: {type: string}
+        displayName: {type: string}
+        email: {type: string, format: email}
+        roles:
+          type: array
+          items: {type: string}
+        permissions:
+          type: array
+          items: {type: string}
+        defaultTenant: {type: boolean, default: true}
+    CurrentUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/CurrentUser'}
+    Permission:
+      type: object
+      required: [code, name, domain, tenantId]
+      properties:
+        code: {type: string, examples: ['doc:upload']}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        name: {type: string}
+        domain: {type: string}
+        description: {type: string}
+    PermissionListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: {$ref: '#/components/schemas/Permission'}
+    Role:
+      allOf:
+        - $ref: '#/components/schemas/ResourceBase'
+        - type: object
+          required: [code, name, builtIn, permissions, grants]
+          properties:
+            code: {type: string, examples: [KB_ADMIN]}
+            name: {type: string}
+            builtIn: {type: boolean}
+            permissions:
+              type: array
+              items: {type: string}
+            grants:
+              type: array
+              items: {$ref: '#/components/schemas/RolePermissionGrant'}
+              description: P0 知识库级授权；CLAUSE scope 仅为 P1 预留
+            userCount: {type: integer, minimum: 0}
+    RolePermissionGrant:
+      type: object
+      required: [permission, scopeType, scopeId]
+      properties:
+        permission: {type: string, examples: ['doc:upload']}
+        scopeType: {type: string, enum: [KB, CLAUSE], description: 'P0 仅允许 KB；CLAUSE 为 P1 #160 预留'}
+        scopeId: {type: string, description: P0 为知识库 ID}
+    RoleCreateRequest:
+      type: object
+      required: [code, name, permissions]
+      properties:
+        code: {type: string, pattern: '^[A-Z][A-Z0-9_]{2,31}$'}
+        name: {type: string, minLength: 1, maxLength: 64}
+        permissions:
+          type: array
+          minItems: 1
+          items: {type: string}
+        grants:
+          type: array
+          items: {$ref: '#/components/schemas/RolePermissionGrant'}
+          description: 可选；P0 知识库级授权，实时生效
+    RolePermissionUpdateRequest:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          items: {type: string}
+        grants:
+          type: array
+          items: {$ref: '#/components/schemas/RolePermissionGrant'}
+    RoleResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/Role'}
+    RolePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/Role'}
+    RolePageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/RolePage'}
+    UserStatus:
+      type: string
+      enum: [ACTIVE, DISABLED, LOCKED]
+    User:
+      allOf:
+        - $ref: '#/components/schemas/ResourceBase'
+        - type: object
+          required: [username, displayName, status, roles]
+          properties:
+            username: {type: string}
+            displayName: {type: string}
+            email: {type: string, format: email}
+            status: {$ref: '#/components/schemas/UserStatus'}
+            roles:
+              type: array
+              items: {type: string}
+            lastLoginAt: {type: string, format: date-time, nullable: true}
+    UserCreateRequest:
+      type: object
+      required: [username, displayName, password, roleCodes]
+      properties:
+        username: {type: string, minLength: 3, maxLength: 64}
+        displayName: {type: string, minLength: 1, maxLength: 64}
+        password: {type: string, minLength: 8, maxLength: 128}
+        email: {type: string, format: email}
+        roleCodes:
+          type: array
+          minItems: 1
+          items: {type: string}
+    UserUpdateRequest:
+      type: object
+      properties:
+        displayName: {type: string, minLength: 1, maxLength: 64}
+        email: {type: string, format: email}
+        status: {$ref: '#/components/schemas/UserStatus'}
+        roleCodes:
+          type: array
+          items: {type: string}
+    UserResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/User'}
+    UserPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/User'}
+    UserPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/UserPage'}
+
+    # ------------------------------------------------------------------
+    # 知识库 / 文档
+    # ------------------------------------------------------------------
+    KnowledgeBaseStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED, DELETED]
+    IndexState:
+      type: string
+      enum: [EMPTY, BUILDING, READY, FAILED, STALE]
+    KnowledgeBase:
+      allOf:
+        - $ref: '#/components/schemas/ResourceBase'
+        - type: object
+          required: [name, status, documentCount, chunkCount, indexStatus]
+          properties:
+            name: {type: string, minLength: 1, maxLength: 128}
+            description: {type: string, maxLength: 1024}
+            domain:
+              type: string
+              nullable: true
+              description: 标准域，如 JR / PBOC；P0 支持分类与精确筛选
+            standardSystem:
+              type: string
+              nullable: true
+              maxLength: 128
+              description: 标准体系，如 JR/T 0088
+            config:
+              $ref: '#/components/schemas/KnowledgeBaseConfig'
+            status: {$ref: '#/components/schemas/KnowledgeBaseStatus'}
+            documentCount: {type: integer, minimum: 0}
+            chunkCount: {type: integer, minimum: 0}
+            indexStatus: {$ref: '#/components/schemas/IndexState'}
+            version:
+              type: string
+              nullable: true
+              description: P2 预留：配置版本；P0 可空
+              x-reserved-for: P2
+            env:
+              type: string
+              nullable: true
+              description: P2 预留：环境标识；P0 可空
+              x-reserved-for: P2
+    KnowledgeBaseCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        domain: {type: string, nullable: true, maxLength: 64}
+        standardSystem: {type: string, nullable: true, maxLength: 128}
+        config: {$ref: '#/components/schemas/KnowledgeBaseConfig'}
+    KnowledgeBaseUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1024}
+        domain: {type: string, nullable: true, maxLength: 64}
+        standardSystem: {type: string, nullable: true, maxLength: 128}
+        config: {$ref: '#/components/schemas/KnowledgeBaseConfig'}
+    KnowledgeBaseConfig:
+      type: object
+      description: 解析与召回配置；P0 仅知识库级，P1 #160 扩展
+      properties:
+        chunkSize: {type: integer, minimum: 64, maximum: 2048, default: 512}
+        chunkOverlap: {type: integer, minimum: 0, maximum: 512, default: 64}
+        retrievalTopK: {type: integer, minimum: 1, maximum: 20, default: 5}
+    KnowledgeBaseResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/KnowledgeBase'}
+    KnowledgeBasePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/KnowledgeBase'}
+    KnowledgeBasePageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/KnowledgeBasePage'}
+    DocumentStatus:
+      type: string
+      enum: [QUEUED, PARSING, PROCESSING, READY, FAILED]
+      description: 解析中/处理中/已入库/失败；删除即时生效
+    DocumentIndexStatus:
+      type: string
+      enum: [PENDING, BUILDING, INDEXED, FAILED, DELETED]
+      description: 文档级索引状态；软删除后立即为 DELETED，物理清理异步重试
+    DocumentFormat:
+      type: string
+      enum: [PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, MD, TXT]
+    Document:
+      allOf:
+        - $ref: '#/components/schemas/ResourceBase'
+        - type: object
+          required: [kbId, fileName, format, sizeBytes, status]
+          properties:
+            kbId: {type: string}
+            fileName: {type: string}
+            format: {$ref: '#/components/schemas/DocumentFormat'}
+            sizeBytes: {type: integer, minimum: 0}
+            status: {$ref: '#/components/schemas/DocumentStatus'}
+            indexStatus: {$ref: '#/components/schemas/DocumentIndexStatus'}
+            chunkCount: {type: integer, minimum: 0}
+            progress:
+              type: integer
+              minimum: 0
+              maximum: 100
+              description: 最近一次解析任务进度（P0 #246 进度展示）
+            standardNo: {type: string, nullable: true}
+            uploaderId: {type: string}
+            source: {type: string, examples: [manual_upload]}
+            pageCount: {type: integer, minimum: 0, nullable: true}
+            clauseCount: {type: integer, minimum: 0, nullable: true}
+            lastTaskId: {type: string, nullable: true}
+            errorCode: {type: string, nullable: true}
+            errorMessage: {type: string, nullable: true}
+    DocumentResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/Document'}
+    DocumentPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/Document'}
+    DocumentPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/DocumentPage'}
+    DocumentUploadResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [document, ingestTask]
+              properties:
+                document: {$ref: '#/components/schemas/Document'}
+                ingestTask: {$ref: '#/components/schemas/IngestTask'}
+                uploadUrl: {type: string, description: 可选：大文件预签名续传地址}
+    DocumentUploadInitRequest:
+      type: object
+      required: [fileName, sizeBytes, fileHash]
+      properties:
+        fileName: {type: string, minLength: 1, maxLength: 255}
+        sizeBytes:
+          type: integer
+          minimum: 1
+          maximum: 104857600
+          description: P0 单文件上限 100MB
+        fileHash:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$'
+          description: 文件 SHA-256；服务端在合并时复核
+        totalParts:
+          type: integer
+          minimum: 1
+          description: 可选；P1 #253 断点续传复用，缺省按 5MB 计算
+        standardNo: {type: string, maxLength: 128}
+        autoParse: {type: boolean, default: true}
+    DocumentUploadSession:
+      type: object
+      required: [kbId, fileName, fileHash, sizeBytes, partSize, totalParts, receivedParts, missingParts, offset, status]
+      properties:
+        uploadId: {type: string, nullable: true, description: 已存在同哈希文档时为 null}
+        kbId: {type: string}
+        fileName: {type: string}
+        fileHash: {type: string}
+        sizeBytes: {type: integer}
+        partSize: {type: integer, description: P0 固定 5MB}
+        totalParts: {type: integer}
+        receivedParts:
+          type: array
+          items: {type: integer}
+          description: 已接收分片序号
+        missingParts:
+          type: array
+          items: {type: integer}
+          description: 缺失分片序号；P1 #253 断点续传直接复用
+        offset:
+          type: integer
+          minimum: 0
+          description: 已连续接收的明文字节数（下一分片起始偏移）
+        status:
+          type: string
+          enum: [UPLOADING, COMPLETED]
+        duplicate: {type: boolean, description: 同 fileHash 文档已存在}
+        documentId: {type: string, nullable: true, description: duplicate=true 时返回}
+        autoParse: {type: boolean}
+    DocumentUploadSessionResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/DocumentUploadSession'}
+
+    # ------------------------------------------------------------------
+    # 接入任务 / 解析 / 清洗
+    # ------------------------------------------------------------------
+    IngestTaskStatus:
+      type: string
+      enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELED]
+    IngestStage:
+      type: string
+      enum: [UPLOAD, PARSE, CLEAN, CHUNK, EMBED, INDEX, DONE]
+      description: P0 串行阶段；事件驱动推进，无定时调度
+    IngestTaskError:
+      type: object
+      properties:
+        code: {type: string, examples: [BIZ.PARSE_FAILED]}
+        message: {type: string}
+        retryable: {type: boolean}
+        stage: {$ref: '#/components/schemas/IngestStage'}
+    IngestTask:
+      allOf:
+        - $ref: '#/components/schemas/ResourceBase'
+        - type: object
+          required: [documentId, kbId, status, stage, progress, retryCount]
+          properties:
+            documentId: {type: string}
+            kbId: {type: string}
+            status: {$ref: '#/components/schemas/IngestTaskStatus'}
+            stage: {$ref: '#/components/schemas/IngestStage'}
+            progress: {type: integer, minimum: 0, maximum: 100}
+            retryCount: {type: integer, minimum: 0}
+            maxRetries: {type: integer, minimum: 0, default: 2}
+            error: {$ref: '#/components/schemas/IngestTaskError'}
+            queuedAt: {type: string, format: date-time}
+            startedAt: {type: string, format: date-time, nullable: true}
+            finishedAt: {type: string, format: date-time, nullable: true}
+    IngestTaskResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/IngestTask'}
+    IngestTaskPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/IngestTask'}
+    IngestTaskPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/IngestTaskPage'}
+    IngestTaskEvent:
+      type: object
+      required: [taskId, status, stage, progress, at]
+      properties:
+        taskId: {type: string}
+        status: {$ref: '#/components/schemas/IngestTaskStatus'}
+        stage: {$ref: '#/components/schemas/IngestStage'}
+        progress: {type: integer, minimum: 0, maximum: 100}
+        code: {type: string, nullable: true}
+        message: {type: string, nullable: true}
+        at: {type: string, format: date-time}
+    SectionNode:
+      type: object
+      required: [sectionId, title, level]
+      properties:
+        sectionId: {type: string}
+        title: {type: string}
+        level: {type: integer, minimum: 1}
+        clauseNo: {type: string, nullable: true}
+        pageNo: {type: integer, minimum: 1, nullable: true}
+        children:
+          type: array
+          items: {$ref: '#/components/schemas/SectionNode'}
+    TableBlock:
+      type: object
+      required: [tableId, pageNo, rows]
+      properties:
+        tableId: {type: string}
+        pageNo: {type: integer, minimum: 1}
+        caption: {type: string, nullable: true}
+        headerRows: {type: integer, minimum: 0, default: 1}
+        rows:
+          type: array
+          description: 二维单元格文本，保持原表格结构
+          items:
+            type: array
+            items: {type: string}
+    ClauseAnchor:
+      type: object
+      required: [clauseNo, title, chapterPath, level]
+      properties:
+        clauseNo: {type: string, examples: ['4.1.1']}
+        title: {type: string}
+        chapterPath: {type: string, examples: ['4 技术要求 / 4.1 数据安全 / 4.1.1 总则']}
+        pageNo: {type: integer, minimum: 1, nullable: true}
+        level: {type: integer, minimum: 1}
+    ParseResult:
+      type: object
+      required: [documentId, parser, success, sections, tables, clauseAnchors, pages]
+      properties:
+        documentId: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        parser: {type: string, examples: [pdf-native, pdf-ocr, docx, xlsx, markdown]}
+        success: {type: boolean}
+        failureCode: {type: string, nullable: true}
+        retryCount: {type: integer, minimum: 0}
+        pages: {type: integer, minimum: 0}
+        sections:
+          type: array
+          items: {$ref: '#/components/schemas/SectionNode'}
+        tables:
+          type: array
+          items: {$ref: '#/components/schemas/TableBlock'}
+        clauseAnchors:
+          type: array
+          items: {$ref: '#/components/schemas/ClauseAnchor'}
+        parsedAt: {type: string, format: date-time}
+    ParseResultResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/ParseResult'}
+    CleaningDiff:
+      type: object
+      required: [type, before, after]
+      properties:
+        type: {type: string, enum: [GARBAGE_REMOVED, ILLEGAL_CHAR_REMOVED, BLANK_LINE_COLLAPSED, HEADER_FOOTER_REMOVED]}
+        pageNo: {type: integer, minimum: 1, nullable: true}
+        lineNo: {type: integer, minimum: 1, nullable: true}
+        before: {type: string}
+        after: {type: string}
+    CleaningReport:
+      type: object
+      required: [documentId, beforeChars, afterChars, removedGarbage, removedIllegalChars, collapsedBlankLines, clauseNoPreserved]
+      properties:
+        documentId: {type: string}
+        beforeChars: {type: integer, minimum: 0}
+        afterChars: {type: integer, minimum: 0}
+        removedGarbage: {type: integer, minimum: 0}
+        removedIllegalChars: {type: integer, minimum: 0}
+        collapsedBlankLines: {type: integer, minimum: 0}
+        clauseNoPreserved: {type: boolean, description: 清洗后条款编号完整性}
+        diffs:
+          type: array
+          items: {$ref: '#/components/schemas/CleaningDiff'}
+        generatedAt: {type: string, format: date-time}
+    CleaningReportResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/CleaningReport'}
+
+    # ------------------------------------------------------------------
+    # 分块 / 条款 / 标准元数据
+    # ------------------------------------------------------------------
+    ChunkType:
+      type: string
+      enum: [FIXED, STRUCTURED, CLAUSE]
+      description: 固定长度 / 结构化 / 条目化（按条款编号）
+    Chunk:
+      type: object
+      required: [id, tenantId, documentId, kbId, chunkType, chunkIndex, text, tokenCount]
+      properties:
+        id: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        documentId: {type: string}
+        kbId: {type: string}
+        chunkType: {$ref: '#/components/schemas/ChunkType'}
+        chunkIndex: {type: integer, minimum: 0}
+        text: {type: string}
+        tokenCount: {type: integer, minimum: 0}
+        clauseNo: {type: string, nullable: true}
+        chapterPath: {type: string, nullable: true}
+        pageNo: {type: integer, minimum: 1, nullable: true}
+        securityLevel:
+          type: string
+          nullable: true
+          description: P2 预留：密级（PUBLIC/INTERNAL/CONFIDENTIAL）；P0 恒 null
+          x-reserved-for: P2
+        domain:
+          type: string
+          nullable: true
+          description: P2 预留：标准域；P0 恒 null
+          x-reserved-for: P2
+        effectiveAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: P2 预留：条款生效时间；P0 恒 null
+          x-reserved-for: P2
+        indexVersion:
+          type: string
+          nullable: true
+          description: P2 预留：索引版本；P0 恒 null
+          x-reserved-for: P2
+        env:
+          type: string
+          nullable: true
+          description: P2 预留：环境；P0 恒 null
+          x-reserved-for: P2
+        metadata:
+          type: object
+          additionalProperties: {type: string}
+          description: 透传标签，不参与 P0 检索逻辑
+    ChunkPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/Chunk'}
+    ChunkPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/ChunkPage'}
+    ChunkPreviewRequest:
+      type: object
+      required: [chunkType]
+      properties:
+        chunkType: {$ref: '#/components/schemas/ChunkType'}
+        chunkSize: {type: integer, minimum: 100, maximum: 4096, default: 512, description: 仅 FIXED 生效（字符数）}
+        chunkOverlap: {type: integer, minimum: 0, maximum: 512, default: 64}
+        respectSentenceBoundary: {type: boolean, default: true}
+        maxPreview: {type: integer, minimum: 1, maximum: 200, default: 50}
+    ChunkPreviewResult:
+      type: object
+      required: [documentId, chunkType, totalChunks, items]
+      properties:
+        documentId: {type: string}
+        chunkType: {$ref: '#/components/schemas/ChunkType'}
+        totalChunks: {type: integer, minimum: 0}
+        clauseCount: {type: integer, minimum: 0, nullable: true, description: CLAUSE 模式下应等于文档条款数}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Chunk'}
+    ChunkPreviewResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/ChunkPreviewResult'}
+    Clause:
+      type: object
+      required: [clauseNo, title, chapterPath, text, level, tenantId]
+      properties:
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        clauseNo: {type: string, examples: ['4.1.1']}
+        title: {type: string}
+        chapterPath: {type: string}
+        text: {type: string}
+        pageNo: {type: integer, minimum: 1, nullable: true}
+        level: {type: integer, minimum: 1}
+        chunkId: {type: string, nullable: true}
+    ClausePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/Clause'}
+    ClausePageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/ClausePage'}
+    StandardMeta:
+      type: object
+      required: [documentId, tenantId, standardNo, standardName, issuer, clauseCount]
+      properties:
+        documentId: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        standardNo: {type: string, examples: ['JR/T 0088']}
+        standardName: {type: string}
+        issuer: {type: string, description: 发布机构}
+        issuedAt: {type: string, format: date, nullable: true}
+        effectiveAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: P0 仅展示；P2 用于时效检索
+          x-reserved-for: P2
+        replacedBy: {type: string, nullable: true}
+        domain:
+          type: string
+          nullable: true
+          description: P2 预留：标准域；P0 可空
+          x-reserved-for: P2
+        securityLevel:
+          type: string
+          nullable: true
+          description: P2 预留：密级；P0 可空
+          x-reserved-for: P2
+        clauseCount: {type: integer, minimum: 0}
+        confidence: {type: number, minimum: 0, maximum: 1, description: 元数据抽取置信度}
+        source: {type: string, enum: [AUTO_EXTRACTED, MANUAL_CORRECTED], default: AUTO_EXTRACTED}
+        version:
+          type: string
+          nullable: true
+          description: P2 预留：版本；P0 可空
+          x-reserved-for: P2
+        env:
+          type: string
+          nullable: true
+          description: P2 预留：环境；P0 可空
+          x-reserved-for: P2
+        updatedAt: {type: string, format: date-time}
+    StandardMetaUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        standardNo: {type: string}
+        standardName: {type: string}
+        issuer: {type: string}
+        effectiveAt: {type: string, format: date-time, nullable: true, x-reserved-for: P2}
+        domain: {type: string, nullable: true, x-reserved-for: P2}
+        securityLevel: {type: string, nullable: true, x-reserved-for: P2}
+        confidence: {type: number, minimum: 0, maximum: 1}
+    StandardMetaResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/StandardMeta'}
+
+    # ------------------------------------------------------------------
+    # 向量化 / 索引
+    # ------------------------------------------------------------------
+    JobStatus:
+      type: string
+      enum: [QUEUED, RUNNING, PAUSED, SUCCEEDED, FAILED]
+    EmbeddingFailure:
+      type: object
+      properties:
+        chunkId: {type: string}
+        code: {type: string}
+        message: {type: string}
+        retryable: {type: boolean}
+    EmbeddingJob:
+      allOf:
+        - $ref: '#/components/schemas/ResourceBase'
+        - type: object
+          required: [kbId, status, model, dimension, total, processed, failed]
+          properties:
+            kbId: {type: string}
+            documentIds:
+              type: array
+              items: {type: string}
+            status: {$ref: '#/components/schemas/JobStatus'}
+            model: {type: string, examples: ['bge-m3']}
+            dimension: {type: integer, minimum: 1}
+            total: {type: integer, minimum: 0}
+            processed: {type: integer, minimum: 0}
+            failed: {type: integer, minimum: 0}
+            progress: {type: integer, minimum: 0, maximum: 100}
+            failures:
+              type: array
+              items: {$ref: '#/components/schemas/EmbeddingFailure'}
+            error: {type: string, nullable: true}
+    EmbeddingJobCreateRequest:
+      type: object
+      required: [kbId]
+      properties:
+        kbId: {type: string}
+        documentIds:
+          type: array
+          description: 为空表示知识库全量
+          items: {type: string}
+        model: {type: string, default: bge-m3}
+    EmbeddingJobResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/EmbeddingJob'}
+    IndexBuild:
+      allOf:
+        - $ref: '#/components/schemas/ResourceBase'
+        - type: object
+          required: [kbId, status, totalChunks, indexedChunks]
+          properties:
+            kbId: {type: string}
+            status: {$ref: '#/components/schemas/JobStatus'}
+            totalChunks: {type: integer, minimum: 0}
+            indexedChunks: {type: integer, minimum: 0}
+            progress: {type: integer, minimum: 0, maximum: 100}
+            durationMs: {type: integer, minimum: 0, nullable: true}
+            indexType:
+              type: string
+              nullable: true
+              description: P2 预留（P0 固定 HNSW）；P0 可空且不参与逻辑
+              x-reserved-for: P2
+            metric:
+              type: string
+              nullable: true
+              description: P2 预留；P0 可空
+              x-reserved-for: P2
+            params:
+              type: object
+              nullable: true
+              additionalProperties: true
+              description: P2 预留；P0 可空
+              x-reserved-for: P2
+            indexSlot:
+              type: string
+              nullable: true
+              description: P2 预留；P0 可空
+              x-reserved-for: P2
+            alias:
+              type: string
+              nullable: true
+              description: P2 预留；P0 可空
+              x-reserved-for: P2
+            version:
+              type: string
+              nullable: true
+              description: P2 预留；P0 可空
+              x-reserved-for: P2
+            env:
+              type: string
+              nullable: true
+              description: P2 预留；P0 可空
+              x-reserved-for: P2
+            error: {type: string, nullable: true}
+            startedAt: {type: string, format: date-time, nullable: true}
+            finishedAt: {type: string, format: date-time, nullable: true}
+    IndexBuildRequest:
+      type: object
+      required: [kbId]
+      properties:
+        kbId: {type: string}
+        documentIds:
+          type: array
+          items: {type: string}
+        indexType: {type: string, nullable: true, x-reserved-for: P2, description: P2 预留，P0 忽略}
+        metric: {type: string, nullable: true, x-reserved-for: P2, description: P2 预留，P0 忽略}
+        params: {type: object, nullable: true, additionalProperties: true, x-reserved-for: P2}
+        indexSlot: {type: string, nullable: true, x-reserved-for: P2}
+        alias: {type: string, nullable: true, x-reserved-for: P2}
+        version: {type: string, nullable: true, x-reserved-for: P2}
+        env: {type: string, nullable: true, x-reserved-for: P2}
+    IndexBuildResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/IndexBuild'}
+    IndexStatus:
+      type: object
+      required: [kbId, indexStatus, collection, dimension, docCount, chunkCount]
+      properties:
+        kbId: {type: string}
+        indexStatus: {$ref: '#/components/schemas/IndexState'}
+        collection: {type: string, examples: ['kb_default_v1']}
+        dimension: {type: integer, minimum: 1}
+        docCount: {type: integer, minimum: 0}
+        chunkCount: {type: integer, minimum: 0}
+        lastBuildId: {type: string, nullable: true}
+        lastBuiltAt: {type: string, format: date-time, nullable: true}
+        version: {type: string, nullable: true, x-reserved-for: P2}
+        env: {type: string, nullable: true, x-reserved-for: P2}
+    IndexStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/IndexStatus'}
+
+    # ------------------------------------------------------------------
+    # 检索
+    # ------------------------------------------------------------------
+    RetrievalMode:
+      type: string
+      enum: [vector, bm25, hybrid]
+      default: vector
+      description: |
+        P0 仅 vector 实际执行；bm25（P1 #71）与 hybrid（P1 #72）收到时返回
+        `RETRIEVAL_MODE_NOT_ENABLED` 告警与空 hits，不报错。客户端必须容忍未知枚举值。
+    RetrievalFilters:
+      type: object
+      properties:
+        standardNo: {type: string, description: 标准编号精确/前缀匹配，如 JR/T 0088}
+        issuer: {type: string, description: 发布机构，包含匹配}
+        clauseNo: {type: string, description: 条款编号定位，如 4.1.1}
+        domain:
+          type: string
+          nullable: true
+          description: 标准域；P0 生效（chunk.meta.domain），为空不参与检索
+        securityLevel:
+          type: string
+          nullable: true
+          description: |
+            密级上限（PUBLIC/INTERNAL/CONFIDENTIAL/SECRET）。
+            行级密级校验在召回阶段始终生效（#88）；细粒度密级策略 P2 #89。
+        effectiveFrom:
+          type: string
+          format: date-time
+          nullable: true
+          description: 实施日期下界；P0 生效，缺失实施日期的条款不命中
+        effectiveTo:
+          type: string
+          format: date-time
+          nullable: true
+          description: 实施日期上界；P0 生效
+    RetrieveRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 0
+          maxLength: 20000
+          description: |
+            建议 ≤2000 字符；超过 2000 将截断并返回 QUERY_TRUNCATED 告警，
+            空查询返回 QUERY_EMPTY 告警与空 hits（不报错）。
+        kbId:
+          type: string
+          nullable: true
+          description: 单库检索；与 kbIds 互斥，同时传入返回 400
+        kbIds:
+          type: array
+          default: []
+          maxItems: 20
+          description: 多库检索；与 kbId 互斥，为空时检索全部有权限的知识库（P2 #262 跨库编排预留）
+          items: {type: string}
+        topK: {type: integer, minimum: 1, maximum: 50, default: 5}
+        retrievalMode: {$ref: '#/components/schemas/RetrievalMode'}
+        rerank:
+          type: boolean
+          default: false
+          description: |
+            P1 Cross-Encoder 重排预留；P0 收到 true 时返回 RERANK_NOT_ENABLED 告警，
+            并返回未重排的向量召回结果（不报错）
+          x-reserved-for: P1
+        sessionId:
+          type: string
+          nullable: true
+          description: P1 多轮会话预留；P0 接收但不保持上下文
+          x-reserved-for: P1
+        filters: {$ref: '#/components/schemas/RetrievalFilters'}
+    RetrieveHit:
+      type: object
+      required: [rank, score, chunkId, documentId, kbId, text]
+      properties:
+        rank: {type: integer, minimum: 1}
+        score: {type: number, minimum: 0, maximum: 1}
+        chunkId: {type: string}
+        documentId: {type: string}
+        kbId: {type: string}
+        clauseNo: {type: string, nullable: true}
+        chapterPath: {type: string, nullable: true}
+        pageNo: {type: integer, minimum: 1, nullable: true}
+        text: {type: string}
+        standardNo: {type: string, nullable: true}
+        standardName: {type: string, nullable: true}
+        securityLevel: {type: string, nullable: true}
+        citation: {$ref: '#/components/schemas/Citation'}
+    RetrieveResult:
+      type: object
+      required: [query, normalizedQuery, retrievalMode, rerank, hits, latencyMs]
+      properties:
+        query: {type: string}
+        normalizedQuery: {type: string}
+        retrievalMode: {$ref: '#/components/schemas/RetrievalMode'}
+        rerank: {type: boolean, default: false}
+        hits:
+          type: array
+          items: {$ref: '#/components/schemas/RetrieveHit'}
+        latencyMs: {type: integer, minimum: 0, description: 查询处理 + 召回 + 权限复核总耗时}
+        degraded: {type: boolean, default: false}
+        degradedReason: {type: string, nullable: true, description: 如 VECTOR_TIMEOUT}
+        warnings:
+          type: array
+          description: "兜底/未启用告警，形如 `CODE: 说明`"
+          items: {type: string}
+        timings:
+          type: object
+          description: 分段耗时（毫秒）：queryUnderstandingMs/embeddingMs/searchMs/guardMs/totalMs
+          additionalProperties: {type: number}
+        traceId: {type: string}
+    RetrieveResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/RetrieveResult'}
+    QueryUnderstandingRequest:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string, minLength: 0, maxLength: 20000}
+        kbId: {type: string, nullable: true}
+    QueryUnderstanding:
+      type: object
+      required: [originalQuery, normalizedQuery, warnings]
+      properties:
+        originalQuery: {type: string}
+        normalizedQuery: {type: string}
+        standardNo: {type: string, nullable: true, examples: ['JR/T 0088']}
+        clauseNo: {type: string, nullable: true, examples: ['4.1.1']}
+        tokens:
+          type: array
+          items: {type: string}
+        warnings:
+          type: array
+          items: {type: string}
+        latencyMs: {type: number, minimum: 0, description: 查询处理耗时，计入检索 P95}
+        truncated: {type: boolean, default: false}
+    QueryUnderstandingResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/QueryUnderstanding'}
+
+    # ------------------------------------------------------------------
+    # 问答 / 引用 / 标准简介
+    # ------------------------------------------------------------------
+    CapabilityType:
+      type: string
+      enum: [RAG, SKILL]
+      description: P0 仅 RAG；SKILL 为 P3 预留，P0 恒 disabled
+    ConversationMode:
+      type: string
+      enum: [SINGLE_TURN, stream, non-stream]
+      default: SINGLE_TURN
+      description: |
+        P0 单轮问答。`stream` / `non-stream` 仅声明期望输出模式（实际以调用
+        `/chat` 或 `/chat/stream` 为准），服务端不因此保持上下文；传入 sessionId
+        也不做多轮记忆（P1 #115）。客户端必须容忍未知枚举值。
+    AnswerFormat:
+      type: string
+      enum: [MARKDOWN]
+      default: MARKDOWN
+    FinishReason:
+      type: string
+      enum: [STOP, LENGTH, CONTENT_FILTER, REFUSED, ERROR]
+    ChatRequest:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string, minLength: 1, maxLength: 2000}
+        kbId:
+          type: string
+          nullable: true
+          description: 单库问答；与 kbIds 互斥
+        kbIds:
+          type: array
+          default: []
+          maxItems: 20
+          description: P2 预留的多库问答；P0 默认空，非空时与 kbId 互斥
+          x-reserved-for: P2
+          items: {type: string}
+        sessionId:
+          type: string
+          nullable: true
+          description: P1 多轮会话预留；P0 不持久化上下文
+          x-reserved-for: P1
+        conversationMode:
+          allOf:
+            - $ref: '#/components/schemas/ConversationMode'
+          description: P1 多轮预留；P0 固定 SINGLE_TURN
+          x-reserved-for: P1
+        retrievalMode: {$ref: '#/components/schemas/RetrievalMode'}
+        rerank:
+          type: boolean
+          default: false
+          description: P1 重排预留；P0 固定 false
+          x-reserved-for: P1
+        topK: {type: integer, minimum: 1, maximum: 20, default: 5}
+        capability:
+          allOf:
+            - $ref: '#/components/schemas/CapabilityType'
+          default: RAG
+          description: P0 仅 RAG；Skill 传入会被拒绝
+        filters: {$ref: '#/components/schemas/RetrievalFilters'}
+    Citation:
+      type: object
+      required: [chunkId, documentId]
+      properties:
+        chunkId: {type: string}
+        documentId: {type: string}
+        docId: {type: string, description: '与 documentId 等价，兼容 #106 验收口径'}
+        standardNo: {type: string, nullable: true}
+        standardName: {type: string, nullable: true}
+        clauseNo: {type: string, nullable: true, description: 回答必须可溯源到条款编号}
+        pageNo:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: 预留：条款页码（P0 可空，P1 起稳定返回）
+          x-reserved-for: P1
+        chapterPath:
+          type: string
+          nullable: true
+          description: 预留：章节路径（P0 可空，P1 起稳定返回）
+          x-reserved-for: P1
+        quote:
+          type: string
+          nullable: true
+          description: 预留：原文摘录；P0 可空
+          x-reserved-for: P1
+        score: {type: number, minimum: 0, maximum: 1}
+    TokenUsage:
+      type: object
+      required: [promptTokens, completionTokens, totalTokens]
+      properties:
+        promptTokens: {type: integer, minimum: 0}
+        completionTokens: {type: integer, minimum: 0}
+        totalTokens: {type: integer, minimum: 0}
+    Answer:
+      type: object
+      required: [answerId, content, format, citations, refused, confidence, finishReason, retrievalMode, rerank, createdAt, tenantId]
+      properties:
+        answerId: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        sessionId: {type: string, nullable: true, x-reserved-for: P1}
+        content: {type: string, description: Markdown 正文；拒答时为空或引导语}
+        format: {$ref: '#/components/schemas/AnswerFormat'}
+        citations:
+          type: array
+          items: {$ref: '#/components/schemas/Citation'}
+        refused: {type: boolean, description: 无依据时拒答，不得编造}
+        refusalReason: {type: string, nullable: true}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        usage: {$ref: '#/components/schemas/TokenUsage'}
+        finishReason: {$ref: '#/components/schemas/FinishReason'}
+        retrievalMode: {$ref: '#/components/schemas/RetrievalMode'}
+        rerank: {type: boolean, default: false}
+        promptTemplateVersion: {type: string, examples: ['rag-answer@3']}
+        provider: {type: string, nullable: true, description: 实际使用的 LLM 供应商}
+        degraded: {type: boolean, description: 是否发生检索/模型降级}
+        warnings:
+          type: array
+          items: {type: string}
+        timings:
+          type: object
+          additionalProperties: {type: number}
+        traceId: {type: string}
+        createdAt: {type: string, format: date-time}
+    ChatResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/Answer'}
+    SseMeta:
+      type: object
+      required: [answerId, traceId, retrievalMode, startedAt]
+      properties:
+        answerId: {type: string}
+        sessionId: {type: string, nullable: true}
+        traceId: {type: string}
+        retrievalMode: {$ref: '#/components/schemas/RetrievalMode'}
+        startedAt: {type: string, format: date-time}
+    SseDelta:
+      type: object
+      required: [answerId, seq, delta]
+      properties:
+        answerId: {type: string}
+        seq:
+          type: integer
+          minimum: 1
+          description: |
+            流内单调递增序号。SSE 实际 `id` 为 `<streamKey>:<seq>`，客户端断线后
+            原样回传 `Last-Event-ID`，服务端据此定位流并从该序号之后续传。
+        delta: {type: string}
+    SseCitation:
+      type: object
+      required: [answerId, citations]
+      properties:
+        answerId: {type: string}
+        citations:
+          type: array
+          items: {$ref: '#/components/schemas/Citation'}
+    SseDone:
+      type: object
+      required: [answerId, finishReason, refused]
+      properties:
+        answerId: {type: string}
+        finishReason: {$ref: '#/components/schemas/FinishReason'}
+        refused: {type: boolean}
+        refusalReason: {type: string, nullable: true}
+        citations:
+          type: array
+          items: {$ref: '#/components/schemas/Citation'}
+        usage: {$ref: '#/components/schemas/TokenUsage'}
+        content:
+          type: string
+          description: |
+            经引用校验、拒答判定与 Markdown 格式化后的最终正文。客户端应以其覆盖流式增量，
+            保证“流式展示”与 `/chat` 非流式结果一致。
+        confidence: {type: number, minimum: 0, maximum: 1}
+        provider: {type: string, nullable: true}
+        degraded: {type: boolean}
+        warnings:
+          type: array
+          items: {type: string}
+        timings:
+          type: object
+          additionalProperties: {type: number}
+          description: firstTokenMs / retrievalMs / llmMs / postprocessMs 等阶段耗时（毫秒）
+        promptTemplateVersion: {type: string, nullable: true}
+        traceId: {type: string, nullable: true}
+    SseError:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code: {type: string, pattern: '^(AUTH|PERM|PARAM|BIZ|SYS|RATE)\.[A-Z0-9_]+$'}
+        message: {type: string}
+        retryable: {type: boolean}
+        answerId: {type: string, nullable: true}
+    SummaryElement:
+      type: object
+      required: [key, label, value]
+      properties:
+        key: {type: string, examples: [scope, main_content, effective_date]}
+        label: {type: string}
+        value: {type: string}
+        sourceClauseNo: {type: string, nullable: true}
+        sourceQuote: {type: string, nullable: true}
+    Summary:
+      type: object
+      required: [id, tenantId, documentId, standardNo, standardName, elements, generatedAt]
+      properties:
+        id: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        documentId: {type: string}
+        standardNo: {type: string}
+        standardName: {type: string}
+        scope: {type: string, description: 适用范围}
+        mainContent: {type: string, description: 主要技术内容概述}
+        elements:
+          type: array
+          items: {$ref: '#/components/schemas/SummaryElement'}
+        effectiveAt: {type: string, format: date, nullable: true}
+        generatedAt: {type: string, format: date-time}
+        model: {type: string}
+        promptTemplateVersion: {type: string}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        summaryVersion: {type: integer, minimum: 1}
+        documentVersion: {type: integer, minimum: 1}
+        clauseCount: {type: integer, minimum: 0}
+        source: {type: string, enum: [EXTRACTIVE], description: 抽取式生成，不调用生成模型补全}
+        trace:
+          type: object
+          properties:
+            documentVersion: {type: integer}
+            metadataSource: {type: string, nullable: true}
+            metadataConfidence: {type: number, nullable: true}
+            missingElements:
+              type: array
+              items: {type: string}
+    SummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/Summary'}
+    SummaryCreateRequest:
+      type: object
+      properties:
+        regenerate: {type: boolean, default: false}
+    PromptTemplate:
+      type: object
+      required: [name, version, purpose, active, updatedAt]
+      properties:
+        name: {type: string, examples: [rag-answer]}
+        version: {type: string, examples: ['3']}
+        purpose: {type: string, enum: [ANSWER, SUMMARY, QUERY_UNDERSTANDING]}
+        variables:
+          type: array
+          items: {type: string}
+        contentHash: {type: string, description: 模板内容哈希，便于审计复现}
+        active: {type: boolean}
+        updatedAt: {type: string, format: date-time}
+    PromptTemplateListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: {$ref: '#/components/schemas/PromptTemplate'}
+
+    # ------------------------------------------------------------------
+    # 导出 / 审计
+    # ------------------------------------------------------------------
+    ExportType:
+      type: string
+      enum: [CLAUSES, STANDARD_SUMMARY]
+    ExportFormat:
+      type: string
+      enum: [PDF, XLSX, DOCX]
+    ExportStatus:
+      type: string
+      enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, EXPIRED]
+    ExportJob:
+      allOf:
+        - $ref: '#/components/schemas/ResourceBase'
+        - type: object
+          required: [kbId, documentId, type, format, status, progress, scope, clauseCount]
+          properties:
+            kbId: {type: string}
+            documentId: {type: string}
+            type: {$ref: '#/components/schemas/ExportType'}
+            format: {$ref: '#/components/schemas/ExportFormat'}
+            status: {$ref: '#/components/schemas/ExportStatus'}
+            progress: {type: integer, minimum: 0, maximum: 100}
+            scope: {type: string, description: '导出范围：KB/DOC/CLAUSES:ALL 或 SUMMARY:5'}
+            clauseCount: {type: integer, minimum: 0, description: 条款清单为导出条目数；标准简介为要素数 5}
+            retryCount: {type: integer, minimum: 0}
+            maxRetries: {type: integer, minimum: 0}
+            fileName: {type: string, nullable: true}
+            sizeBytes: {type: integer, minimum: 0, nullable: true}
+            fileHash: {type: string, nullable: true, description: SHA-256（明文文件）}
+            downloadUrl: {type: string, nullable: true}
+            errorCode: {type: string, nullable: true}
+            errorMessage: {type: string, nullable: true}
+            error: {type: string, nullable: true, deprecated: true}
+            expiresAt: {type: string, format: date-time, nullable: true}
+            finishedAt: {type: string, format: date-time, nullable: true}
+    ExportCreateRequest:
+      type: object
+      required: [documentId, type, format]
+      properties:
+        kbId: {type: string, description: 仅兼容入口 /exports 需要；推荐使用路径参数}
+        documentId: {type: string}
+        type: {$ref: '#/components/schemas/ExportType'}
+        format: {$ref: '#/components/schemas/ExportFormat'}
+    ExportJobResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/ExportJob'}
+    ExportJobPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/ExportJob'}
+    ExportJobPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/ExportJobPage'}
+    AuditResult:
+      type: string
+      enum: [SUCCESS, FAILURE, DENIED]
+    AuditLog:
+      type: object
+      required: [id, tenantId, actorId, action, objectType, result, traceId, createdAt]
+      properties:
+        id: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        actorId: {type: string}
+        actorName: {type: string}
+        action: {type: string, examples: [doc.upload]}
+        objectType: {type: string, examples: [document]}
+        objectId: {type: string, nullable: true}
+        result: {$ref: '#/components/schemas/AuditResult'}
+        ip: {type: string, nullable: true}
+        userAgent: {type: string, nullable: true}
+        traceId: {type: string}
+        detail:
+          type: object
+          additionalProperties: true
+          description: 脱敏后的变更摘要，不含密码/密钥/原文全文
+        createdAt: {type: string, format: date-time}
+    AuditLogPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/AuditLog'}
+    AuditLogPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/AuditLogPage'}
+
+    # ------------------------------------------------------------------
+    # 安全与合规
+    # ------------------------------------------------------------------
+    TlsPosture:
+      type: object
+      required: [enabled, minVersion]
+      properties:
+        enabled: {type: boolean}
+        minVersion: {type: string, examples: ['TLSv1.2']}
+        certificateExpiresAt: {type: string, format: date-time, nullable: true}
+    StorageEncryptionPosture:
+      type: object
+      required: [encryption, algorithm, keyManagement, keyRotationEnabled]
+      properties:
+        encryption: {type: boolean}
+        algorithm: {type: string, examples: [AES-256-GCM]}
+        keyManagement: {type: string, examples: [KMS/Vault]}
+        keyRotationEnabled: {type: boolean}
+        lastRotatedAt: {type: string, format: date-time, nullable: true}
+    SecurityPosture:
+      type: object
+      required: [tls, storage, checkedAt]
+      properties:
+        tls: {$ref: '#/components/schemas/TlsPosture'}
+        storage: {$ref: '#/components/schemas/StorageEncryptionPosture'}
+        checkedAt: {type: string, format: date-time}
+    SecurityPostureResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/SecurityPosture'}
+    SecurityAction:
+      type: string
+      enum: [ALLOW, BLOCK, REPLACE, WARN]
+    SecurityRuleDefinition:
+      type: object
+      required: [ruleId, ruleType, pattern, matchType, enabled, weight]
+      properties:
+        ruleId: {type: string, pattern: '^[A-Za-z0-9_.-]{2,64}$'}
+        ruleType: {$ref: '#/components/schemas/SecurityCheckType'}
+        pattern: {type: string, minLength: 1, maxLength: 512, description: CONTAINS 为字面量，REGEX 为正则表达式}
+        matchType: {type: string, enum: [REGEX, CONTAINS]}
+        description: {type: string, maxLength: 256, nullable: true}
+        enabled: {type: boolean}
+        weight: {type: number, minimum: 0, maximum: 1, description: Prompt 注入评分权重；内容规则命中即评分 1}
+    SecurityPolicyRule:
+      type: object
+      required: [enabled, action, ruleVersion]
+      properties:
+        enabled: {type: boolean}
+        action: {$ref: '#/components/schemas/SecurityAction'}
+        ruleVersion: {type: string, minLength: 1, maxLength: 32}
+        threshold: {type: number, minimum: 0, maximum: 1, nullable: true}
+        rules:
+          type: array
+          items: {$ref: '#/components/schemas/SecurityRuleDefinition'}
+          description: 查询返回完整规则；更新时省略 rules 表示只修改策略，传入数组表示整体替换该类规则
+    SecurityPolicy:
+      type: object
+      required: [inputContent, outputContent, promptInjection, updatedAt]
+      properties:
+        inputContent: {$ref: '#/components/schemas/SecurityPolicyRule'}
+        outputContent: {$ref: '#/components/schemas/SecurityPolicyRule'}
+        promptInjection: {$ref: '#/components/schemas/SecurityPolicyRule'}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string, nullable: true}
+    SecurityPolicyResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/SecurityPolicy'}
+    SecurityPolicyUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        inputContent: {$ref: '#/components/schemas/SecurityPolicyRule'}
+        outputContent: {$ref: '#/components/schemas/SecurityPolicyRule'}
+        promptInjection: {$ref: '#/components/schemas/SecurityPolicyRule'}
+    SecurityCheckType:
+      type: string
+      enum: [INPUT_CONTENT, OUTPUT_CONTENT, PROMPT_INJECTION]
+    SecurityCheckRequest:
+      type: object
+      required: [type, content]
+      properties:
+        type: {$ref: '#/components/schemas/SecurityCheckType'}
+        content: {type: string, maxLength: 20000}
+    SecurityCheckResult:
+      type: object
+      required: [type, passed, action, ruleVersion, traceId]
+      properties:
+        type: {$ref: '#/components/schemas/SecurityCheckType'}
+        passed: {type: boolean}
+        action: {$ref: '#/components/schemas/SecurityAction'}
+        riskTypes:
+          type: array
+          items: {type: string, examples: [SENSITIVE_WORD, PROMPT_INJECTION, JAILBREAK, PII]}
+        score: {type: number, minimum: 0, maximum: 1}
+        sanitizedContent: {type: string, nullable: true, description: REPLACE 时的净化结果}
+        ruleVersion: {type: string}
+        traceId: {type: string}
+    SecurityCheckResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/SecurityCheckResult'}
+
+    # ------------------------------------------------------------------
+    # 可观测
+    # ------------------------------------------------------------------
+    RequestLogEntry:
+      type: object
+      required: [requestId, traceId, method, path, status, latencyMs, occurredAt]
+      properties:
+        requestId: {type: string}
+        traceId: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        userId: {type: string, nullable: true}
+        method: {type: string}
+        path:
+          type: string
+          description: 接口路径（不含 query string）
+        status: {type: integer}
+        latencyMs: {type: integer, minimum: 0}
+        outcome:
+          type: string
+          enum: [SUCCESS, DENIED, FAILURE]
+          description: 成功 / 鉴权拒绝 / 其他失败
+        service: {type: string}
+        clientIpHash:
+          type: string
+          nullable: true
+          description: 客户端 IP 的 SHA-256 摘要，不保存原始 IP
+        occurredAt: {type: string, format: date-time}
+    RequestLogPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/RequestLogEntry'}
+    RequestLogPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/RequestLogPage'}
+    TraceSpan:
+      type: object
+      required: [spanId, name, stage, startTime, durationMs, status]
+      properties:
+        traceId: {type: string}
+        spanId: {type: string}
+        parentSpanId: {type: string, nullable: true}
+        name: {type: string, examples: [retrieve, generate]}
+        stage: {type: string, enum: [AUTH, RETRIEVE, RERANK, PROMPT, LLM, SECURITY, INDEX, OTHER]}
+        service: {type: string, examples: [platform-api, svc-query]}
+        kind: {type: string, examples: [SERVER]}
+        startTime: {type: string, format: date-time}
+        endTime: {type: string, format: date-time}
+        durationMs: {type: number, minimum: 0}
+        status: {type: string, enum: [UNSET, OK, ERROR]}
+        attributes:
+          type: object
+          additionalProperties: true
+          description: 环节标签（kbId、chunkCount、hits 等），不含正文与密钥
+        error: {type: string, nullable: true}
+    TraceDetail:
+      type: object
+      required: [traceId, totalLatencyMs, spans, status]
+      properties:
+        traceId: {type: string}
+        tenantId: {$ref: '#/components/schemas/TenantId'}
+        userId: {type: string, nullable: true}
+        totalLatencyMs: {type: integer, minimum: 0}
+        spanCount: {type: integer, minimum: 0}
+        errorSpanCount: {type: integer, minimum: 0}
+        services:
+          type: array
+          items: {type: string}
+        spans:
+          type: array
+          items: {$ref: '#/components/schemas/TraceSpan'}
+        unavailableSources:
+          type: array
+          description: 查询失败的下游服务；已采集部分仍返回
+          items: {type: string}
+        status: {type: string, enum: [OK, ERROR]}
+        queriedAt: {type: string, format: date-time}
+    TraceResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/TraceDetail'}
+    MetricsSummary:
+      type: object
+      required: [window, qps, latencyP95Ms, errorRate, successRate, collectedAt]
+      properties:
+        window: {type: string, enum: ['5m', '15m', '1h', '24h']}
+        qps: {type: number, minimum: 0}
+        latencyP50Ms: {type: integer, minimum: 0}
+        latencyP95Ms: {type: integer, minimum: 0}
+        latencyP99Ms: {type: integer, minimum: 0}
+        errorRate: {type: number, minimum: 0, maximum: 1}
+        successRate: {type: number, minimum: 0, maximum: 1}
+        cpuUsage: {type: number, minimum: 0, maximum: 1}
+        memoryUsage: {type: number, minimum: 0, maximum: 1}
+        collectedAt: {type: string, format: date-time}
+    MetricsSummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/MetricsSummary'}
+
+    # ------------------------------------------------------------------
+    # 平台配置 / UI
+    # ------------------------------------------------------------------
+    SystemConfig:
+      type: object
+      required: [defaultCapability, supportedFormats, maxUploadSizeBytes, maxQueryLength, streamingEnabled]
+      properties:
+        defaultCapability: {$ref: '#/components/schemas/CapabilityType'}
+        supportedFormats:
+          type: array
+          items: {$ref: '#/components/schemas/DocumentFormat'}
+        maxUploadSizeBytes: {type: integer, minimum: 1}
+        maxQueryLength: {type: integer, minimum: 1}
+        streamingEnabled: {type: boolean}
+        retrievalTopK: {type: integer, minimum: 1, maximum: 50}
+        updatedAt: {type: string, format: date-time}
+    SystemConfigResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/SystemConfig'}
+    SystemConfigUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        defaultCapability: {$ref: '#/components/schemas/CapabilityType'}
+        maxUploadSizeBytes: {type: integer, minimum: 1}
+        maxQueryLength: {type: integer, minimum: 1}
+        streamingEnabled: {type: boolean}
+        retrievalTopK: {type: integer, minimum: 1, maximum: 50}
+    AdminOverview:
+      type: object
+      required: [kbCount, documentCount, chunkCount, userCount, qps, latencyP95Ms, errorRate]
+      properties:
+        kbCount: {type: integer, minimum: 0}
+        documentCount: {type: integer, minimum: 0}
+        chunkCount: {type: integer, minimum: 0}
+        userCount: {type: integer, minimum: 0}
+        qps: {type: number, minimum: 0}
+        latencyP95Ms: {type: integer, minimum: 0}
+        errorRate: {type: number, minimum: 0, maximum: 1}
+        updatedAt: {type: string, format: date-time}
+    AdminOverviewResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/AdminOverview'}
+    Capability:
+      type: object
+      required: [code, name, enabled]
+      properties:
+        code: {$ref: '#/components/schemas/CapabilityType'}
+        name: {type: string}
+        enabled: {type: boolean}
+        availableFrom: {type: string, examples: [P0, P3]}
+        description: {type: string}
+    CapabilityConfig:
+      type: object
+      required: [capabilities, defaultCapability, skillEnabled]
+      properties:
+        capabilities:
+          type: array
+          items: {$ref: '#/components/schemas/Capability'}
+        defaultCapability: {$ref: '#/components/schemas/CapabilityType'}
+        skillEnabled: {type: boolean, const: false, description: P0 固定 false（P3 才启用）}
+    CapabilityConfigResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/CapabilityConfig'}
+    UIConfig:
+      type: object
+      required: [supportedFormats, maxUploadSizeBytes, streamingEnabled, defaultCapability, maxQueryLength]
+      properties:
+        supportedFormats:
+          type: array
+          items: {$ref: '#/components/schemas/DocumentFormat'}
+        maxUploadSizeBytes: {type: integer}
+        streamingEnabled: {type: boolean}
+        defaultCapability: {$ref: '#/components/schemas/CapabilityType'}
+        maxQueryLength: {type: integer}
+        showCitationPageNo: {type: boolean, description: P0 false；P1 页码稳定后开启}
+    UIConfigResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/UIConfig'}
+
+    # ------------------------------------------------------------------
+    # 模型服务
+    # ------------------------------------------------------------------
+    ModelStatus:
+      type: string
+      enum: [UP, DEGRADED, DOWN]
+    ModelProvider:
+      type: object
+      required: [code, name, models, status]
+      properties:
+        code: {type: string, examples: [openai-compatible]}
+        name: {type: string}
+        models:
+          type: array
+          items: {type: string}
+        status: {$ref: '#/components/schemas/ModelStatus'}
+        latencyP95Ms: {type: integer, minimum: 0, nullable: true}
+        active: {type: boolean, default: false, description: 是否为当前激活供应商}
+    ModelProviderListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: {$ref: '#/components/schemas/ModelProvider'}
+    ModelMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role: {type: string, enum: [system, user, assistant]}
+        content: {type: string}
+    ModelChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        provider:
+          type: string
+          nullable: true
+          description: 手动切换供应商 code；缺省使用当前激活供应商
+        model: {type: string, nullable: true}
+        messages:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/ModelMessage'}
+        temperature: {type: number, minimum: 0, maximum: 2, default: 0.1}
+        maxTokens: {type: integer, minimum: 1, maximum: 8192, default: 1024}
+    ModelChatResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [provider, model, content, usage, latencyMs]
+              properties:
+                provider: {type: string}
+                model: {type: string}
+                content: {type: string}
+                usage: {$ref: '#/components/schemas/TokenUsage'}
+                latencyMs: {type: integer, minimum: 0}
+                degraded: {type: boolean, description: 是否发生供应商故障切换}
+                warnings:
+                  type: array
+                  items: {type: string}
+                attempts:
+                  type: array
+                  description: 脱敏后的调用尝试链
+                  items:
+                    type: object
+                    properties:
+                      provider: {type: string}
+                      model: {type: string, nullable: true}
+                      ok: {type: boolean}
+                      errorCode: {type: string, nullable: true}
+                      error: {type: string, nullable: true}
+                      latencyMs: {type: integer, minimum: 0}
+    RefusalStats:
+      type: object
+      required: [answered, refused, total, refusalRate]
+      properties:
+        answered: {type: integer, minimum: 0}
+        refused: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0}
+        refusalRate: {type: number, minimum: 0, maximum: 1}
+        byReason:
+          type: object
+          additionalProperties: {type: integer, minimum: 0}
+        byTenant:
+          type: object
+          additionalProperties: {type: integer, minimum: 0}
+    RefusalStatsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/RefusalStats'}
+    EmbeddingRequest:
+      type: object
+      required: [texts]
+      properties:
+        model: {type: string, default: bge-m3}
+        texts:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: {type: string}
+    EmbeddingResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [model, dimension, vectors, usage]
+              properties:
+                model: {type: string}
+                dimension: {type: integer}
+                vectors:
+                  type: array
+                  items:
+                    type: array
+                    items: {type: number}
+                usage: {$ref: '#/components/schemas/TokenUsage'}
+    ModelHealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: {$ref: '#/components/schemas/ModelProvider'}
+

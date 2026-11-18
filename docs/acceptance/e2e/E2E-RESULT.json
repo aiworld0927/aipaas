@@ -1,0 +1,651 @@
+{
+  "generatedAt": "2026-11-19T00:08:44",
+  "kbId": "kb_e2e",
+  "documents": [
+    {
+      "docId": "e2e_gbt35273",
+      "standardNo": "GB/T 35273-2020",
+      "clauses": 6
+    },
+    {
+      "docId": "e2e_jrt0197",
+      "standardNo": "JR/T 0197-2020",
+      "clauses": 6
+    },
+    {
+      "docId": "e2e_gbt22239",
+      "standardNo": "GB/T 22239-2019",
+      "clauses": 5
+    }
+  ],
+  "steps": [
+    {
+      "step": "1. 上传并解析 3 份文本型 PDF（含表格）",
+      "status": "PASS",
+      "durationMs": 790.76,
+      "detail": [
+        {
+          "docId": "e2e_gbt35273",
+          "file": "GBT-35273-2020.pdf",
+          "success": true,
+          "standardNo": "GB/T 35273-2020",
+          "title": "信息安全技术 个人信息安全规范",
+          "clauseCount": 6,
+          "tableCount": 1,
+          "chunkCount": 7
+        },
+        {
+          "docId": "e2e_jrt0197",
+          "file": "JRT-0197-2020.pdf",
+          "success": true,
+          "standardNo": "JR/T 0197-2020",
+          "title": "金融数据安全 数据安全分级指南",
+          "clauseCount": 6,
+          "tableCount": 0,
+          "chunkCount": 6
+        },
+        {
+          "docId": "e2e_gbt22239",
+          "file": "GBT-22239-2019.pdf",
+          "success": true,
+          "standardNo": "GB/T 22239-2019",
+          "title": "信息安全技术 网络安全等级保护基本要求",
+          "clauseCount": 5,
+          "tableCount": 1,
+          "chunkCount": 6
+        }
+      ],
+      "error": null
+    },
+    {
+      "step": "2. 扫描件负向样例明确失败标识",
+      "status": "PASS",
+      "durationMs": 123.06,
+      "detail": {
+        "file": "scanned-sample.pdf",
+        "success": false,
+        "failureCode": "PARSE.PDF_SCANNED"
+      },
+      "error": null
+    },
+    {
+      "step": "3. 条目化分块（条目数=条款数）",
+      "status": "PASS",
+      "durationMs": 0.37,
+      "detail": [
+        {
+          "docId": "e2e_gbt35273",
+          "structuredChunks": 7,
+          "itemizedChunks": 6,
+          "clauses": 6
+        },
+        {
+          "docId": "e2e_jrt0197",
+          "structuredChunks": 6,
+          "itemizedChunks": 6,
+          "clauses": 6
+        },
+        {
+          "docId": "e2e_gbt22239",
+          "structuredChunks": 6,
+          "itemizedChunks": 5,
+          "clauses": 5
+        }
+      ],
+      "error": null
+    },
+    {
+      "step": "4. 向量化并构建 HNSW 索引",
+      "status": "PASS",
+      "durationMs": 779.59,
+      "detail": {
+        "vectors": 19,
+        "dimension": 512,
+        "buildId": "idx_a60b8c9e75b4",
+        "status": "READY",
+        "indexedChunks": 19,
+        "durationMs": 0.008,
+        "searchProbe": []
+      },
+      "error": null
+    },
+    {
+      "step": "5. 标准编号查询 → 条款定位问答 → 引用展示",
+      "status": "PASS",
+      "durationMs": 4.85,
+      "detail": [
+        {
+          "query": "GB/T 35273-2020 对个人信息收集提出了哪些要求？",
+          "retrievalLatencyMs": 1,
+          "hits": [
+            {
+              "chunkId": "e2e_gbt35273:clause:0:4",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": "4",
+              "score": 0.855767938812709
+            },
+            {
+              "chunkId": "e2e_gbt35273:table:0:tbl_p1_1",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": null,
+              "score": 0.8362767058199579
+            },
+            {
+              "chunkId": "e2e_gbt35273:clause:3:4.1.2",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": "4.1.2",
+              "score": 0.8305272495960956
+            },
+            {
+              "chunkId": "e2e_gbt35273:clause:5:5.1",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": "5.1",
+              "score": 0.7850951638616331
+            },
+            {
+              "chunkId": "e2e_gbt35273:clause:2:4.1.1",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": "4.1.1",
+              "score": 0.7840005868604716
+            }
+          ],
+          "answer": "- 4 个人信息安全要求 [1]\n- 条款号 要求 说明 4.1.1 最小必要 收集个人信息应最小必要 [2]\n- 4.1.2 最小必要 收集个人信息应当遵循最小必要原则，不得过度收集。（未检索到直接依据，建议查阅原标准） 条款号 要求 说明 4.1.1 最小必要 收集个人信息应最小必要 4.1.2 告知同意 应告知处理目的 [3]\n- 5.1 安全管理制度 应建立个人信息安全管理制度。[4]",
+          "refused": false,
+          "citations": [
+            {
+              "chunkId": "e2e_gbt35273:clause:0:4",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": "4",
+              "quote": "4 个人信息安全要求"
+            },
+            {
+              "chunkId": "e2e_gbt35273:table:0:tbl_p1_1",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": null,
+              "quote": "条款号\t\t要求\t\t说明\n4.1.1\t\t最小必要\t\t收集个人信息应最小必要"
+            },
+            {
+              "chunkId": "e2e_gbt35273:clause:3:4.1.2",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": "4.1.2",
+              "quote": "4.1.2 最小必要\n收集个人信息应当遵循最小必要原则，不得过度收集。\n条款号\n要求\n说明\n4.1.1\n最小必要\n收集个人信息应最小必要\n4.1.2\n告知同意\n应告知处理目的"
+            },
+            {
+              "chunkId": "e2e_gbt35273:clause:5:5.1",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": "5.1",
+              "quote": "5.1 安全管理制度\n应建立个人信息安全管理制度。"
+            },
+            {
+              "chunkId": "e2e_gbt35273:clause:2:4.1.1",
+              "standardNo": "GB/T 35273-2020",
+              "clauseNo": "4.1.1",
+              "quote": "4.1.1 总则\n本文件规定了个人信息处理活动应遵循的基本原则。"
+            }
+          ],
+          "confidence": 0.8728
+        },
+        {
+          "query": "JR/T 0197-2020 的适用范围是什么？",
+          "retrievalLatencyMs": 0,
+          "hits": [
+            {
+              "chunkId": "e2e_jrt0197:clause:0:1",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "1",
+              "score": 0.8311547236945473
+            },
+            {
+              "chunkId": "e2e_jrt0197:clause:1:4",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "4",
+              "score": 0.75
+            },
+            {
+              "chunkId": "e2e_jrt0197:clause:2:4.1",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "4.1",
+              "score": 0.75
+            },
+            {
+              "chunkId": "e2e_jrt0197:clause:3:4.1.1",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "4.1.1",
+              "score": 0.75
+            },
+            {
+              "chunkId": "e2e_jrt0197:clause:4:附录A",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "附录A",
+              "score": 0.75
+            }
+          ],
+          "answer": "- 1 范围 本文件适用于金融机构数据安全分级工作。[1]\n- 4 数据安全分级 [2]\n- 4.1 分级要素 [3]\n- 4.1.1 识别数据资产 金融机构应识别数据资产并形成数据资产目录。[4]",
+          "refused": false,
+          "citations": [
+            {
+              "chunkId": "e2e_jrt0197:clause:0:1",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "1",
+              "quote": "1 范围\n本文件适用于金融机构数据安全分级工作。"
+            },
+            {
+              "chunkId": "e2e_jrt0197:clause:1:4",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "4",
+              "quote": "4 数据安全分级"
+            },
+            {
+              "chunkId": "e2e_jrt0197:clause:2:4.1",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "4.1",
+              "quote": "4.1 分级要素"
+            },
+            {
+              "chunkId": "e2e_jrt0197:clause:3:4.1.1",
+              "standardNo": "JR/T 0197-2020",
+              "clauseNo": "4.1.1",
+              "quote": "4.1.1 识别数据资产\n金融机构应识别数据资产并形成数据资产目录。"
+            }
+          ],
+          "confidence": 0.8392
+        },
+        {
+          "query": "GB/T 22239-2019 关于访问控制和安全审计的要求是什么？",
+          "retrievalLatencyMs": 0,
+          "hits": [
+            {
+              "chunkId": "e2e_gbt22239:clause:3:7.2",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": "7.2",
+              "score": 0.9207170236179986
+            },
+            {
+              "chunkId": "e2e_gbt22239:clause:0:7",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": "7",
+              "score": 0.8116853696558657
+            },
+            {
+              "chunkId": "e2e_gbt22239:clause:2:7.1.1",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": "7.1.1",
+              "score": 0.7838439781244647
+            },
+            {
+              "chunkId": "e2e_gbt22239:table:0:tbl_p1_1",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": null,
+              "score": 0.7621926230008306
+            },
+            {
+              "chunkId": "e2e_gbt22239:clause:4:7.2.1",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": "7.2.1",
+              "score": 0.7574153065178943
+            }
+          ],
+          "answer": "- 7.2 访问控制 [1]\n- 7 安全通用要求 [2]\n- 7.1.1 应对登录用户进行身份鉴别。[3]\n- 条款号 要求 说明 4.1.1 最小必要 收集个人信息应最小必要 [4]",
+          "refused": false,
+          "citations": [
+            {
+              "chunkId": "e2e_gbt22239:clause:3:7.2",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": "7.2",
+              "quote": "7.2 访问控制"
+            },
+            {
+              "chunkId": "e2e_gbt22239:clause:0:7",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": "7",
+              "quote": "7 安全通用要求"
+            },
+            {
+              "chunkId": "e2e_gbt22239:clause:2:7.1.1",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": "7.1.1",
+              "quote": "7.1.1 应对登录用户进行身份鉴别。"
+            },
+            {
+              "chunkId": "e2e_gbt22239:table:0:tbl_p1_1",
+              "standardNo": "GB/T 22239-2019",
+              "clauseNo": null,
+              "quote": "条款号\t\t要求\t\t说明\n4.1.1\t\t最小必要\t\t收集个人信息应最小必要"
+            }
+          ],
+          "confidence": 0.8737
+        }
+      ],
+      "error": null
+    },
+    {
+      "step": "6. 标准简介生成（五要素）",
+      "status": "PASS",
+      "durationMs": 0.97,
+      "detail": [
+        {
+          "docId": "e2e_gbt35273",
+          "standardNo": "GB/T 35273-2020",
+          "summaryVersion": 1,
+          "clauseCount": 6,
+          "elements": {
+            "standard_no": "GB/T 35273-2020",
+            "standard_name": "信息安全技术 个人信息安全规范",
+            "scope": "本文件规定了个人信息处理活动应遵循的基本原则。",
+            "main_content": "本文件共 6 条，主要技术内容包括：个人信息安全要求、数据安全、总则、最小必要、管理要求、安全管理制度。",
+            "effective_date": "未识别"
+          }
+        },
+        {
+          "docId": "e2e_jrt0197",
+          "standardNo": "JR/T 0197-2020",
+          "summaryVersion": 1,
+          "clauseCount": 6,
+          "elements": {
+            "standard_no": "JR/T 0197-2020",
+            "standard_name": "金融数据安全 数据安全分级指南",
+            "scope": "本文件适用于金融机构数据安全分级工作。",
+            "main_content": "本文件共 6 条，主要技术内容包括：范围、数据安全分级、分级要素、识别数据资产、数据安全级别、级别定义。",
+            "effective_date": "未识别"
+          }
+        },
+        {
+          "docId": "e2e_gbt22239",
+          "standardNo": "GB/T 22239-2019",
+          "summaryVersion": 1,
+          "clauseCount": 5,
+          "elements": {
+            "standard_no": "GB/T 22239-2019",
+            "standard_name": "信息安全技术 网络安全等级保护基本要求",
+            "scope": "未识别",
+            "main_content": "本文件共 5 条，主要技术内容包括：安全通用要求、身份鉴别、应对登录用户进行身份鉴别。、访问控制、应遵循最小权限原则。。",
+            "effective_date": "未识别"
+          }
+        }
+      ],
+      "error": null
+    },
+    {
+      "step": "7. 条目化导出（JSON + XLSX）",
+      "status": "PASS",
+      "durationMs": 50.26,
+      "detail": [
+        {
+          "docId": "e2e_gbt35273",
+          "rows": 6,
+          "json": "docs/acceptance/e2e/exports/e2e_gbt35273-clauses.json",
+          "xlsx": "docs/acceptance/e2e/exports/e2e_gbt35273-clauses.xlsx"
+        },
+        {
+          "docId": "e2e_jrt0197",
+          "rows": 6,
+          "json": "docs/acceptance/e2e/exports/e2e_jrt0197-clauses.json",
+          "xlsx": "docs/acceptance/e2e/exports/e2e_jrt0197-clauses.xlsx"
+        },
+        {
+          "docId": "e2e_gbt22239",
+          "rows": 5,
+          "json": "docs/acceptance/e2e/exports/e2e_gbt22239-clauses.json",
+          "xlsx": "docs/acceptance/e2e/exports/e2e_gbt22239-clauses.xlsx"
+        }
+      ],
+      "error": null
+    },
+    {
+      "step": "8. 越权导出/检索拦截",
+      "status": "PASS",
+      "durationMs": 0.11,
+      "detail": {
+        "denied": true,
+        "errorType": "PermissionDenied"
+      },
+      "error": null
+    }
+  ],
+  "qa": [
+    {
+      "query": "GB/T 35273-2020 对个人信息收集提出了哪些要求？",
+      "retrievalLatencyMs": 1,
+      "hits": [
+        {
+          "chunkId": "e2e_gbt35273:clause:0:4",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": "4",
+          "score": 0.855767938812709
+        },
+        {
+          "chunkId": "e2e_gbt35273:table:0:tbl_p1_1",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": null,
+          "score": 0.8362767058199579
+        },
+        {
+          "chunkId": "e2e_gbt35273:clause:3:4.1.2",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": "4.1.2",
+          "score": 0.8305272495960956
+        },
+        {
+          "chunkId": "e2e_gbt35273:clause:5:5.1",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": "5.1",
+          "score": 0.7850951638616331
+        },
+        {
+          "chunkId": "e2e_gbt35273:clause:2:4.1.1",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": "4.1.1",
+          "score": 0.7840005868604716
+        }
+      ],
+      "answer": "- 4 个人信息安全要求 [1]\n- 条款号 要求 说明 4.1.1 最小必要 收集个人信息应最小必要 [2]\n- 4.1.2 最小必要 收集个人信息应当遵循最小必要原则，不得过度收集。（未检索到直接依据，建议查阅原标准） 条款号 要求 说明 4.1.1 最小必要 收集个人信息应最小必要 4.1.2 告知同意 应告知处理目的 [3]\n- 5.1 安全管理制度 应建立个人信息安全管理制度。[4]",
+      "refused": false,
+      "citations": [
+        {
+          "chunkId": "e2e_gbt35273:clause:0:4",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": "4",
+          "quote": "4 个人信息安全要求"
+        },
+        {
+          "chunkId": "e2e_gbt35273:table:0:tbl_p1_1",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": null,
+          "quote": "条款号\t\t要求\t\t说明\n4.1.1\t\t最小必要\t\t收集个人信息应最小必要"
+        },
+        {
+          "chunkId": "e2e_gbt35273:clause:3:4.1.2",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": "4.1.2",
+          "quote": "4.1.2 最小必要\n收集个人信息应当遵循最小必要原则，不得过度收集。\n条款号\n要求\n说明\n4.1.1\n最小必要\n收集个人信息应最小必要\n4.1.2\n告知同意\n应告知处理目的"
+        },
+        {
+          "chunkId": "e2e_gbt35273:clause:5:5.1",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": "5.1",
+          "quote": "5.1 安全管理制度\n应建立个人信息安全管理制度。"
+        },
+        {
+          "chunkId": "e2e_gbt35273:clause:2:4.1.1",
+          "standardNo": "GB/T 35273-2020",
+          "clauseNo": "4.1.1",
+          "quote": "4.1.1 总则\n本文件规定了个人信息处理活动应遵循的基本原则。"
+        }
+      ],
+      "confidence": 0.8728
+    },
+    {
+      "query": "JR/T 0197-2020 的适用范围是什么？",
+      "retrievalLatencyMs": 0,
+      "hits": [
+        {
+          "chunkId": "e2e_jrt0197:clause:0:1",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "1",
+          "score": 0.8311547236945473
+        },
+        {
+          "chunkId": "e2e_jrt0197:clause:1:4",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "4",
+          "score": 0.75
+        },
+        {
+          "chunkId": "e2e_jrt0197:clause:2:4.1",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "4.1",
+          "score": 0.75
+        },
+        {
+          "chunkId": "e2e_jrt0197:clause:3:4.1.1",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "4.1.1",
+          "score": 0.75
+        },
+        {
+          "chunkId": "e2e_jrt0197:clause:4:附录A",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "附录A",
+          "score": 0.75
+        }
+      ],
+      "answer": "- 1 范围 本文件适用于金融机构数据安全分级工作。[1]\n- 4 数据安全分级 [2]\n- 4.1 分级要素 [3]\n- 4.1.1 识别数据资产 金融机构应识别数据资产并形成数据资产目录。[4]",
+      "refused": false,
+      "citations": [
+        {
+          "chunkId": "e2e_jrt0197:clause:0:1",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "1",
+          "quote": "1 范围\n本文件适用于金融机构数据安全分级工作。"
+        },
+        {
+          "chunkId": "e2e_jrt0197:clause:1:4",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "4",
+          "quote": "4 数据安全分级"
+        },
+        {
+          "chunkId": "e2e_jrt0197:clause:2:4.1",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "4.1",
+          "quote": "4.1 分级要素"
+        },
+        {
+          "chunkId": "e2e_jrt0197:clause:3:4.1.1",
+          "standardNo": "JR/T 0197-2020",
+          "clauseNo": "4.1.1",
+          "quote": "4.1.1 识别数据资产\n金融机构应识别数据资产并形成数据资产目录。"
+        }
+      ],
+      "confidence": 0.8392
+    },
+    {
+      "query": "GB/T 22239-2019 关于访问控制和安全审计的要求是什么？",
+      "retrievalLatencyMs": 0,
+      "hits": [
+        {
+          "chunkId": "e2e_gbt22239:clause:3:7.2",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": "7.2",
+          "score": 0.9207170236179986
+        },
+        {
+          "chunkId": "e2e_gbt22239:clause:0:7",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": "7",
+          "score": 0.8116853696558657
+        },
+        {
+          "chunkId": "e2e_gbt22239:clause:2:7.1.1",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": "7.1.1",
+          "score": 0.7838439781244647
+        },
+        {
+          "chunkId": "e2e_gbt22239:table:0:tbl_p1_1",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": null,
+          "score": 0.7621926230008306
+        },
+        {
+          "chunkId": "e2e_gbt22239:clause:4:7.2.1",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": "7.2.1",
+          "score": 0.7574153065178943
+        }
+      ],
+      "answer": "- 7.2 访问控制 [1]\n- 7 安全通用要求 [2]\n- 7.1.1 应对登录用户进行身份鉴别。[3]\n- 条款号 要求 说明 4.1.1 最小必要 收集个人信息应最小必要 [4]",
+      "refused": false,
+      "citations": [
+        {
+          "chunkId": "e2e_gbt22239:clause:3:7.2",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": "7.2",
+          "quote": "7.2 访问控制"
+        },
+        {
+          "chunkId": "e2e_gbt22239:clause:0:7",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": "7",
+          "quote": "7 安全通用要求"
+        },
+        {
+          "chunkId": "e2e_gbt22239:clause:2:7.1.1",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": "7.1.1",
+          "quote": "7.1.1 应对登录用户进行身份鉴别。"
+        },
+        {
+          "chunkId": "e2e_gbt22239:table:0:tbl_p1_1",
+          "standardNo": "GB/T 22239-2019",
+          "clauseNo": null,
+          "quote": "条款号\t\t要求\t\t说明\n4.1.1\t\t最小必要\t\t收集个人信息应最小必要"
+        }
+      ],
+      "confidence": 0.8737
+    }
+  ],
+  "summaries": [
+    {
+      "docId": "e2e_gbt35273",
+      "standardNo": "GB/T 35273-2020",
+      "summaryVersion": 1,
+      "clauseCount": 6,
+      "elements": {
+        "standard_no": "GB/T 35273-2020",
+        "standard_name": "信息安全技术 个人信息安全规范",
+        "scope": "本文件规定了个人信息处理活动应遵循的基本原则。",
+        "main_content": "本文件共 6 条，主要技术内容包括：个人信息安全要求、数据安全、总则、最小必要、管理要求、安全管理制度。",
+        "effective_date": "未识别"
+      }
+    },
+    {
+      "docId": "e2e_jrt0197",
+      "standardNo": "JR/T 0197-2020",
+      "summaryVersion": 1,
+      "clauseCount": 6,
+      "elements": {
+        "standard_no": "JR/T 0197-2020",
+        "standard_name": "金融数据安全 数据安全分级指南",
+        "scope": "本文件适用于金融机构数据安全分级工作。",
+        "main_content": "本文件共 6 条，主要技术内容包括：范围、数据安全分级、分级要素、识别数据资产、数据安全级别、级别定义。",
+        "effective_date": "未识别"
+      }
+    },
+    {
+      "docId": "e2e_gbt22239",
+      "standardNo": "GB/T 22239-2019",
+      "summaryVersion": 1,
+      "clauseCount": 5,
+      "elements": {
+        "standard_no": "GB/T 22239-2019",
+        "standard_name": "信息安全技术 网络安全等级保护基本要求",
+        "scope": "未识别",
+        "main_content": "本文件共 5 条，主要技术内容包括：安全通用要求、身份鉴别、应对登录用户进行身份鉴别。、访问控制、应遵循最小权限原则。。",
+        "effective_date": "未识别"
+      }
+    }
+  ],
+  "chunks": 19,
+  "passed": true
+}

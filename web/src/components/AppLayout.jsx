@@ -88,12 +88,26 @@ export default function AppLayout() {
 
           {/* ===== 底部：文件导入入口 ===== */}
           <div className="sidebar-footer">
+            <NavLink to="/knowledge" className="sidebar-foot-link" title="知识库管理">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16.5A1.5 1.5 0 0 0 18.5 21H6.5A2.5 2.5 0 0 1 4 18.5V5.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                <path d="M8 7.5h8M8 11h8M8 14.5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+              知识库管理
+            </NavLink>
             <NavLink to="/import" className="sidebar-foot-link" title="文件导入">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M6.5 19C4.01472 19 2 16.9853 2 14.5C2 12.1569 3.69897 10.1989 5.94868 9.84519C6.32828 6.70055 9.03032 4.26172 12.2857 4.26172C15.4572 4.26172 18.1041 6.58233 18.5907 9.61412C20.5869 9.99892 22 11.7409 22 13.8462C22 16.2359 20.0966 18.1731 17.75 18.1731H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M12 20.7383V11.5M12 11.5L8.8 14.7M12 11.5L15.2 14.7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               文件导入
+            </NavLink>
+            <NavLink to="/exports" className="sidebar-foot-link" title="简介与导出">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 3v11m0 0 4-4m-4 4-4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M4 15v3.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+              简介与导出
             </NavLink>
           </div>
         </aside>

@@ -4,6 +4,8 @@ import AppLayout from './components/AppLayout.jsx';
 import Login from './pages/Login.jsx';
 import Chat from './pages/Chat.jsx';
 import Import from './pages/Import.jsx';
+import Knowledge from './pages/Knowledge.jsx';
+import Exports from './pages/Exports.jsx';
 import UserCenter from './pages/UserCenter.jsx';
 
 export default function App() {
@@ -24,6 +26,8 @@ export default function App() {
         <Route path="/chat" element={<Chat />} />
         <Route path="/chat/:sessionId" element={<Chat />} />
         <Route path="/import" element={<Import />} />
+        <Route path="/knowledge" element={<Knowledge />} />
+        <Route path="/exports" element={<Exports />} />
         <Route path="/user" element={<UserCenter />} />
       </Route>
 

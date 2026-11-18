@@ -1,172 +1,133 @@
-# aipaas
+# AIPaaS
 
-人工智能平台即服务（AI PaaS）：面向金融标准化的知识库问答平台，由 Python AI 服务、Java 微服务平台、React 前端与部署编排组成。
+面向金融标准化知识库的检索增强生成（RAG）平台，提供文档解析、条款级分块、向量索引、标准号/条款号定位、引用问答、无证据拒答、标准简介、条目化导出、权限审计和可观测能力。
 
-## 软件架构
+仓库采用多语言 Monorepo：Java 负责平台控制面，Python 负责 AI 能力，React 负责交互界面，OpenAPI 负责跨端契约。
 
-| 模块                               | 技术栈                                              | 说明                                                   |
-| -------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
-| [pymodules](pymodules/README.md) | Python 3.12 / uv workspace / FastAPI / LangGraph | 文档导入（:8000）与知识库查询（:8001）AI 服务                        |
-| [web](web/README.md)             | React 18 / Vite / nginx                          | 对话、文件导入、个人中心前端                                       |
-| [javaplat](javaplat)             | Java 服务构建目录                                      | gateway / svc-document / svc-search（当前仅含 Dockerfile） |
-| [deploy](deploy)                 | Docker Compose / K8s                             | 中间件（Milvus、etcd、MinIO、MongoDB）、Nacos、离线包与初始化脚本       |
-| [docs](docs)                     | Markdown                                         | 设计文档与待办事项                                            |
-| [eval](eval)                     | Python                                           | 检索与问答效果评测脚本                                          |
+## 文档导航
 
-Python 侧 `pymodules` 采用 **uv workspace monorepo** 结构：`apps/` 存放可独立部署的业务服务，`libs/` 存放共享库，依赖单向流动（apps → libs）。详见 [pymodules/README.md](pymodules/README.md)。
+| 文档 | 用途 |
+| --- | --- |
+| [快速使用入门](docs/00_快速使用入门.md) | Mock 演示、P0 Compose、离线验收和开发全量环境的最短路径 |
+| [架构说明](docs/03_架构说明.md) | 实际模块、调用链、数据存储、安全、部署与 P0/P1+ 边界 |
+| [P0 部署手册](docs/acceptance/P0-DEPLOYMENT-MANUAL.md) | 配置、端口、TLS、监控、备份、升级和回滚 |
+| [P0 验收报告](docs/acceptance/P0-ACCEPTANCE-REPORT.md) | 44 项功能、19 项非功能指标及端到端证据 |
+| [接口契约](aipaas-contracts/README.md) | OpenAPI、Mock、版本兼容与契约变更流程 |
+| [Python 工程](pymodules/README.md) | uv workspace、业务服务、共享包和模型配置 |
+| [贡献指南](CONTRIBUTING.md) | 分支、开发、测试、提交和 Pull Request 规范 |
+| [行为准则](CODE_OF_CONDUCT.md) | 社区协作、评审和违规处理约定 |
+| [安全政策](SECURITY.md) | 漏洞私密报告与敏感信息处理 |
 
-## 安装教程
+## 当前实现一览
 
-### 1. 启动中间件与依赖服务
+| 模块 | 技术栈 | 当前职责 |
+| --- | --- | --- |
+| `javaplat/apps/platform-api` | Java 21 / Spring Boot 3 / Maven | 统一 `/api/v1` 平台入口；认证、RBAC、文档与任务、审计、内容安全、导出、Trace 和指标 |
+| `pymodules/apps/ingest-worker` | Python 3.12 / FastAPI | 文档解析、清洗、分块、元数据、Embedding 和标准简介；默认 8001 |
+| `pymodules/apps/query-worker` | Python 3.12 / FastAPI | 向量检索、权限过滤、生成、引用、拒答和 SSE；默认 8002 |
+| `pymodules/apps/rag-ai-api` | FastAPI | P0 容器契约骨架；健康检查与系统信息，业务路由返回 501 |
+| `pymodules/packages` | uv workspace | `pipeline`、`retrieval`、`generation` 等可复用 AI 业务包 |
+| `web` | React 18 / Vite / Nginx | 对话、导入、知识库、导出和个人中心；登录页当前仍为演示模式 |
+| `aipaas-contracts` | OpenAPI 3.1 | P0 契约唯一权威来源，附零依赖 Mock 和校验脚本 |
+| `deploy/docker` | Docker Compose | P0 交付骨架与开发全量两套编排，含 Prometheus/Grafana/Alertmanager |
+| `docs` | Markdown | 架构、部署、解析、质量、安全、验收和上线材料 |
+
+> 状态说明：P0 已有可复现验收材料，但 P0 Compose 中的 `rag-ai-api` 仍是骨架，真实 AI 能力位于 `ingest-worker`、`query-worker` 和共享包。不要把“契约冻结”“容器健康”或“离线 Stub 验收”理解为真实模型生产链路已经全部接通，详见[架构说明的集成边界](docs/03_架构说明.md#81-p0-compose契约与平台交付骨架)。
+
+## 快速开始
+
+### 1. 最短的界面与契约演示
+
+在仓库根目录启动 Mock：
 
 ```bash
-cd deploy
-source scripts/setup-env.sh      # 导出中间件地址、JAVA_HOME、DOCKER_VOLUME_DIRECTORY 等
-docker-compose -f docker-compose.yaml up -d
+python3 aipaas-contracts/mock/server.py --port 4010
 ```
 
-`docker-compose.yaml` 内置 `init-volumes` 一次性容器，会自动创建数据目录并把属主对齐到当前执行用户，无需手工 `chown`。
-
-### 2. 启动 Python 服务
-
-```bash
-cd pymodules
-uv sync --all-packages
-uv run uvicorn query_worker.api.app:app --port 8001      # 查询服务 http://127.0.0.1:8001
-uv run uvicorn ingest_worker.api.app:app --port 8000     # 导入服务 http://127.0.0.1:8000
-```
-
-### 3. 启动前端
+另开终端启动前端：
 
 ```bash
 cd web
-npm install && npm run dev                   # 开发模式 http://localhost:5173
+npm ci
+PLATFORM_API_TARGET=http://127.0.0.1:4010 npm run dev
 ```
 
-生产构建与容器运行方式见 [web/README.md](web/README.md#docker-构建与运行)。
+访问 `http://localhost:5173`，使用任意非空账号密码进入演示界面。当前演示登录尚未与 P0 Bearer Token 打通，浏览器内 API 调用不能据此视为已认证；请独立运行契约冒烟验证上传→问答链路：
 
-## monorepo目录结构【待完善】
-
+```bash
+python3 aipaas-contracts/mock/smoke_upload_qa.py \
+  --base-url http://127.0.0.1:4010
 ```
+
+### 2. 启动 P0 容器环境
+
+```bash
+cd deploy/docker
+cp .env.example .env
+# 编辑 .env，至少设置 P0_BOOTSTRAP_ADMIN_PASSWORD、P0_PG_PASSWORD、
+# P0_MINIO_PASSWORD、GRAFANA_ADMIN_PASSWORD
+
+docker compose -f docker-compose-p0.yaml config -q
+docker compose -f docker-compose-p0.yaml up -d --build
+docker compose -f docker-compose-p0.yaml ps
+```
+
+Web：`http://localhost:18080`；Grafana：`http://localhost:13000`；Prometheus：`http://localhost:19090`。平台 API 默认仅在容器内网暴露，完整健康检查和边界见[快速入门](docs/00_快速使用入门.md#3-b-p0-compose-部署)。
+
+### 3. 复现真实 Python 业务包验收
+
+```bash
+cd pymodules
+uv sync --all-packages --group cpu
+uv run python scripts/acceptance/e2e_p0.py
+uv run python scripts/acceptance/golden_eval.py
+uv run pytest tests -q
+```
+
+该路径复用生产解析、检索和生成代码，并使用明确标注的确定性替身；证据输出到 `docs/acceptance/`。
+
+## 仓库结构
+
+```text
 aipaas/
-├── contracts/                        # ★ 跨语言接口契约（单一事实来源）【待分析完善】
-│   ├── proto/                        # Java ↔ Python 内部 gRPC 契约
-│   │   ├── ingestion/v1/*.proto
-│   │   ├── retrieval/v1/*.proto
-│   │   └── common/v1/*.proto
-│   ├── openapi/                      # Java 对外 REST API（平台 API）
-│   │   ├── platform-v1.yaml
-│   │   └── admin-v1.yaml
-│   ├── asyncapi/                     # 异步事件（Kafka/MQ）
-│   │   ├── document-ingested.yaml
-│   │   └── task-status.yaml
-│   ├── schemas/                      # 跨语言共享 DTO（JSON Schema）
-│   ├── buf.yaml / buf.gen.yaml       # proto 生成 & 兼容性 lint
-│   └── README.md                     # 版本策略 / 兼容规则
-│
-├── javaplat/                             # ★ 平台业务域（Gradle 多模块）
-│   ├── settings.gradle.kts
-│   ├── build.gradle.kts
-│   ├── gradlew
-│   ├── apps/
-│   │   ├── platform-api/             # 对外主 API：用户/租户/鉴权/计费/网关
-│   │   ├── admin-service/            # 管理后台 BFF
-│   │   ├── document-service/         # 文档元数据、配额、审计
-│   │   └── ai-orchestrator/          # 调用 Python AI 服务的编排入口（同步+异步）
-│   ├── libs/
-│   │   ├── common/                   # 工具、错误模型、结果类型
-│   │   ├── security/                 # 认证/授权、mTLS、服务令牌
-│   │   ├── ai-contract/              # 由 contracts/proto 生成的 Java stub + 封装
-│   │   └── persistence/              # JPA/MyBatis 公共配置
-│   └── config/                       # checkstyle / spotbugs / jacoco
-│
-├── pymodules/                        # ★ 算法与流程编排域（uv workspace）
-│   ├── pyproject.toml
-│   ├── uv.lock
-│   ├── apps/
-│   │   ├── ai-service/               # 对外 gRPC/HTTP：检索·重排·生成·会话
-│   │   │   ├── src/rag_service/
-│   │   │   └── pyproject.toml
-│   │   ├── ingest-worker/            # 解析→清洗→分块→嵌入→入库
-│   │   ├── query-worker/             # 长查询、批处理、异步重排
-│   │   ├── eval-runner/              # 离线评测执行器（CI/定时）
-│   │   ├── embedding-service/        # 嵌入模型：GPU 池独立部署
-│   │   └── reranker-service/         # 重排序模型：GPU 池独立部署
-│   ├── packages/
-│   │   ├── core/                     # 领域模型 + Protocol/ABC（零三方依赖）
-│   │   ├── ingestion/                # parsers / cleaners / chunkers
-│   │   ├── embeddings/               # 嵌入适配 + 批处理 + 缓存
-│   │   ├── retrieval/                # 向量库 adapter、混合检索、rerank
-│   │   ├── llm/                      # LLM 客户端抽象、限流、路由
-│   │   ├── pipeline/                 # RAG 流程编排（ingest/query 主线）
-│   │   ├── eval/                     # 指标、数据集、LLM-as-judge
-│   │   ├── observability/            # 结构化日志、OTel、token 计量
-│   │   ├── common/                   # 配置、DI、重试、缓存
-│   │   └── platform-sdk/             # ★ 回调 Java 平台的 client（由 openapi 生成）
-│   ├── configs/
-│   │   ├── pipelines/                # 声明式 pipeline 定义
-│   │   └── prompts/                  # prompt 模板（版本化）
-│   └── data/                         # 本地样例（gitignore）
-│
-├── web/                              # 前端（与语言域解耦）
-│   ├── admin-web/                    # Next.js 管理后台
-│   ├── chat-web/                     # Next.js 用户端
-│   ├── pnpm-workspace.yaml
-│   └── package.json
-│
-├── sdks/                             # 对外发布 SDK（由 contracts 生成）
-│   ├── java/                         # Maven Central
-│   ├── python/                       # PyPI
-│   └── ts/                           # npm
-│
-├── deploy/                           # 部署与运行基础设施
-│   ├── docker/                       # 各 app Dockerfile、compose.dev.yaml
-│   ├── k8s/                          # manifests / kustomize
-│   ├── helm/                         # 按服务分包
-│   ├── terraform/                    # 向量库、对象存储、MQ、RDS
-│   └── migrations/                   # 关系库迁移（Flyway，Java 侧主导）
-│
-├── configs/                          # 跨域共享配置（极少）
-│   ├── feature-flags.yaml
-│   └── models.yaml                   # 共享的模型清单（两边都读）
-│
-├── scripts/                          # 跨语言运维脚本
-│   ├── bootstrap.sh
-│   ├── gen-contracts.sh              # buf generate + openapi-generator
-│   ├── reindex.py                    # 触发全量重建（调 Python CLI）
-│   └── smoke_test.sh
-│
-├── tests/                            # ★ 跨语言测试
-│   ├── contract/                     # 契约测试（Java 侧 stub ↔ Python 实现）
-│   ├── integration/                  # 起 docker-compose 跑真实向量库/MQ
-│   └── e2e/                          # 平台→AI 全链路
-│
-├── docs/
-│   ├── adr/                          # 含「为什么选 gRPC + contracts/ 目录」等决策
-│   ├── api/
-│   └── runbooks/
-│
-├── .github/workflows/
-│   ├── contracts.yml                 # buf lint / breaking / 生成物 diff
-│   ├── java-ci.yml
-│   ├── python-ci.yml
-│   ├── eval-gate.yml
-│   └── e2e.yml                       # 按路径过滤触发
-├── Makefile                          # 统一入口，内部委派各语言
-├── .env.example
-└── README.md
+├── aipaas-contracts/          # OpenAPI、Mock、契约校验与版本策略
+├── javaplat/                  # Java 21 Maven 多模块：platform-api + common
+├── pymodules/                 # Python uv workspace：apps + packages + tests
+│   ├── apps/                  # ingest/query/model/rag-ai-api
+│   ├── packages/              # pipeline/retrieval/generation/common 等
+│   └── scripts/acceptance/    # 可复现 P0 验收脚本
+├── web/                       # React + Vite 前端与 Nginx 镜像
+├── deploy/                    # Docker Compose、监控、环境与初始化脚本
+├── docs/                      # 项目文档与验收证据
+├── .github/                   # Issue 与 Pull Request 模板
+├── CONTRIBUTING.md
+└── SECURITY.md
 ```
 
-## 使用说明
+## 本地开发与验证
 
-1. 前端登录后进入 `/chat` 进行知识库问答，支持流式（SSE）与非流式返回
-2. `/import` 上传文档，自动触发解析、切分、向量化与入库流程
-3. 健康检查：查询服务 `GET /health`；中间件端口映射见 [deploy/docker-compose.yaml](deploy/docker-compose.yaml)
+| 范围 | 命令 |
+| --- | --- |
+| 契约校验 | `python3 aipaas-contracts/scripts/verify_contract.py` |
+| Java 测试 | `cd javaplat && ./mvnw -pl apps/platform-api -am test` |
+| Python 环境 | `cd pymodules && uv sync --all-packages --group cpu` |
+| Python 测试 | `cd pymodules && uv run pytest tests -q` |
+| 导入服务 | `cd pymodules && uv run python -m ingest_worker.api.app` |
+| 查询服务 | 另一个终端执行 `cd pymodules && uv run python -m query_worker.api.app` |
+| Web 开发 | `cd web && npm ci && npm run dev` |
+| Web 构建 | `cd web && npm run build` |
+
+两套 Compose 不混用：
+
+- `deploy/docker/docker-compose-p0.yaml`：P0 平台、契约骨架、基础设施和监控；
+- `deploy/docker/docker-compose.yaml`：开发全量 Python/模型服务及既有中间件。
+
+开发全量链路的混合检索、重排、联网搜索等能力不属于 P0 金融标准契约的统一验收口径。
 
 ## 参与贡献
 
-1. Fork 本仓库
-2. 新建 `Feat_xxx` 分支
-3. 提交代码
-4. 新建 Pull Request
-
+1. 阅读[贡献指南](CONTRIBUTING.md)和[架构说明](docs/03_架构说明.md)。
+2. 从最新默认分支创建 `feat/<scope>-<summary>`、`fix/<scope>-<summary>` 或 `docs/<scope>-<summary>` 分支。
+3. 按变更范围运行契约、Java、Python、Web 和端到端验证。
+4. 使用 Issue/PR 模板提交，说明契约、权限、审计、部署和文档影响。
+5. 不在 Issue、日志或提交中粘贴口令、Token、私钥和敏感业务数据；漏洞按[安全政策](SECURITY.md)私密报告。

@@ -1,0 +1,247 @@
+# P0 部署手册
+
+- 版本：v1.0
+- 日期：2026-11-19
+- 适用：金融标准化 RAG 平台 P0（Docker Compose 单机/单节点）
+- 关联：[P0 验收报告](./P0-ACCEPTANCE-REPORT.md)、[上线检查单](./GO-LIVE-CHECKLIST.md)
+
+---
+
+## 1. 交付拓扑
+
+P0 提供两套编排，按场景选择：
+
+| 编排 | 文件 | 用途 | 服务 |
+| --- | --- | --- | --- |
+| P0 验收/联调编排 | `deploy/docker/docker-compose-p0.yaml` | 一键起 P0 全链路 + 监控 + 前端 | postgres / redis / minio / etcd / milvus / platform-api / rag-ai-api / mock / web / prometheus / alertmanager / grafana（12 个） |
+| 开发全量编排 | `deploy/docker/docker-compose.yaml` | 开发环境全量中间件与 Python 服务 | 基础编排（etcd/minio/milvus/attu/mongodb/postgres/redis/nacos/rocketmq/vllm）+ svc-ingest / svc-query / svc-model-embedding / svc-model-reranker / frontend |
+
+> 生产环境建议在 P0 编排基础上替换为托管 PostgreSQL/Redis/对象存储/Milvus，并前置反向代理与网关限流。
+>
+> 当前 P0 Compose 的 `rag-ai-api` 仍是契约骨架，业务路由返回 501；真实问答需接入 `query-worker`，解析需接入 `ingest-worker` 并设置对应下游地址。容器健康不等于真实 AI 全链路已容器化，集成边界见[架构说明](../03_架构说明.md#81-p0-compose契约与平台交付骨架)。
+
+### 1.1 端口（P0 编排）
+
+| 服务 | 宿主端口 | 说明 |
+| --- | --- | --- |
+| web | 18080 / 18443 | HTTP / HTTPS（自签证书默认开启） |
+| mock | 4010 | 契约 Mock（仅联调） |
+| prometheus | 19090 | 指标查询 |
+| grafana | 13000 | 看板（默认 admin / `aipaas_grafana_p0`） |
+| alertmanager | 19093 | 告警聚合与抑制 |
+| milvus | 29530 / 29091 | gRPC / metrics |
+| minio | 19000 / 19001 | S3 API / 控制台 |
+| redis | 56379 | 缓存 |
+| postgres | 内部 5432 | 不对外暴露 |
+| platform-api | 内部 8080 | Java 平台 API |
+| rag-ai-api | 内部 8100 | Python RAG API |
+
+服务间通过 Compose 网络以服务名通信（如 `postgres:5432`、`milvus:19530`、`rag-ai-api:8100`）。
+
+---
+
+## 2. 前置要求
+
+| 项 | 最低 | 推荐 |
+| --- | --- | --- |
+| Docker Engine | 24.0+ | 26+ |
+| Docker Compose | v2.20+ | v2.27+ |
+| CPU | 4 核 | 8 核+ |
+| 内存 | 8 GB | 16 GB+ |
+| 磁盘 | 30 GB | 100 GB+（SSD） |
+| 操作系统 | Linux 5.x+ | Linux 6.x |
+
+检查：
+
+```bash
+docker --version
+docker compose version   # 若仅安装 v1，可使用 docker-compose
+```
+
+---
+
+## 3. 快速部署（P0 编排）
+
+```bash
+cd deploy/docker
+
+# 1) 准备环境变量（首次必须设置管理员口令）
+cp .env.example .env
+export P0_BOOTSTRAP_ADMIN_PASSWORD='<强口令>'
+export P0_PG_PASSWORD='<强口令>'
+export P0_MINIO_PASSWORD='<强口令>'
+export GRAFANA_ADMIN_PASSWORD='<强口令>'
+
+# 2) 语法校验
+docker compose -f docker-compose-p0.yaml config -q
+
+# 3) 构建并启动
+docker compose -f docker-compose-p0.yaml up -d --build
+
+# 4) 查看状态
+docker compose -f docker-compose-p0.yaml ps
+```
+
+> 若环境只有 Compose v1，将 `docker compose` 替换为 `docker-compose`。
+
+首次启动顺序：postgres/redis/minio/etcd → milvus → platform-api / rag-ai-api → web；prometheus 依赖 platform-api 启动，alertmanager/grafana 依赖 prometheus。
+
+### 3.1 访问入口
+
+| 入口 | 地址 |
+| --- | --- |
+| Web | `http://localhost:18080` 或 `https://localhost:18443` |
+| Platform API（容器内） | `http://platform-api:8080` |
+| RAG API（容器内） | `http://rag-ai-api:8100` |
+| Prometheus | `http://localhost:19090` |
+| Grafana | `http://localhost:13000` |
+| Alertmanager | `http://localhost:19093` |
+
+宿主机调试 API 时可临时 `docker compose exec` 或增加端口映射；生产通过 Nginx 反向代理统一暴露 `/api/v1`。
+
+---
+
+## 4. 关键配置
+
+P0 编排通过环境变量注入，默认值写在 `docker-compose-p0.yaml`：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `P0_PG_USER` / `P0_PG_PASSWORD` / `P0_PG_DB` | `aipaas` / `aipaas_p0` / `aipaas` | PostgreSQL 账号库名（生产必须改口令） |
+| `P0_MINIO_USER` / `P0_MINIO_PASSWORD` | `minioadmin` / `minioadmin` | 对象存储账号（生产必须改） |
+| `P0_BOOTSTRAP_ADMIN_PASSWORD` | 无默认，必须显式设置 | 首次启动管理员口令 |
+| `AIPAAS_AUDIT_RETENTION_DAYS` | `180` | 审计保留天数；启动时校验不得 <180 |
+| `AIPAAS_REQUEST_LOG_RETENTION_DAYS` | `30` | 请求日志保留天数 |
+| `AIPAAS_TRACE_MAX_SPANS` | `20000` | 单 Trace 最大 span 数 |
+| `AIPAAS_CHAT_SERVICE_URL` | `http://rag-ai-api:8100` | Java 调 Python RAG 服务地址 |
+| `AIPAAS_TLS_CERTIFICATE_PATH` | `/etc/aipaas/tls/tls.crt` | TLS 证书路径 |
+| `TLS_GENERATE_SELF_SIGNED` | `true` | 是否生成自签证书（生产建议 false 并挂载正式证书） |
+| `TLS_SERVER_NAME` | `localhost` | 证书 CN/SAN |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | `admin` / `aipaas_grafana_p0` | Grafana 管理员（生产必须改） |
+
+开发全量编排的模型/中间件参数见 `.env.example`：`EMBEDDING_BACKEND`、`RERANKER_BACKEND`、`MODEL_BASE_DIR`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL_NAME`、`VLLM_MODEL_DIR` 等。
+
+---
+
+## 5. 部署后验证
+
+```bash
+# 1) 容器健康
+docker compose -f docker-compose-p0.yaml ps
+
+# 2) 服务健康（容器内）
+docker compose -f docker-compose-p0.yaml exec platform-api wget -qO- http://127.0.0.1:8080/healthz
+docker compose -f docker-compose-p0.yaml exec rag-ai-api python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8100/healthz').read().decode())"
+
+# 3) 指标
+curl -fsS http://localhost:19090/-/ready
+curl -fsS http://localhost:19090/api/v1/targets | head
+
+# 4) 看板
+# 浏览器打开 http://localhost:13000，检查 aipaas-p0-observability 的 8 个面板
+
+# 5) 端到端验收（仓库根目录）
+cd pymodules && uv run python scripts/acceptance/e2e_p0.py
+uv run python scripts/acceptance/golden_eval.py
+uv run python scripts/acceptance/load_test.py
+uv run python scripts/acceptance/security_checks.py
+```
+
+验收通过标准见 [上线检查单](./GO-LIVE-CHECKLIST.md) 第 1–6 节。
+
+---
+
+## 6. 可观测配置
+
+| 资源 | 路径 | 说明 |
+| --- | --- | --- |
+| Prometheus 配置 | `deploy/docker/prometheus/` | 抓取 platform-api `/observability/metrics` 与 rag-ai-api `/metrics` |
+| 告警规则 | `deploy/docker/prometheus/alerts/alerts-p0.yml` | 2 组 8 条（可用性、延迟、错误率、资源、拒答率等） |
+| 告警抑制 | `deploy/docker/alertmanager/` | 聚合与抑制，避免风暴 |
+| Grafana 数据源 | `deploy/docker/grafana/provisioning/` | 自动注入 Prometheus |
+| Grafana 看板 | `deploy/docker/grafana/dashboards/aipaas-p0-observability.json` | 8 个面板 |
+
+指标口径：P50/P95/P99 均按滑动窗口计算；成功率 = 2xx/总请求；拒答率 = `refused=true`/问答请求。
+
+---
+
+## 7. TLS 与安全
+
+1. **传输加密**：`web` 暴露 18443，启用 TLS1.2+；生产关闭自签（`TLS_GENERATE_SELF_SIGNED=false`），将证书挂载到 `/etc/aipaas/tls/`。
+2. **口令**：替换所有默认口令；使用密钥管理注入，不写入镜像与仓库。
+3. **鉴权**：除 `/healthz`、`/readyz`、`/system/info`、`/auth/login` 外，`/api/v1/**` 均需 Bearer Token。
+4. **权限**：上传/删除/导出均做「权限点 + 对象归属」双重校验，拒绝写 `permission.denied` 审计。
+5. **审计**：保留期默认 180 天，启动时强制 `>=180`，定时清理过期数据。
+6. **内容安全**：输入注入/敏感内容与输出合规均可在策略接口热更新；SSE 跨 chunk 违规会中断流。
+
+---
+
+## 8. 数据持久化与备份
+
+| 数据 | 位置 | 备份建议 |
+| --- | --- | --- |
+| PostgreSQL | 命名卷 `pg-data` | 每日 `pg_dump`，保留 30 天；季度恢复演练 |
+| MinIO | 命名卷 `minio-data` | 版本化/跨桶复制；解析产物按 `parse/{tenant}/{docId}/v{n}/` 归档 |
+| Milvus | 命名卷 `milvus-data` + etcd | 允许从对象存储重建索引；保留 collection 快照 |
+| Redis | 命名卷 `redis-data` | 缓存可重建，不要求强一致 |
+| 审计/日志 | PostgreSQL + `AIPAAS_REQUEST_LOG_PATH` | 与审计保留期一致；日志脱敏后归档 |
+
+---
+
+## 9. 升级与回滚
+
+```bash
+# 升级（保留数据卷）
+cd deploy/docker
+docker compose -f docker-compose-p0.yaml pull
+docker compose -f docker-compose-p0.yaml up -d --build
+
+# 回滚到上一镜像（示例）
+export IMAGE_TAG=<previous-tag>
+docker compose -f docker-compose-p0.yaml up -d --no-deps platform-api rag-ai-api web
+
+# 数据库迁移异常时按备份恢复
+# 1) 停止写入 2) 恢复 pg_dump 3) 重建索引 4) 健康检查
+```
+
+回滚验收：`/healthz` 200、登录成功、检索/问答/导出冒烟通过、指标恢复。
+
+---
+
+## 10. 常见问题
+
+| 现象 | 排查 | 处理 |
+| --- | --- | --- |
+| 启动报 `Set P0_BOOTSTRAP_ADMIN_PASSWORD` | 未设置管理员口令 | 导出变量后重启 |
+| 审计保留期启动失败 | `AIPAAS_AUDIT_RETENTION_DAYS < 180` | 调整为 ≥180 |
+| Milvus unhealthy | etcd/minio 未就绪或磁盘不足 | 检查依赖健康与磁盘，重建容器 |
+| 前端 502 | platform-api/rag-ai-api 未 healthy | 查看容器日志与依赖健康 |
+| 指标无数据 | Prometheus target down | 检查抓取地址与网络 |
+| 告警风暴 | 抑制规则未加载 | 检查 Alertmanager 配置与路由 |
+| 导出 403 | 缺少 `export:create/read` 或 KB 归属不符 | 授予权限并检查审计 |
+| 扫描件无法问答 | P0 不支持 OCR（`PARSE.PDF_SCANNED`） | 归 P1 OCR；当前按失败提示处理 |
+
+---
+
+## 11. 卸载（保留/清理数据）
+
+```bash
+cd deploy/docker
+# 停止并移除容器（保留数据卷）
+docker compose -f docker-compose-p0.yaml down
+
+# 同时清理数据卷（危险，确认后执行）
+docker compose -f docker-compose-p0.yaml down -v
+```
+
+---
+
+## 12. 验收关联
+
+本手册配套的验收证据：
+
+- [P0 验收报告](./P0-ACCEPTANCE-REPORT.md)
+- [缺陷清单](./DEFECT-LIST.md)
+- [golden set](./golden/golden_set.jsonl)
+- [压测报告](./perf/LOAD-TEST-REPORT.md)
+- [上线检查单](./GO-LIVE-CHECKLIST.md)

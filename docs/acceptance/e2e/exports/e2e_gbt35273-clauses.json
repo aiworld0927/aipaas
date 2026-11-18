@@ -1,0 +1,50 @@
+[
+  {
+    "clauseNo": "4",
+    "clauseTitle": "个人信息安全要求",
+    "text": "",
+    "chapterPath": "4 个人信息安全要求",
+    "pageNo": 1,
+    "standardNo": "GB/T 35273-2020"
+  },
+  {
+    "clauseNo": "4.1",
+    "clauseTitle": "数据安全",
+    "text": "",
+    "chapterPath": "4 个人信息安全要求 / 4.1 数据安全",
+    "pageNo": 1,
+    "standardNo": "GB/T 35273-2020"
+  },
+  {
+    "clauseNo": "4.1.1",
+    "clauseTitle": "总则",
+    "text": "本文件规定了个人信息处理活动应遵循的基本原则。",
+    "chapterPath": "4 个人信息安全要求 / 4.1 数据安全 / 4.1.1 总则",
+    "pageNo": 1,
+    "standardNo": "GB/T 35273-2020"
+  },
+  {
+    "clauseNo": "4.1.2",
+    "clauseTitle": "最小必要",
+    "text": "收集个人信息应当遵循最小必要原则，不得过度收集。\n条款号\n要求\n说明\n4.1.1\n最小必要\n收集个人信息应最小必要\n4.1.2\n告知同意\n应告知处理目的",
+    "chapterPath": "4 个人信息安全要求 / 4.1 数据安全 / 4.1.2 最小必要",
+    "pageNo": 1,
+    "standardNo": "GB/T 35273-2020"
+  },
+  {
+    "clauseNo": "5",
+    "clauseTitle": "管理要求",
+    "text": "",
+    "chapterPath": "5 管理要求",
+    "pageNo": 2,
+    "standardNo": "GB/T 35273-2020"
+  },
+  {
+    "clauseNo": "5.1",
+    "clauseTitle": "安全管理制度",
+    "text": "应建立个人信息安全管理制度。",
+    "chapterPath": "5 管理要求 / 5.1 安全管理制度",
+    "pageNo": 2,
+    "standardNo": "GB/T 35273-2020"
+  }
+]

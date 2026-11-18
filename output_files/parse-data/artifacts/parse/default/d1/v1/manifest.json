@@ -1,0 +1,32 @@
+{
+  "documentId": "d1",
+  "tenantId": "default",
+  "version": 1,
+  "parser": "markdown",
+  "success": true,
+  "failureCode": null,
+  "standardNo": "JR/T 0197-2020",
+  "pages": 1,
+  "clauseCount": 2,
+  "tableCount": 0,
+  "chunkCount": 3,
+  "chunkKeysDigest": "f92022fc7798b358f71d23a28fab4f44f470a1e3f74db74458f57465daae50f1",
+  "artifactKey": "parse/default/d1/v1/parse-result.json",
+  "parsedAt": "2026-11-18T13:51:24.512286Z",
+  "cleaned": true,
+  "cleanResultKey": "parse/default/d1/v1/clean-result.json",
+  "cleanDiffKey": "parse/default/d1/v1/clean-diff.json",
+  "cleanSummary": {
+    "rulesVersion": "p0-clean-v1",
+    "changedFields": 9,
+    "removedChars": 29,
+    "removedBlankLines": 2,
+    "rawTextLinesBefore": 16,
+    "rawTextLinesAfter": 14,
+    "diffEntries": 9,
+    "diffTruncated": false,
+    "protectedTableCells": 0,
+    "protectedCodeBlocks": 1,
+    "protectedFormulaLines": 0
+  }
+}

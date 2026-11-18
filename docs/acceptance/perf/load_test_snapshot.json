@@ -1,0 +1,59 @@
+{
+  "generatedAt": "2026-11-19T00:09:45",
+  "metrics": {
+    "concurrency": 32,
+    "retrievalRequests": 3000,
+    "retrievalQps": 1453.63,
+    "retrievalErrorRate": 0.0,
+    "retrievalP50Ms": 21.88,
+    "retrievalP95Ms": 24.99,
+    "retrievalP99Ms": 34.8,
+    "e2eRequests": 800,
+    "e2eQps": 1039.16,
+    "e2eErrorRate": 0.0,
+    "e2eP50Ms": 30.38,
+    "e2eP95Ms": 34.0,
+    "e2eP99Ms": 41.84
+  },
+  "degradation": {
+    "llmFailure": {
+      "answerRefused": true,
+      "refusalReason": "全部 LLM 供应商不可用",
+      "retrievalStillWorks": true,
+      "retrievalHits": 5,
+      "llmCalls": 6
+    },
+    "vectorStoreFailure": {
+      "degraded": true,
+      "degradedReason": "VECTOR_BACKEND_ERROR",
+      "hits": 0,
+      "warnings": [
+        "VECTOR_BACKEND_DEGRADED: 向量召回失败（RuntimeError），已降级"
+      ],
+      "keywordFallback": "DEFERRED_P1_71_BM25"
+    },
+    "circuitBreaker": {
+      "rounds": 5,
+      "controlledRefusals": 5,
+      "exceptions": 0
+    },
+    "rateLimit": {
+      "requests": 26,
+      "maxPerWindow": 20,
+      "elapsedSeconds": 1.001,
+      "effective": true,
+      "scope": "LLM 出站/工具级；入口全局限流依赖网关（P1）"
+    }
+  },
+  "checks": {
+    "retrievalP95<=500ms": true,
+    "e2eP95<=3000ms(桩)": true,
+    "qps>=100": true,
+    "LLM失败降级纯检索": true,
+    "向量库失败显式降级": true,
+    "熔断受控": true,
+    "限流生效": true
+  },
+  "passed": true,
+  "stub": "LLM 为抽取式桩；真实 LLM 时延与配额属后置期依赖"
+}

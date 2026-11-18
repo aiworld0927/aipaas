@@ -1,0 +1,135 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: platform-api
+  datasource:
+    url: ${AIPAAS_DB_URL:jdbc:postgresql://postgres:5432/aipaas}
+    username: ${AIPAAS_DB_USERNAME:aipaas}
+    password: ${AIPAAS_DB_PASSWORD:aipaas_p0}
+    hikari:
+      maximum-pool-size: 10
+  flyway:
+    enabled: true
+    clean-disabled: true
+    locations: classpath:db/migration/common,classpath:db/migration/postgresql
+  servlet:
+    multipart:
+      # P0 业务上限 100MB，预留表单开销；超限由 DocumentService 返回 PARAM.FILE_TOO_LARGE。
+      max-file-size: 120MB
+      max-request-size: 120MB
+      file-size-threshold: 10MB
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+  jackson:
+    default-property-inclusion: non_null
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+    prometheus:
+      access: read_only
+  metrics:
+    tags:
+      application: platform-api
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        aipaas.request.duration: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+        aipaas.request.duration: 0.5,0.95,0.99
+
+aipaas:
+  api-version: ${AIPAAS_API_VERSION:v1}
+  contract-version: ${AIPAAS_CONTRACT_VERSION:1.1.0-p0}
+  env: ${AIPAAS_ENV:prod}
+  chat:
+    service-url: ${AIPAAS_CHAT_SERVICE_URL:http://svc-query:8002}
+    connect-timeout: ${AIPAAS_CHAT_CONNECT_TIMEOUT:PT5S}
+    read-timeout: ${AIPAAS_CHAT_READ_TIMEOUT:PT120S}
+  export:
+    # 导出文件有效期与失败自动重试次数；到期由定时任务删除对象存储文件。
+    ttl: ${AIPAAS_EXPORT_TTL:PT24H}
+    max-retries: ${AIPAAS_EXPORT_MAX_RETRIES:2}
+    cleanup-interval-ms: ${AIPAAS_EXPORT_CLEANUP_INTERVAL_MS:600000}
+  bootstrap:
+    admin-password: ${AIPAAS_BOOTSTRAP_ADMIN_PASSWORD:}
+  observability:
+    service-name: platform-api
+    # #175 内存 Span 上限；按 TraceID 查询时再合并 Python 服务 Span。
+    trace-max-spans: ${AIPAAS_TRACE_MAX_SPANS:20000}
+    trace-source-timeout: ${AIPAAS_TRACE_SOURCE_TIMEOUT:PT2S}
+    # #173 请求日志保留期（天）与清理时间；可通过环境变量调整。
+    request-log-retention-days: ${AIPAAS_REQUEST_LOG_RETENTION_DAYS:30}
+    request-log-retention-enabled: ${AIPAAS_REQUEST_LOG_RETENTION_ENABLED:true}
+    request-log-retention-cron: ${AIPAAS_REQUEST_LOG_RETENTION_CRON:0 15 3 * * *}
+    request-log-path: ${AIPAAS_REQUEST_LOG_PATH:logs}
+  storage:
+    type: ${AIPAAS_STORAGE_TYPE:minio}
+    temp-path: ${AIPAAS_UPLOAD_TEMP_PATH:/var/lib/aipaas/uploads}
+    local-path: ${AIPAAS_LOCAL_OBJECT_PATH:/var/lib/aipaas/objects}
+    minio:
+      endpoint: ${AIPAAS_MINIO_ENDPOINT:http://minio:9000}
+      access-key: ${AIPAAS_MINIO_ACCESS_KEY:}
+      secret-key: ${AIPAAS_MINIO_SECRET_KEY:}
+      bucket: ${AIPAAS_MINIO_BUCKET:aipaas-p0}
+  parse:
+    service-url: ${AIPAAS_PARSE_SERVICE_URL:http://ingest-worker:8000}
+    connect-timeout: ${AIPAAS_PARSE_CONNECT_TIMEOUT:PT5S}
+    read-timeout: ${AIPAAS_PARSE_READ_TIMEOUT:PT180S}
+    revision-mode: ${AIPAAS_PARSE_REVISION_MODE:ignore}
+    comment-mode: ${AIPAAS_PARSE_COMMENT_MODE:ignore}
+    formula-mode: ${AIPAAS_PARSE_FORMULA_MODE:result}
+  security:
+    keyring-path: ${AIPAAS_KEYRING_PATH:/var/lib/aipaas/security/keyring.json}
+    access-token-ttl: ${AIPAAS_ACCESS_TOKEN_TTL:PT30M}
+    refresh-token-ttl: ${AIPAAS_REFRESH_TOKEN_TTL:P7D}
+    max-failed-attempts: ${AIPAAS_MAX_FAILED_ATTEMPTS:5}
+    lock-duration: ${AIPAAS_LOCK_DURATION:PT15M}
+    audit-retention-days: ${AIPAAS_AUDIT_RETENTION_DAYS:180}
+    audit-retention-enabled: ${AIPAAS_AUDIT_RETENTION_ENABLED:true}
+    audit-retention-cron: ${AIPAAS_AUDIT_RETENTION_CRON:0 30 3 * * *}
+    tls:
+      enabled: ${AIPAAS_TLS_ENABLED:true}
+      min-version: ${AIPAAS_TLS_MIN_VERSION:TLSv1.2}
+      certificate-path: ${AIPAAS_TLS_CERTIFICATE_PATH:/etc/aipaas/tls/tls.crt}
+      expiry-warning-days: ${AIPAAS_TLS_EXPIRY_WARNING_DAYS:30}
+      check-cron: ${AIPAAS_TLS_CHECK_CRON:0 0 8 * * *}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      pythonAi:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+  ratelimiter:
+    instances:
+      p0Api:
+        limit-for-period: 100
+        limit-refresh-period: 1s
+        timeout-duration: 0
+  timelimiter:
+    instances:
+      pythonAi:
+        timeout-duration: 5s
+
+logging:
+  pattern:
+    level: "%5p [traceId=%X{traceId:-}]"
+  level:
+    com.aipaas: INFO

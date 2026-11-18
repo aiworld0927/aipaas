@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# 轻量 Maven Wrapper（只下载 Apache Maven 发行版，不依赖 wrapper jar）。
+# 固定版本保证构建可复现；生产 CI 可直接使用 mvn。
+set -euo pipefail
+
+MVN_VERSION="${MVN_VERSION:-3.9.9}"
+BASE="${HOME}/.m2/wrapper/dists/apache-maven-${MVN_VERSION}"
+MAVEN_HOME="${BASE}/apache-maven-${MVN_VERSION}"
+
+if [ ! -x "${MAVEN_HOME}/bin/mvn" ]; then
+  echo "Downloading Apache Maven ${MVN_VERSION} ..." >&2
+  mkdir -p "${BASE}"
+  URL="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MVN_VERSION}/apache-maven-${MVN_VERSION}-bin.tar.gz"
+  TMP="$(mktemp -t maven-XXXXXX.tar.gz)"
+  curl -fsSL "${URL}" -o "${TMP}"
+  tar -xzf "${TMP}" -C "${BASE}"
+  rm -f "${TMP}"
+fi
+
+exec "${MAVEN_HOME}/bin/mvn" "$@"

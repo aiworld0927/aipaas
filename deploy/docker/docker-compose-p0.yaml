@@ -1,0 +1,416 @@
+# ===========================================================================
+# AIPaaS P0 骨架编排（Step 0：接口契约冻结 + 可运行骨架）
+# ---------------------------------------------------------------------------
+# 目标：
+#   - 基础设施：postgres / redis / minio / etcd+milvus / prometheus
+#   - 应用骨架：platform-api(Java) / rag-ai-api(Python) / web(React) / mock(契约)
+#   - 全部服务具备 /healthz、/readyz（或等价健康检查）
+#
+# 端口刻意避开宿主机已占用的 8080/5432/6379/9000/19530/9091：
+#   postgres（仅内网 5432） · redis 56379 · minio 19000/19001 · milvus 29530/29091
+#   prometheus 19090 · alertmanager 19093 · grafana 13000 · platform-api 8081 · rag-ai-api 8100 · mock 4010 · web 18080
+#
+# 用法：
+#   docker-compose -f deploy/docker/docker-compose-p0.yaml up -d --build
+#   docker-compose -f deploy/docker/docker-compose-p0.yaml ps
+#   docker-compose -f deploy/docker/docker-compose-p0.yaml down
+# ===========================================================================
+name: aipaas-p0
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+  # -------------------------------------------------------------------------
+  # 基础设施
+  # -------------------------------------------------------------------------
+  postgres:
+    # 复用本机已有的 pgvector/pg17 镜像（P0 向量化仍以 Milvus 为准，pg 仅存元数据）
+    image: pgvector/pgvector:pg17
+    container_name: p0-postgres
+    environment:
+      POSTGRES_USER: ${P0_PG_USER:-aipaas}
+      POSTGRES_PASSWORD: ${P0_PG_PASSWORD:-aipaas_p0}
+      POSTGRES_DB: ${P0_PG_DB:-aipaas}
+    # 仅容器网络内可见（platform-api 通过 postgres:5432 访问），不向宿主机暴露
+    expose:
+      - "5432"
+    volumes:
+      - p0-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${P0_PG_USER:-aipaas} -d ${P0_PG_DB:-aipaas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    <<: *default-restart
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: p0-redis
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "56379:6379"
+    volumes:
+      - p0-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    <<: *default-restart
+    logging: *default-logging
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
+    container_name: p0-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${P0_MINIO_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${P0_MINIO_PASSWORD:-minioadmin}
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - p0-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    <<: *default-restart
+    logging: *default-logging
+
+  # Milvus 依赖：etcd（元数据）+ MinIO（对象存储）
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.25
+    container_name: p0-etcd
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    volumes:
+      - p0-etcd-data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    <<: *default-restart
+    logging: *default-logging
+
+  milvus:
+    image: milvusdb/milvus:v3.0.1
+    container_name: p0-milvus
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${P0_MINIO_USER:-minioadmin}
+      MINIO_SECRET_ACCESS_KEY: ${P0_MINIO_PASSWORD:-minioadmin}
+      MQ_TYPE: woodpecker
+    ports:
+      - "29530:19530"
+      - "29091:9091"
+    volumes:
+      - p0-milvus-data:/var/lib/milvus
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      start_period: 90s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+    <<: *default-restart
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    container_name: p0-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./prometheus/prometheus-p0.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+      - p0-prom-data:/prometheus
+    ports:
+      - "19090:9090"
+    depends_on:
+      platform-api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    <<: *default-restart
+    logging: *default-logging
+
+  # #177 告警：聚合 + 抑制，避免告警风暴
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: p0-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./alertmanager/alertmanager-p0.yml:/etc/alertmanager/alertmanager.yml:ro
+      - p0-alertmanager-data:/alertmanager
+    ports:
+      - "19093:9093"
+    depends_on:
+      prometheus:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+    <<: *default-restart
+    logging: *default-logging
+
+  # #177 可视化看板：数据源与 Dashboard 由 provisioning 自动装载
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: p0-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-aipaas_grafana_p0}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - p0-grafana-data:/var/lib/grafana
+    ports:
+      - "13000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    <<: *default-restart
+    logging: *default-logging
+
+  # -------------------------------------------------------------------------
+  # 应用骨架
+  # -------------------------------------------------------------------------
+  platform-api:
+    build:
+      context: ../../javaplat
+      dockerfile: Dockerfile
+    image: aipaas/platform-api:p0
+    container_name: p0-platform-api
+    environment:
+      AIPAAS_ENV: ${AIPAAS_ENV:-prod}
+      AIPAAS_API_VERSION: v1
+      AIPAAS_CONTRACT_VERSION: 1.1.0-p0
+      AIPAAS_DB_URL: jdbc:postgresql://postgres:5432/${P0_PG_DB:-aipaas}
+      AIPAAS_DB_USERNAME: ${P0_PG_USER:-aipaas}
+      AIPAAS_DB_PASSWORD: ${P0_PG_PASSWORD:-aipaas_p0}
+      AIPAAS_MINIO_ENDPOINT: http://minio:9000
+      AIPAAS_MINIO_ACCESS_KEY: ${P0_MINIO_USER:-minioadmin}
+      AIPAAS_MINIO_SECRET_KEY: ${P0_MINIO_PASSWORD:-minioadmin}
+      AIPAAS_BOOTSTRAP_ADMIN_PASSWORD: ${P0_BOOTSTRAP_ADMIN_PASSWORD:?Set P0_BOOTSTRAP_ADMIN_PASSWORD before first startup}
+      AIPAAS_AUDIT_RETENTION_DAYS: ${AIPAAS_AUDIT_RETENTION_DAYS:-180}
+      # #173 请求日志保留期与落盘目录；#175 Span 上限
+      AIPAAS_REQUEST_LOG_RETENTION_DAYS: ${AIPAAS_REQUEST_LOG_RETENTION_DAYS:-30}
+      AIPAAS_REQUEST_LOG_PATH: /var/log/aipaas
+      AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
+      # 问答编排下游：#407/#113 指向真正执行检索与生成的 Python 服务
+      AIPAAS_CHAT_SERVICE_URL: ${AIPAAS_CHAT_SERVICE_URL:-http://rag-ai-api:8100}
+      AIPAAS_TLS_CERTIFICATE_PATH: /etc/aipaas/tls/tls.crt
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
+    expose:
+      - "8080"
+    volumes:
+      - p0-security-keys:/var/lib/aipaas/security
+      - p0-upload-temp:/var/lib/aipaas/uploads
+      - p0-request-logs:/var/log/aipaas
+      - p0-tls:/etc/aipaas/tls:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    <<: *default-restart
+    logging: *default-logging
+
+  rag-ai-api:
+    build:
+      context: ../../pymodules/apps/rag-ai-api
+      dockerfile: Dockerfile
+    image: aipaas/rag-ai-api:p0
+    container_name: p0-rag-ai-api
+    environment:
+      AIPAAS_ENV: ${AIPAAS_ENV:-dev}
+      AIPAAS_API_VERSION: v1
+      AIPAAS_CONTRACT_VERSION: 1.1.0-p0
+      MILVUS_URI: http://milvus:19530
+      MINIO_ENDPOINT: minio:9000
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8100"
+    depends_on:
+      milvus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8100/healthz')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    <<: *default-restart
+    logging: *default-logging
+
+  mock:
+    build:
+      context: ../../aipaas-contracts/mock
+      dockerfile: Dockerfile
+    image: aipaas/contracts-mock:p0
+    container_name: p0-contracts-mock
+    ports:
+      - "4010:4010"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:4010/healthz')"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    <<: *default-restart
+    logging: *default-logging
+
+  web:
+    build:
+      context: ../../web
+      dockerfile: Dockerfile
+    image: aipaas/frontend:p0
+    container_name: p0-web
+    environment:
+      # /api/v1/** 反代到 P0 契约网关
+      PLATFORM_API_UPSTREAM: http://platform-api:8080
+      # 旧链路占位（P0 骨架由 rag-ai-api 返回 501，保持统一信封）
+      QUERY_API_UPSTREAM: http://platform-api:8080
+      IMPORT_API_UPSTREAM: http://platform-api:8080
+      TLS_GENERATE_SELF_SIGNED: ${TLS_GENERATE_SELF_SIGNED:-true}
+      TLS_SERVER_NAME: ${TLS_SERVER_NAME:-localhost}
+    ports:
+      - "18080:80"
+      - "18443:443"
+    volumes:
+      - p0-tls:/etc/nginx/tls
+    depends_on:
+      platform-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    <<: *default-restart
+    logging: *default-logging
+
+volumes:
+  p0-pg-data:
+  p0-redis-data:
+  p0-minio-data:
+  p0-etcd-data:
+  p0-milvus-data:
+  p0-prom-data:
+  p0-alertmanager-data:
+  p0-grafana-data:
+  p0-request-logs:
+  p0-security-keys:
+  p0-upload-temp:
+  p0-tls:

@@ -8,6 +8,7 @@ dependencies = [
     "aipaas-common",
     "aipaas-model-clients",
     "aipaas-nacos",
+    "aipaas-pipeline",
     "aipaas-retrieval",
     "aipaas-storage",
     # Web 框架
@@ -30,6 +31,7 @@ dependencies = [
 aipaas-common = { workspace = true }
 aipaas-model-clients = { workspace = true }
 aipaas-nacos = { workspace = true }
+aipaas-pipeline = { workspace = true }
 aipaas-retrieval = { workspace = true }
 aipaas-storage = { workspace = true }
 

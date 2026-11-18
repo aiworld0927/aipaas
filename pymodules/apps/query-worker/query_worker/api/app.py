@@ -16,9 +16,9 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from aipaas_common.core.lifespan import AppLifespan
-from aipaas_common.core.middleware import install_request_id_middleware
+from aipaas_common.core.observability import install_observability
 from query_worker.api.dependencies import background_tasks, get_query_settings
-from query_worker.api.routers import history, query, stream
+from query_worker.api.routers import generation, history, query, retrieval, stream
 
 SERVICE_NAME = "svc-query"
 
@@ -50,8 +50,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    install_request_id_middleware(app, "query")
+    install_observability(app, SERVICE_NAME)
     app.include_router(query.router)
+    app.include_router(retrieval.router)
+    app.include_router(generation.router)
     app.include_router(stream.router)
     app.include_router(history.router)
     return app

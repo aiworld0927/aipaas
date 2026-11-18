@@ -1,0 +1,96 @@
+{
+  "generatedAt": "2026-11-19T00:07:35",
+  "goldenSetSize": 52,
+  "distribution": {
+    "standard_no_direct": 10,
+    "clause_locate": 20,
+    "cross_clause": 10,
+    "no_answer": 12
+  },
+  "corpusSize": 59,
+  "topK": 8,
+  "metrics": {
+    "topK": 8,
+    "answerable": 40,
+    "noAnswer": 12,
+    "recall": 0.9938,
+    "hit": 1.0,
+    "faithfulness": 1.0,
+    "citation": 1.0,
+    "hallucination": 0.0,
+    "refusalAccuracy": 1.0,
+    "falseRefusalRate": 0.0,
+    "answered": 40,
+    "p50LatencyMs": 1.25,
+    "p95LatencyMs": 4.24
+  },
+  "thresholds": {
+    "recall": 0.85,
+    "hit": 0.9,
+    "faithfulness": 0.9,
+    "citation": 0.9,
+    "hallucination": 0.05,
+    "refusal": 1.0,
+    "false_refusal": 0.05
+  },
+  "gatePassed": true,
+  "gateChecks": {
+    "Recall@k>=0.85": true,
+    "Hit@k>=0.90": true,
+    "Faithfulness>=0.90": true,
+    "Citation>=0.90": true,
+    "幻觉率<=5%": true,
+    "无答案拒答=100%": true,
+    "误拒答<=5%": true
+  },
+  "tuning": {
+    "topKSweep": [
+      {
+        "topK": 3,
+        "recall": 0.8875,
+        "hit": 0.95,
+        "citation": 0.95,
+        "hallucination": 0.0
+      },
+      {
+        "topK": 5,
+        "recall": 0.9708,
+        "hit": 1.0,
+        "citation": 1.0,
+        "hallucination": 0.0
+      },
+      {
+        "topK": 8,
+        "recall": 0.9938,
+        "hit": 1.0,
+        "citation": 1.0,
+        "hallucination": 0.0
+      },
+      {
+        "topK": 10,
+        "recall": 1.0,
+        "hit": 1.0,
+        "citation": 1.0,
+        "hallucination": 0.0
+      }
+    ],
+    "encoderAblation": [
+      {
+        "encoder": "tfidf-char-ngram-v1",
+        "recall": 0.9938,
+        "hit": 1.0,
+        "citation": 1.0
+      },
+      {
+        "encoder": "hashing-baseline",
+        "recall": 0.7979,
+        "hit": 0.85,
+        "citation": 0.775
+      }
+    ]
+  },
+  "stub": {
+    "llm": "ExtractiveStubLLM (deterministic)",
+    "note": "真实 LLM 属后置期依赖；检索与生成编排使用生产代码路径"
+  }
+}

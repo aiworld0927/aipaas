@@ -52,6 +52,8 @@ RUN rm -rf /app/node_modules \
 # ---- 阶段 2：运行 ----
 FROM nginx:alpine AS runtime
 
+RUN apk add --no-cache openssl
+
 # 把构建产物拷到 nginx 默认站点目录
 COPY --from=build /app/dist /usr/share/nginx/html
 
@@ -59,11 +61,19 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
 
 # 默认反代目标（会被运行时环境变量覆盖）
-ENV QUERY_API_UPSTREAM=http://localhost:8001 \
-    IMPORT_API_UPSTREAM=http://localhost:8000
+# PLATFORM_API_UPSTREAM：P0 契约网关（platform-api），/api/v1/** 原样透传
+ENV QUERY_API_UPSTREAM=http://localhost:8081 \
+    IMPORT_API_UPSTREAM=http://localhost:8081 \
+    PLATFORM_API_UPSTREAM=http://localhost:8081 \
+    TLS_CERT_PATH=/etc/nginx/tls/tls.crt \
+    TLS_KEY_PATH=/etc/nginx/tls/tls.key \
+    TLS_GENERATE_SELF_SIGNED=true
 
-EXPOSE 80
+EXPOSE 80 443
 
+# 容器健康检查（docker-compose / k8s 探针共用）
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
+  CMD wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1
 # 把启动逻辑写成 shell 脚本 → CMD 只 exec 它
 # 好处：
 #   1. 避免在 CMD 的 JSON 数组里塞带换行的长命令，转义清晰
@@ -79,12 +89,29 @@ set -eu\n\
 # a) 去掉末尾的 /（只去最后一个，避免 http://host/a/b 被破坏）\n\
 QUERY_API_UPSTREAM="${QUERY_API_UPSTREAM%%/}"\n\
 IMPORT_API_UPSTREAM="${IMPORT_API_UPSTREAM%%/}"\n\
-export QUERY_API_UPSTREAM IMPORT_API_UPSTREAM\n\
-# b) envsubst 替换 template 中的占位符 → nginx 主配置\n\
-envsubst '"'"'${QUERY_API_UPSTREAM} ${IMPORT_API_UPSTREAM}'"'"' \\\n\
+PLATFORM_API_UPSTREAM="${PLATFORM_API_UPSTREAM%%/}"\n\
+export QUERY_API_UPSTREAM IMPORT_API_UPSTREAM PLATFORM_API_UPSTREAM\n\
+# b) 仅在显式允许且证书缺失时生成开发自签证书；生产应挂载正式证书并关闭生成。\n\
+if [ ! -s "${TLS_CERT_PATH}" ] || [ ! -s "${TLS_KEY_PATH}" ]; then\n\
+  if [ "${TLS_GENERATE_SELF_SIGNED}" != "true" ]; then\n\
+    echo "TLS certificate or private key is missing" >&2\n\
+    exit 1\n\
+  fi\n\
+  install -d -m 700 "$(dirname "${TLS_KEY_PATH}")"\n\
+  openssl req -x509 -newkey rsa:3072 -sha256 -days 30 -nodes \\\n\
+    -keyout "${TLS_KEY_PATH}" -out "${TLS_CERT_PATH}" \\\n\
+    -subj "/CN=${TLS_SERVER_NAME:-aipaas.local}" \\\n\
+    -addext "subjectAltName=DNS:${TLS_SERVER_NAME:-aipaas.local},DNS:localhost,IP:127.0.0.1" \\\n\
+    >/dev/null 2>&1\n\
+  chmod 600 "${TLS_KEY_PATH}"\n\
+  chmod 644 "${TLS_CERT_PATH}"\n\
+fi\n\
+export TLS_CERT_PATH TLS_KEY_PATH\n\
+# c) envsubst 替换 template 中的占位符 → nginx 主配置\n\
+envsubst '"'"'${QUERY_API_UPSTREAM} ${IMPORT_API_UPSTREAM} ${PLATFORM_API_UPSTREAM} ${TLS_CERT_PATH} ${TLS_KEY_PATH}'"'"' \\\n\
   < /etc/nginx/nginx.conf.template \\\n\
   > /etc/nginx/conf.d/default.conf\n\
-# c) 前台 nginx\n\
+# d) 前台 nginx\n\
 exec nginx -g '"'"'daemon off;'"'"'\n\
 ' > /entrypoint.sh \
  && chmod +x /entrypoint.sh

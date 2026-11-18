@@ -16,9 +16,9 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from aipaas_common.core.lifespan import AppLifespan
-from aipaas_common.core.middleware import install_request_id_middleware
+from aipaas_common.core.observability import install_observability
 from ingest_worker.api.dependencies import background_tasks, get_ingest_settings
-from ingest_worker.api.routers import pages, tasks
+from ingest_worker.api.routers import embedding, metadata, pages, parse, summary, tasks
 
 SERVICE_NAME = "svc-ingest"
 
@@ -49,8 +49,12 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    install_request_id_middleware(app, "ingest")
+    install_observability(app, SERVICE_NAME)
     app.include_router(tasks.router)
+    app.include_router(parse.router)
+    app.include_router(summary.router)
+    app.include_router(metadata.router)
+    app.include_router(embedding.router)
     app.include_router(pages.router)
     return app
 

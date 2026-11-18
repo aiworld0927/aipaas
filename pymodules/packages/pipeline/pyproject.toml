@@ -1,0 +1,23 @@
+[project]
+name = "aipaas-pipeline"
+version = "0.1.0"
+description = "AIPaaS 文档解析管线：可插拔解析器 + 统一中间结构 + 版本化产物"
+requires-python = ">=3.12"
+dependencies = [
+    "aipaas-common",
+    "pymupdf>=2.1.0",
+    "python-docx>=1.2.0",
+    "openpyxl>=3.1.5",
+    "xlrd>=2.0.1",
+    "markdown-it-py>=4.0.0",
+]
+
+[tool.uv.sources]
+aipaas-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aipaas_pipeline"]

@@ -1,0 +1,166 @@
+{
+  "documentId": "d1",
+  "tenantId": "default",
+  "version": 2,
+  "parser": "markdown",
+  "success": true,
+  "failureCode": null,
+  "pages": 1,
+  "artifactKey": "parse/default/d1/v2/parse-result.json",
+  "chunkCount": 3,
+  "parsedAt": "2026-11-18T13:51:42.722069+00:00",
+  "payload": {
+    "docId": "d1",
+    "documentId": "d1",
+    "standardNo": "JR/T 0197-2020",
+    "title": "金融数据安全 数据安全分级指南",
+    "chapterTree": [
+      {
+        "sectionId": "sec_0001",
+        "title": "JR/T 0197-2020 金融数据安全 数据安全分级指南",
+        "level": 1,
+        "pageNo": 1,
+        "children": [
+          {
+            "sectionId": "sec_0002",
+            "title": "第4章 数据分级",
+            "level": 2,
+            "pageNo": 1,
+            "children": [
+              {
+                "sectionId": "sec_0003",
+                "title": "组织应建立 数据分级制度â€™。",
+                "level": 3,
+                "clauseNo": "4.1.1",
+                "pageNo": 1
+              },
+              {
+                "sectionId": "sec_0004",
+                "title": "应采用 \f 加密 存储，并 留存 日志。",
+                "level": 3,
+                "clauseNo": "4.1.2",
+                "pageNo": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "sections": [
+      {
+        "sectionId": "sec_0001",
+        "title": "JR/T 0197-2020 金融数据安全 数据安全分级指南",
+        "level": 1,
+        "pageNo": 1,
+        "children": [
+          {
+            "sectionId": "sec_0002",
+            "title": "第4章 数据分级",
+            "level": 2,
+            "pageNo": 1,
+            "children": [
+              {
+                "sectionId": "sec_0003",
+                "title": "组织应建立 数据分级制度â€™。",
+                "level": 3,
+                "clauseNo": "4.1.1",
+                "pageNo": 1
+              },
+              {
+                "sectionId": "sec_0004",
+                "title": "应采用 \f 加密 存储，并 留存 日志。",
+                "level": 3,
+                "clauseNo": "4.1.2",
+                "pageNo": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "clauses": [
+      {
+        "clauseNo": "4.1.1",
+        "title": "组织应建立 数据分级制度â€™。",
+        "chapterPath": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.1 组织应建立 数据分级制度â€™。",
+        "level": 3,
+        "pageNo": 1,
+        "text": "",
+        "sectionId": "sec_0003"
+      },
+      {
+        "clauseNo": "4.1.2",
+        "title": "应采用 \f 加密 存储，并 留存 日志。",
+        "chapterPath": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.2 应采用 \f 加密 存储，并 留存 日志。",
+        "level": 3,
+        "pageNo": 1,
+        "text": "正文结束。",
+        "sectionId": "sec_0004"
+      }
+    ],
+    "clauseAnchors": [
+      {
+        "clauseNo": "4.1.1",
+        "title": "组织应建立 数据分级制度â€™。",
+        "chapterPath": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.1 组织应建立 数据分级制度â€™。",
+        "level": 3,
+        "pageNo": 1
+      },
+      {
+        "clauseNo": "4.1.2",
+        "title": "应采用 \f 加密 存储，并 留存 日志。",
+        "chapterPath": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.2 应采用 \f 加密 存储，并 留存 日志。",
+        "level": 3,
+        "pageNo": 1
+      }
+    ],
+    "tables": [],
+    "rawText": "# JR/T 0197-2020 金融数据安全 数据安全分级指南\n\n## 第4章  数据分级\n\n\n\n4.1.1   组织应建立\t\t数据分级制度â€™。\n\n4.1.2 应采用  \f 加密  存储，并  ﻿留存  日志。\n\n```text\nSELECT  *\n  FROM  grade\n```\n正文结束。\n",
+    "warnings": [
+      {
+        "code": "PARSE.CODE_BLOCK_ATOMIC",
+        "message": "保留 1 个代码块，分块时将作为整体不再切分",
+        "element": "codeBlocks"
+      }
+    ],
+    "parser": "markdown",
+    "success": true,
+    "failureCode": null,
+    "retryCount": 0,
+    "pages": 1,
+    "version": 2,
+    "parsedAt": "2026-11-18T13:51:42.722069Z",
+    "tenantId": "default",
+    "extras": {
+      "lists": [],
+      "codeBlocks": [
+        {
+          "language": "text",
+          "content": "SELECT  *\n  FROM  grade\n",
+          "startLine": 11,
+          "endLine": 14
+        }
+      ],
+      "blockquoteMaxDepth": 0,
+      "chunkCount": 3,
+      "chunkKeysDigest": "f92022fc7798b358f71d23a28fab4f44f470a1e3f74db74458f57465daae50f1"
+    }
+  },
+  "extra": {
+    "cleanResultKey": "parse/default/d1/v2/clean-result.json",
+    "cleanDiffKey": "parse/default/d1/v2/clean-diff.json",
+    "cleanSummary": {
+      "rulesVersion": "p0-clean-v1",
+      "changedFields": 9,
+      "removedChars": 29,
+      "removedBlankLines": 2,
+      "rawTextLinesBefore": 16,
+      "rawTextLinesAfter": 14,
+      "diffEntries": 9,
+      "diffTruncated": false,
+      "protectedTableCells": 0,
+      "protectedCodeBlocks": 1,
+      "protectedFormulaLines": 0
+    }
+  }
+}

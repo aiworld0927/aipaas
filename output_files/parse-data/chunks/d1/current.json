@@ -1,0 +1,35 @@
+[
+  {
+    "chunkKey": "4.1.1#0",
+    "documentId": "d1",
+    "ordinal": 0,
+    "type": "clause",
+    "content": "组织应建立 数据分级制度。",
+    "contentHash": "e36831a1e1762e9cbf94d0cf4f3ac8ab532a9b8c6588e9335645f437cd178d91",
+    "clauseNo": "4.1.1",
+    "chapterPath": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.1 组织应建立 数据分级制度。",
+    "pageNo": 1
+  },
+  {
+    "chunkKey": "4.1.2#0",
+    "documentId": "d1",
+    "ordinal": 1,
+    "type": "clause",
+    "content": "应采用 加密 存储，并 留存 日志。\n正文结束。",
+    "contentHash": "53a79bfba9858ff2636221a86aa2af76c2dd08ce2eeebfedc7912ff338c891b6",
+    "clauseNo": "4.1.2",
+    "chapterPath": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.2 应采用 加密 存储，并 留存 日志。",
+    "pageNo": 1
+  },
+  {
+    "chunkKey": "code#0",
+    "documentId": "d1",
+    "ordinal": 2,
+    "type": "code",
+    "content": "SELECT  *\n  FROM  grade\n",
+    "contentHash": "53034cdbbe2a7807d1dcde08130bf7e8e1dc14c8c1caac31e10a59b8f06a59c9",
+    "clauseNo": null,
+    "chapterPath": "",
+    "pageNo": null
+  }
+]

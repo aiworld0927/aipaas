@@ -1,0 +1,135 @@
+{
+  "rulesVersion": "p0-clean-v1",
+  "rules": {
+    "enabled": true,
+    "remove_control_chars": true,
+    "remove_zero_width": true,
+    "remove_replacement_chars": true,
+    "remove_mojibake_tokens": true,
+    "normalize_newlines": true,
+    "trim_line_edges": true,
+    "collapse_inline_spaces": true,
+    "collapse_blank_lines": true,
+    "max_consecutive_blank_lines": 1,
+    "protect_tables": true,
+    "protect_code_blocks": true,
+    "protect_formulas": true,
+    "max_diff_entries": 500
+  },
+  "summary": {
+    "rulesVersion": "p0-clean-v1",
+    "changedFields": 9,
+    "removedChars": 29,
+    "removedBlankLines": 2,
+    "rawTextLinesBefore": 16,
+    "rawTextLinesAfter": 14,
+    "diffEntries": 9,
+    "diffTruncated": false,
+    "protectedTableCells": 0,
+    "protectedCodeBlocks": 1,
+    "protectedFormulaLines": 0
+  },
+  "invariants": {
+    "clauseCount": 2,
+    "clauseNumbersPreserved": true,
+    "sectionTreePreserved": true,
+    "tableShapePreserved": true,
+    "codeBlocksPreserved": true,
+    "codeBlocksProtected": true
+  },
+  "changes": [
+    {
+      "path": "chapterTree[0].chapterTree[0].chapterTree[0].title",
+      "element": "sectionTitle",
+      "rules": [
+        "remove_mojibake_tokens"
+      ],
+      "removedChars": 3,
+      "before": "组织应建立 数据分级制度â€™。",
+      "after": "组织应建立 数据分级制度。"
+    },
+    {
+      "path": "chapterTree[0].chapterTree[0].chapterTree[1].title",
+      "element": "sectionTitle",
+      "rules": [
+        "remove_control_chars",
+        "collapse_inline_spaces"
+      ],
+      "removedChars": 2,
+      "before": "应采用 \f 加密 存储，并 留存 日志。",
+      "after": "应采用 加密 存储，并 留存 日志。"
+    },
+    {
+      "path": "clauses[0].title",
+      "element": "clauseTitle",
+      "rules": [
+        "remove_mojibake_tokens"
+      ],
+      "removedChars": 3,
+      "before": "组织应建立 数据分级制度â€™。",
+      "after": "组织应建立 数据分级制度。"
+    },
+    {
+      "path": "clauses[0].chapterPath",
+      "element": "chapterPath",
+      "rules": [
+        "remove_mojibake_tokens"
+      ],
+      "removedChars": 3,
+      "before": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.1 组织应建立 数据分级制度â€™。",
+      "after": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.1 组织应建立 数据分级制度。"
+    },
+    {
+      "path": "clauses[1].title",
+      "element": "clauseTitle",
+      "rules": [
+        "remove_control_chars",
+        "collapse_inline_spaces"
+      ],
+      "removedChars": 2,
+      "before": "应采用 \f 加密 存储，并 留存 日志。",
+      "after": "应采用 加密 存储，并 留存 日志。"
+    },
+    {
+      "path": "clauses[1].chapterPath",
+      "element": "chapterPath",
+      "rules": [
+        "remove_control_chars",
+        "collapse_inline_spaces"
+      ],
+      "removedChars": 2,
+      "before": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.2 应采用 \f 加密 存储，并 留存 日志。",
+      "after": "JR/T 0197-2020 金融数据安全 数据安全分级指南 / 第4章 数据分级 / 4.1.2 应采用 加密 存储，并 留存 日志。"
+    },
+    {
+      "path": "rawText",
+      "element": "rawTextLine",
+      "rules": [
+        "normalize_whitespace"
+      ],
+      "removedChars": 1,
+      "before": "## 第4章  数据分级",
+      "after": "## 第4章 数据分级"
+    },
+    {
+      "path": "rawText",
+      "element": "rawTextLine",
+      "rules": [
+        "normalize_whitespace"
+      ],
+      "removedChars": 6,
+      "before": "4.1.1   组织应建立\t\t数据分级制度â€™。",
+      "after": "4.1.1 组织应建立 数据分级制度。"
+    },
+    {
+      "path": "rawText",
+      "element": "rawTextLine",
+      "rules": [
+        "normalize_whitespace"
+      ],
+      "removedChars": 7,
+      "before": "4.1.2 应采用  \f 加密  存储，并  ﻿留存  日志。",
+      "after": "4.1.2 应采用 加密 存储，并 留存 日志。"
+    }
+  ]
+}

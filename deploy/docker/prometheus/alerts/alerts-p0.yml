@@ -1,0 +1,114 @@
+# ===========================================================================
+# P0 基础告警规则（#177）
+# ---------------------------------------------------------------------------
+# 聚合与抑制：
+#   - 所有规则按 service 聚合，避免实例级重复告警；
+#   - ServiceDown（critical）会抑制同服务的错误率/延迟/拒答告警（见 alertmanager-p0.yml）；
+#   - 阈值与 NFR 对齐：P95 > 2s、5xx 比例 > 5%、检索命中率 < 50%、拒答率 > 30%。
+# ===========================================================================
+groups:
+  - name: aipaas-p0-availability
+    rules:
+      - alert: AipaasServiceDown
+        expr: up{job=~"platform-api|rag-ai-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "服务不可用：{{ $labels.job }}"
+          description: "{{ $labels.job }} 连续 1 分钟抓取失败，请检查容器与端口。"
+
+      - alert: AipaasHigh5xxRate
+        expr: |
+          sum by (service) (rate(aipaas_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum by (service) (rate(aipaas_requests_total[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          category: error-rate
+        annotations:
+          summary: "5xx 比例过高：{{ $labels.service }}"
+          description: "最近 5 分钟 5xx 比例 {{ $value | humanizePercentage }}，阈值 5%。"
+
+      - alert: AipaasHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, service) (
+              rate({__name__=~"aipaas_request_duration_seconds_bucket|aipaas_http_request_duration_seconds_bucket"}[5m])
+            )
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: latency
+        annotations:
+          summary: "P95 延迟过高：{{ $labels.service }}"
+          description: "最近 5 分钟 P95 = {{ $value }}s，阈值 2s。"
+
+      - alert: AipaasHighSpanLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, name) (rate(aipaas_span_duration_seconds_bucket[5m]))
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: latency
+        annotations:
+          summary: "链路环节耗时过高：{{ $labels.name }}"
+          description: "{{ $labels.name }} P95 = {{ $value }}s，阈值 5s。"
+
+  - name: aipaas-p0-quality
+    rules:
+      - alert: AipaasLowRetrievalHitRate
+        expr: |
+          sum(rate(aipaas_retrieval_hits_total[10m]))
+          /
+          clamp_min(sum(rate(aipaas_retrieval_queries_total[10m])), 0.001)
+          < 0.5
+        for: 10m
+        labels:
+          severity: warning
+          category: retrieval-quality
+        annotations:
+          summary: "检索命中率过低"
+          description: "最近 10 分钟命中率 {{ $value | humanizePercentage }}，低于 50%。"
+
+      - alert: AipaasHighRefusalRate
+        expr: |
+          sum by (service) (rate(aipaas_generation_refusals_total[10m]))
+          /
+          clamp_min(sum by (service) (rate(aipaas_generation_requests_total[10m])), 0.001)
+          > 0.3
+        for: 10m
+        labels:
+          severity: warning
+          category: generation-quality
+        annotations:
+          summary: "拒答率过高：{{ $labels.service }}"
+          description: "最近 10 分钟拒答率 {{ $value | humanizePercentage }}，高于 30%。"
+
+      - alert: AipaasSecurityBlocksSpike
+        expr: sum(rate(aipaas_security_blocks_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "内容安全拦截激增"
+          description: "最近 5 分钟拦截速率 {{ $value }}/s，请检查规则误拦或攻击流量。"
+
+      - alert: AipaasNoTraffic
+        expr: sum(rate(aipaas_requests_total[10m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+        annotations:
+          summary: "平台无请求流量"
+          description: "最近 10 分钟未收到任何 API 请求，请检查入口与上游。"

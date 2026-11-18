@@ -1,0 +1,38 @@
+# ===========================================================================
+# P0 Alertmanager 配置（#157/#177）
+# ---------------------------------------------------------------------------
+# 聚合：同 alertname+service 合并为一条通知，group_wait 30s 吸收抖动；
+# 抑制：ServiceDown 抑制同服务的错误率/延迟/拒答/无流量告警，避免告警风暴；
+# 通知：默认 receiver 留空，接入企业微信/飞书/邮件时在 receivers 中追加配置。
+# ===========================================================================
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ["alertname", "service", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['severity="critical"']
+      receiver: default
+      group_wait: 15s
+      repeat_interval: 1h
+
+inhibit_rules:
+  # 服务整体不可用时，抑制同服务的衍生告警，只保留根因。
+  - source_matchers: ['alertname="AipaasServiceDown"']
+    target_matchers: ['severity=~"warning|critical"']
+    equal: ["service"]
+  # 高 5xx 已覆盖可用性异常，抑制同服务的延迟/拒答告警。
+  - source_matchers: ['alertname="AipaasHigh5xxRate"']
+    target_matchers: ['alertname=~"AipaasHighLatencyP95|AipaasHighRefusalRate|AipaasHighSpanLatency"']
+    equal: ["service"]
+
+receivers:
+  - name: default
+    # 示例（按需启用）：
+    # webhook_configs:
+    #   - url: https://open.feishu.cn/open-apis/bot/v2/hook/<token>
+    #     send_resolved: true

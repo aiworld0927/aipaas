@@ -1,0 +1,545 @@
+# 文档解析、清洗与分块验收报告（#10 / #14 / #18-#21 / #36 / #37 / #404）
+
+- 生成时间：2026-11-18 22:07:47
+- 样例总数：15（PDF 5 / Word 3 / Excel 3 / Markdown 4）
+- 文本型样例解析成功率：13/13（100.0%），另含扫描件/乱码 PDF 负向样例各 1 份（要求明确失败标识）
+- 解析产物：统一中间结构 + 版本化对象存储（`parse/{tenant}/{docId}/v{n}/`）+ 幂等 chunk 覆盖
+- 清洗产物：同一版本内另存 `clean-result.json` / `clean-diff.json`，原始解析结果不覆盖
+- 分块产物：同一版本内另存 `chunk-config.json`（参数与配置版本）/ `chunks.json`，chunk 按 chunkId + hash 幂等覆盖
+
+## 1. 样例清单
+
+| 格式 | 文件 | 大小（字节） |
+| --- | --- | --- |
+| PDF | `samples/pdf/GBT-35273-2020.pdf` | 5249 |
+| PDF | `samples/pdf/JRT-0197-2020.pdf` | 3012 |
+| PDF | `samples/pdf/GBT-22239-2019.pdf` | 4307 |
+| PDF | `samples/pdf/scanned-sample.pdf` | 781 |
+| PDF | `samples/pdf/garbled-sample.pdf` | 2821 |
+| Word | `samples/word/GBT-22239-2019.docx` | 37086 |
+| Word | `samples/word/JRT-0197-2020-revised.docx` | 37592 |
+| Word | `samples/word/JRT-0171-2020.docx` | 37062 |
+| Excel | `samples/excel/GBT-35273-2020.xlsx` | 5214 |
+| Excel | `samples/excel/JRT-0197-2020.xlsx` | 6072 |
+| Excel | `samples/excel/JRT-0171-2020.xls` | 5632 |
+| Markdown | `samples/markdown/GBT-35273-2020.md` | 458 |
+| Markdown | `samples/markdown/JRT-0197-2020.md` | 485 |
+| Markdown | `samples/markdown/JRT-0171-2020.md` | 570 |
+| Markdown | `samples/markdown/JRT-0197-2020-dirty.md` | 309 |
+
+## 2. 解析结果
+
+| 文件 | 结果 | 标准编号 | 标题 | 条款数 | 表格数 | 页数 | Chunk | 告警 | 版本 | 耗时(ms) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `pdf/GBT-35273-2020.pdf` | 成功 | GB/T 35273-2020 | 信息安全技术 个人信息安全规范 | 6 | 1 | 2 | 7 | 0 | v1 | 419 |
+| `pdf/JRT-0197-2020.pdf` | 成功 | JR/T 0197-2020 | 金融数据安全 数据安全分级指南 | 6 | 0 | 1 | 6 | 0 | v1 | 75 |
+| `pdf/GBT-22239-2019.pdf` | 成功 | GB/T 22239-2019 | 信息安全技术 网络安全等级保护基本要求 | 5 | 1 | 1 | 6 | 0 | v1 | 132 |
+| `pdf/scanned-sample.pdf` | 失败 `PARSE.PDF_SCANNED` | - |  | 0 | 0 | 0 | - | 2 | v1 | 83 |
+| `pdf/garbled-sample.pdf` | 失败 `PARSE.PDF_GARBLED` | - |  | 0 | 0 | 0 | - | 2 | v1 | 447 |
+| `word/GBT-22239-2019.docx` | 成功 | GB/T 22239-2019 | 信息安全技术 网络安全等级保护基本要求 | 4 | 1 | 1 | 5 | 0 | v1 | 9 |
+| `word/JRT-0197-2020-revised.docx` | 成功 | JR/T 0197-2020 | 金融数据安全 数据安全分级指南 | 4 | 0 | 1 | 4 | 2 | v1 | 9 |
+| `word/JRT-0171-2020.docx` | 成功 | JR/T 0171-2020 | 个人金融信息保护技术规范 | 5 | 1 | 1 | 6 | 0 | v1 | 10 |
+| `excel/GBT-35273-2020.xlsx` | 成功 | GB/T 35273-2020 | 个人信息安全规范 | 4 | 1 | 1 | 5 | 0 | v1 | 6 |
+| `excel/JRT-0197-2020.xlsx` | 成功 | - | 术语 | 2 | 2 | 3 | 4 | 2 | v1 | 10 |
+| `excel/JRT-0171-2020.xls` | 成功 | - | 条款 | 3 | 1 | 1 | 4 | 0 | v1 | 6 |
+| `markdown/GBT-35273-2020.md` | 成功 | GB/T 35273-2020 | 信息安全技术 个人信息安全规范 | 4 | 1 | 1 | 5 | 0 | v1 | 13 |
+| `markdown/JRT-0197-2020.md` | 成功 | JR/T 0197-2020 | 金融数据安全 数据安全分级指南 | 4 | 1 | 1 | 6 | 1 | v1 | 3 |
+| `markdown/JRT-0171-2020.md` | 成功 | JR/T 0171-2020 | 个人金融信息保护技术规范 | 6 | 0 | 1 | 8 | 1 | v1 | 3 |
+| `markdown/JRT-0197-2020-dirty.md` | 成功 | JR/T 0197-2020 | 金融数据安全 数据安全分级指南 | 2 | 0 | 1 | 3 | 1 | v1 | 2 |
+
+## 3. 负向样例（扫描件 / 乱码）
+
+| 文件 | 失败码 | 可重试 | 重试次数 | 告警/定位 |
+| --- | --- | --- | --- | --- |
+| `pdf/scanned-sample.pdf` | `PARSE.PDF_SCANNED` | False | 0 | `PARSE.PAGE_NO_TEXT` p1；`PARSE.PDF_SCANNE… |
+| `pdf/garbled-sample.pdf` | `PARSE.PDF_GARBLED` | True | 2 | `PARSE.GARBLED_TEXT`；`PARSE.PDF_GARBLED` |
+
+## 4. #18-#21 验收标准逐条核对
+
+| 编号 | 验收项 | 结果 | 证据 |
+| --- | --- | --- | --- |
+| #18 | 标准编号识别（GB/T、JR/T 等） | 通过 | `pdf/GBT-35273-2020.pdf`→`GB/T 35273-2020`、`pdf/JRT-0197-2020.pdf`→`JR/T 0197-2020`、`pdf/GBT-22239-2019.pdf`→`GB/T 22239-2019` |
+| #18 | 条款编号识别（4.1.1 等）与章节树 | 通过 | `pdf/GBT-35273-2020.pdf`→6 条、`pdf/JRT-0197-2020.pdf`→6 条、`pdf/GBT-22239-2019.pdf`→5 条 |
+| #18 | 表格结构保留 | 通过 | `pdf/GBT-35273-2020.pdf`→1 张、`pdf/JRT-0197-2020.pdf`→0 张、`pdf/GBT-22239-2019.pdf`→1 张 |
+| #18 | 扫描件/乱码明确失败标识与告警 | 通过 | `pdf/scanned-sample.pdf`→`PARSE.PDF_SCANNED`、`pdf/garbled-sample.pdf`→`PARSE.PDF_GARBLED` |
+| #18 | 失败自动重试 ≤2 次 | 通过 | 单元测试 test_pdf_parser：retry_count=2；上限 2 次后返回失败码 |
+| #19 | 标题层级/条款/表格/列表还原 | 通过 | `word/GBT-22239-2019.docx`→4 条、`word/JRT-0197-2020-revised.docx`→4 条、`word/JRT-0171-2020.docx`→5 条 |
+| #19 | 修订/批注按配置忽略或保留 | 通过 | 单元测试 test_docx_parser：ignore/keep 两种模式断言 |
+| #20 | 多 sheet 与行列结构 | 通过 | `excel/GBT-35273-2020.xlsx` 表1、`excel/JRT-0197-2020.xlsx` 表2、`excel/JRT-0171-2020.xls` 表1 |
+| #20 | 公式 result/source 可配置 | 通过 | 单元测试 test_excel_parser：两种 formula_mode |
+| #20 | 空 sheet 不导致失败 | 通过 | `excel/JRT-0197-2020.xlsx` 含空 sheet，结果成功并带 `PARSE.EMPTY_SHEET` |
+| #21 | 标题/列表/代码块/表格/引用 | 通过 | `markdown/GBT-35273-2020.md`→4 条、`markdown/JRT-0197-2020.md`→4 条、`markdown/JRT-0171-2020.md`→6 条、`markdown/JRT-0197-2020-dirty.md`→2 条 |
+| #21 | 代码块不被混切 | 通过 | 单元测试 test_markdown_parser：代码块整块进入 code chunk |
+| 统一结构 | {docId, standardNo, title, chapterTree, clauses, tables, rawText, warnings} | 通过 | 全部结果按该结构序列化，并附带契约字段 sections/clauseAnchors |
+| 约束 | 可定位到页码/元素 | 通过 | 告警与失败信息携带 pageNo/element |
+| 约束 | 解析器按格式注册、可插拔 | 通过 | `ParserRegistry.register` + 未知格式 `PARSE.UNSUPPORTED_FORMAT` |
+| 约束 | 解析结果落对象存储并记录版本 | 通过 | `parse/{tenant}/{docId}/v{n}/parse-result.json` + manifest + latest |
+| 约束 | 不得静默吞异常 | 通过 | 未预期异常记录堆栈并最终返回 `PARSE.INTERNAL` |
+
+## 5. 幂等验证（重复解析不产生重复 chunk）
+
+| 文件 | 版本序列 | v1 chunk 数 | v2 chunk 数 | 键摘要一致 |
+| --- | --- | --- | --- | --- |
+| `pdf/GBT-35273-2020.pdf` | v1、v2 | 7 | 7 | 是 |
+| `pdf/JRT-0197-2020.pdf` | v1、v2 | 6 | 6 | 是 |
+| `pdf/GBT-22239-2019.pdf` | v1、v2 | 6 | 6 | 是 |
+| `word/GBT-22239-2019.docx` | v1、v2 | 5 | 5 | 是 |
+| `word/JRT-0197-2020-revised.docx` | v1、v2 | 4 | 4 | 是 |
+| `word/JRT-0171-2020.docx` | v1、v2 | 6 | 6 | 是 |
+| `excel/GBT-35273-2020.xlsx` | v1、v2 | 5 | 5 | 是 |
+| `excel/JRT-0197-2020.xlsx` | v1、v2 | 4 | 4 | 是 |
+| `excel/JRT-0171-2020.xls` | v1、v2 | 4 | 4 | 是 |
+| `markdown/GBT-35273-2020.md` | v1、v2 | 5 | 5 | 是 |
+| `markdown/JRT-0197-2020.md` | v1、v2 | 6 | 6 | 是 |
+| `markdown/JRT-0171-2020.md` | v1、v2 | 8 | 8 | 是 |
+| `markdown/JRT-0197-2020-dirty.md` | v1、v2 | 3 | 3 | 是 |
+
+## 6. 并发验证（≥10 并发不阻塞）
+
+- 并发任务数：12（PDF/Word/Excel/Markdown 混合）
+- 全部成功：是
+- 总耗时：0.36s
+
+## 7. 产物与版本（对象存储布局）
+
+```text
+parse/{tenantId}/{docId}/v{n}/parse-result.json   # 统一中间结构
+parse/{tenantId}/{docId}/v{n}/manifest.json       # 版本清单（条款/表格/chunk 摘要）
+parse/{tenantId}/{docId}/v{n}/clean-result.json   # 清洗后文档（不覆盖原始结果）
+parse/{tenantId}/{docId}/v{n}/clean-diff.json     # 清洗差异报告
+parse/{tenantId}/{docId}/v{n}/chunk-config.json   # 分块参数与配置版本
+parse/{tenantId}/{docId}/v{n}/chunks.json         # 该版本分块结果
+parse/{tenantId}/{docId}/latest.json              # 最新版本指针
+parse/{tenantId}/{docId}/latest-chunk.json        # 最新分块指针
+```
+
+产物后端由 `AIPAAS_PARSE_ARTIFACT_BACKEND` 选择 `local` / `minio` / `memory`；本报告使用 local 后端（临时目录）验证。
+
+## 8. #10 接入任务管道验收（Java）
+
+| 验收项 | 实现 | 证据 |
+| --- | --- | --- |
+| 状态机 排队→运行→成功/失败 | `ingest_tasks` 表；`QUEUED→RUNNING→SUCCEEDED/FAILED`，同步更新 stage/progress/startedAt/finishedAt | `IngestTaskRepository.claim` 乐观认领 |
+| 状态实时可见 | `GET /api/v1/ingest/tasks`、`GET /api/v1/ingest/tasks/{id}` | `IngestTaskController` + 契约 `verify_contract.py` PASS |
+| 状态变更推送 | `GET /api/v1/ingest/tasks/{id}/events`（SSE：meta/status/done/error/ping） | `ssePublisherTracksSubscribersAndClosesOnTerminalEvent` |
+| 一键重试且不重复 | `POST /api/v1/ingest/tasks/{id}:retry`（仅 FAILED，202；否则 409），复用同一任务行 | `retryReusesTaskRowAndIncrementsArtifactVersionWithoutDuplicateChunks` |
+| 自动重试 ≤2 次 | 传输异常按 `retry_count<max_retries` 重新排队，复用任务行 | `transportFailureIsRetriedAtMostMaxRetriesAndNeverSwallowed` |
+| ≥10 并发不阻塞 | `ingestExecutor` 核心 16 线程；12 并发全部成功 | `twelveConcurrentTasksAllCompleteWithoutBlocking` |
+
+Java 全量测试：`docker run --rm -v $PWD:/workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-api -am test` → 60 passed。
+
+## 9. #14 数据清洗基础（规则、差异与保护）
+
+| 文件 | 变更字段 | 移除字符 | 移除空行 | 保护公式单元格 | 保护代码块 | 条款号 0 丢失 | 章节树不变 | 表格形状不变 | 代码块完整 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `pdf/GBT-35273-2020.pdf` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `pdf/JRT-0197-2020.pdf` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `pdf/GBT-22239-2019.pdf` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `pdf/scanned-sample.pdf` | - | - | - | - | - | - | - | - | - |
+| `pdf/garbled-sample.pdf` | - | - | - | - | - | - | - | - | - |
+| `word/GBT-22239-2019.docx` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `word/JRT-0197-2020-revised.docx` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `word/JRT-0171-2020.docx` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `excel/GBT-35273-2020.xlsx` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `excel/JRT-0197-2020.xlsx` | 0 | 0 | 0 | 1 | 0 | 是 | 是 | 是 | 是 |
+| `excel/JRT-0171-2020.xls` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `markdown/GBT-35273-2020.md` | 0 | 0 | 0 | 0 | 0 | 是 | 是 | 是 | 是 |
+| `markdown/JRT-0197-2020.md` | 0 | 0 | 0 | 0 | 1 | 是 | 是 | 是 | 是 |
+| `markdown/JRT-0171-2020.md` | 2 | 6 | 0 | 0 | 2 | 是 | 是 | 是 | 是 |
+| `markdown/JRT-0197-2020-dirty.md` | 5 | 17 | 2 | 0 | 1 | 是 | 是 | 是 | 是 |
+
+- 规则：`CleaningOptions`（控制字符/零宽/BOM/替换符/常见 mojibake/CRLF/行首尾空白/重复空白/连续空行），逐项可开关；`POST /documents/{id}:parse` 的 `cleanRules` 支持 JSON 覆盖。
+- P0 边界：不做全半角、编码（UTF-8/GBK）、目录结构规范化（归 P1 #258）。
+- 差异：`v{n}/clean-diff.json` 记录规则、摘要、逐字段 before/after 与保护统计（默认上限 500 条，超出标记 `diffTruncated`）；`GET /api/v1/documents/{id}/parse-result/clean-diff` 可回看。
+- 写回：`v{n}/clean-result.json` + `latest-clean.json`，`parse-result.json` 保持原始解析结果不覆盖；chunk 使用清洗后文本构建。
+- 回归：`pymodules/tests/parsing/test_cleaning.py`（20 项，含 12 份有效样本的结构不变量回归）。
+
+## 10. 分块策略验收（#36 / #37 / #404）
+
+| 文件 | 条款数 | 结构化 chunk（条款/总数） | 条目化 chunk | 固定 chunk（128/16） | 条目数=条款数 | 平均 token | 配置版本 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `pdf/GBT-35273-2020.pdf` | 6 | 6/7 | 6 | 2 | 是 | 25.3 | `structured-p0-chunk-v1-f3dcf273` |
+| `pdf/JRT-0197-2020.pdf` | 6 | 6/6 | 6 | 1 | 是 | 17.0 | `structured-p0-chunk-v1-f3dcf273` |
+| `pdf/GBT-22239-2019.pdf` | 5 | 5/6 | 5 | 1 | 是 | 20.7 | `structured-p0-chunk-v1-f3dcf273` |
+| `pdf/scanned-sample.pdf` | - | - | - | - | - | - | - |
+| `pdf/garbled-sample.pdf` | - | - | - | - | - | - | - |
+| `word/GBT-22239-2019.docx` | 4 | 4/5 | 4 | 1 | 是 | 20.4 | `structured-p0-chunk-v1-f3dcf273` |
+| `word/JRT-0197-2020-revised.docx` | 4 | 4/4 | 4 | 1 | 是 | 23.2 | `structured-p0-chunk-v1-f3dcf273` |
+| `word/JRT-0171-2020.docx` | 5 | 5/6 | 5 | 1 | 是 | 17.0 | `structured-p0-chunk-v1-f3dcf273` |
+| `excel/GBT-35273-2020.xlsx` | 4 | 4/5 | 4 | 3 | 是 | 48.8 | `structured-p0-chunk-v1-f3dcf273` |
+| `excel/JRT-0197-2020.xlsx` | 2 | 2/4 | 2 | 1 | 是 | 28.2 | `structured-p0-chunk-v1-f3dcf273` |
+| `excel/JRT-0171-2020.xls` | 3 | 3/4 | 3 | 2 | 是 | 35.0 | `structured-p0-chunk-v1-f3dcf273` |
+| `markdown/GBT-35273-2020.md` | 4 | 4/5 | 4 | 1 | 是 | 24.8 | `structured-p0-chunk-v1-f3dcf273` |
+| `markdown/JRT-0197-2020.md` | 4 | 4/6 | 4 | 1 | 是 | 20.3 | `structured-p0-chunk-v1-f3dcf273` |
+| `markdown/JRT-0171-2020.md` | 6 | 6/8 | 6 | 2 | 是 | 21.0 | `structured-p0-chunk-v1-f3dcf273` |
+| `markdown/JRT-0197-2020-dirty.md` | 2 | 2/3 | 2 | 1 | 是 | 18.3 | `structured-p0-chunk-v1-f3dcf273` |
+
+- 验收①②：结构化/条目化分块中，每个条款单元的 `content` 完整包含 `clause.text`，`clauseNo` / `clauseTitle` / `chapterPath` 与正文同 chunk 返回；`test_structured_keeps_clause_units_and_associates_number`、`test_itemized_chunk_contains_number_and_body` 断言。
+- 验收③：预览接口 `POST /api/v1/documents/{id}:chunk-preview` 与正式分块共用 `build_chunks`，`test_chunk_preview_api_matches_backend` 断言 chunkId/hash 与落库结果一致。
+- 验收④：条目化分块 `len(chunks) == len(document.clauses)`，`assert_chunk_invariants` 在不一致时抛 `ChunkingInvariantError`；上表全部样例为“是”。
+- 验收⑤：固定分块按 token 窗口切分，`320 字 / size=32 / overlap=0 → 10` 个 chunk，单 chunk token 数 ≤ size；`test_fixed_chunk_count_matches_config` 断言。
+- 参数与版本：`ChunkConfig`（strategy/size/overlap/sentenceAligned/includeCodeBlocks/includeTables）落 `chunk-config.json`，`configVersion = 策略 + 参数摘要`；参数不同则版本不同。
+- 幂等：chunkId 由条款锚点/窗口序号 + 内容 hash 生成，存储按 `chunkId + hash` 去重；同一文档重复解析 chunkId 摘要一致。
+- 预览/查询：`POST /documents/{id}:chunk-preview`、`GET /documents/{id}/chunks`、`GET /documents/{id}/chunk-config`；预览不写产物。
+
+## 11. 元数据标注 / 向量化 / 索引构建验收（#57 / #44 / #49）
+
+### 11.1 #57 金融标准六要素
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| 六要素 | 标准编号/标准名称/发布机构/实施日期（文档级）+ 条款编号（chunk）+ 来源文档 | `test_six_elements_are_extracted_from_rules` |
+| 规则优先 + LLM 兜底 | 规则命中字段不被 LLM 覆盖；仅缺失字段调用 LLM | `test_rules_first_and_llm_only_fills_missing_with_trace` |
+| LLM 可回溯 | evidence 记录 `model/promptDigest/responseDigest/snippet` | 同上；LLM 异常记录 `__llm_error__` 不影响主流程 |
+| 准确率 | 24 条标注样本逐字段评估 | `accuracy=1.0`（≥95%），`test_accuracy_on_labelled_cases_is_at_least_95_percent` |
+| 过滤 | `GET /api/v1/metadata:query?standardNo&issuer&effectiveFrom&effectiveTo&keyword` | `test_filter_by_standard_no_issuer_and_effective_time`、`test_metadata_api_query_filter_correction_and_audit` |
+| 可查可审计 | `GET/PUT /documents/{id}/metadata`、`GET .../metadata/audit`；审计只增不改，记录 before/after/actor | `test_manual_correction_is_auditable` |
+| chunk.meta 预留 | `securityLevel/domain/effectiveAt` 显式置空，P0 不参与过滤 | `test_chunks_carry_clause_no_and_reserved_meta_fields` |
+| 产物 | `v{n}/metadata.json` + `latest-metadata.json`，解析自动标注并写入 chunk.meta | `test_parse_pipeline_persists_metadata_and_decorates_chunks` |
+
+### 11.2 #44 批量向量化
+
+| 指标 | 结果 |
+| --- | --- |
+| 成功率 | 1000 chunk / batch=10 / 首批注入失败：成功 990，成功率 99.0%（≥99%），其余批次不受影响 |
+| 失败定位重试 | failures 含 `chunkId/documentId/code/message/retryable/text`，仅重试失败 chunk 后成功率 100% |
+| 维度校验 | 编码器/集合/输出向量三方校验，不一致返回 `EMBED.DIM_MISMATCH` 且不写库；`vectors:verify` 返回 `dimensionValid` |
+| 进度/暂停恢复 | `run(max_batches)` → PAUSED(30%) → `resume()` → SUCCEEDED(100%)，`batchCount` 累计 |
+| 幂等 | 集合按 chunkId upsert；`Idempotency-Key` 重复创建返回同一任务 |
+| 监控 | metrics 含 `batchCount/durationMs/chunksPerSecond/resources(cpu/gpu/samples)` |
+
+接口：`POST /api/v1/index/embedding-jobs`、`GET .../{id}`、`...:pause`、`...:resume`、`...:retry`、`.../vectors:verify`。
+
+### 11.3 #49 HNSW 索引（Java 控制面 + Python 引擎）
+
+| 能力 | 实现 | 验收证据（Java / Python） |
+| --- | --- | --- |
+| 构建生效 | 构建成功后切别名；失败不切，旧索引继续服务 | `failedBuildKeepsOldIndexAndRetryReusesBuild` / `test_build_failure_keeps_old_index_then_retry_switches` |
+| 可检索 | 别名解析后按 COSINE 检索 Top-K | `test_build_takes_effect_immediately_and_is_searchable` |
+| 失败重试 | FAILED → `:retry` 重新排队，attempt+1 | 同上 |
+| 回退旧索引 | `:rollback` 将别名切回 previousCollection，状态回到旧构建 | `rollbackRestoresPreviousCollection` / `test_rollback_restores_previous_collection` |
+| 全量重建 | 新版本集合（`...__v2`），自动槽位 online→offline | `fullRebuildAllocatesNewVersionAndSlot` |
+| 耗时/资源 | `duration_ms/resource_json`（CPU/GPU）与 `progress/indexedChunks` 可查 | `successfulBuildSwitchesAliasImmediatelyAndExposesMetrics` |
+| 多模型/多索引预留 | 别名 `kb_{kb}__{modelToken}__hnsw`、集合 `{alias}__{slot}__v{n}`；入参保留 `indexType/metric/params/indexSlot/alias/version/env` | `test_alias_reserves_multi_model_and_index_type`、`test_spec_defaults_and_reserved_contract` |
+
+接口：`POST /api/v1/index/builds`（202/409/400）、`GET /api/v1/index/builds/{id}`、`...:retry`、`...:rollback`、`GET /api/v1/knowledge-bases/{kbId}/index-status`；权限 `index:build/index:read`（KB_ADMIN）。
+
+### 11.4 回归结果
+
+- Python：`pytest tests/parsing` **89 passed**（新增 #57/#44/#49 共 23 项）。
+- Java：`mvn -pl apps/platform-api -am test` **66 tests, 0 failures**，新增 `VectorIndexServiceTest` 6 项。
+- 数据库：Flyway `V6__vector_index_builds.sql` 建表、唯一幂等键与查询索引。
+
+## 12. 检索链路验收（#63 / #70 / #88）
+
+实现位置：
+
+- `pymodules/packages/retrieval/aipaas_retrieval/`
+  - `query_understanding.py`：#63 查询清洗/归一/分词/兜底；
+  - `models.py`：`RetrieveRequest`/`RetrievalFilters`/`RetrieveHit`/`RetrieveResult`（camelCase 对齐 OpenAPI）；
+  - `store.py`：`VectorSearcher` 端口、`InMemoryVectorSearcher` 前置过滤与编号锚点、`HashingQueryEncoder`；
+  - `security.py`：`AccessContext`（角色/权限点/KB 授权/密级上限）；
+  - `audit.py`：`retrieval.query` 与 `permission.denied` 审计（内存 / JSONL）；
+  - `service.py`：召回编排、超时降级、行级复核兜底。
+- `pymodules/apps/query-worker/query_worker/api/routers/retrieval.py`：`POST /retrieve`、`POST /retrieve/query-understanding`（网关鉴权头实时解析）。
+
+### 12.1 #63 查询处理
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| 标准编号归一 | `jrt 0088` → `JR/T 0088`；`GB/T35273—2020` → `GB/T 35273-2020`；`ISO/IEC 27001:2013` → `ISO/IEC 27001-2013`；查询省略年份时按前缀匹配 `JR/T 0088-2016` | `test_standard_no_normalization_variants`、`test_standard_no_anchor_only_returns_that_standard` |
+| 条款编号归一 | `第4.1.1条`、全角 `４.１.１` → `4.1.1`；条款编号锚点锁定直达 | `test_clause_no_normalization_variants`、`test_clause_no_anchor_is_direct_hit` |
+| 清洗/分词/标准化 | 控制字符与零宽字符移除、NFKC、空白压缩、中文二元组 + ASCII 词去重限量（≤64） | `test_special_characters_are_cleaned`、`test_tokens_are_deduplicated_and_capped` |
+| 兜底 | 空查询 → `QUERY_EMPTY` + 空结果；超长 → 截断 2000 字符 + `QUERY_TRUNCATED`；纯特殊字符 → `QUERY_NO_EFFECTIVE_TOKEN`，均不抛异常 | `test_empty_query_fallback`、`test_overlong_query_is_truncated_with_warning`、`test_special_only_query_does_not_raise` |
+| 耗时口径 | `QueryUnderstanding.latency_ms` 计入 `RetrieveResult.timings.queryUnderstandingMs`，`latencyMs` 覆盖全链路 | `test_result_model_contains_citation_and_timings` |
+
+### 12.2 #70 向量语义召回
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| Top-K 语义召回 | 余弦相似度归一为 0..1，按分数稳定排序（同分按 chunkId） | `test_top_k_semantic_relevance` |
+| 知识库过滤 | `kbId` 与 `kbIds[]` 互斥；均为空时检索全部有权限知识库 | `test_multiple_kb_ids_scope`、`test_retrieve_rejects_conflicting_kb_fields` |
+| 元数据过滤 | 标准号（精确/前缀）、条款号、发布机构、标准域、实施日期区间 | `test_filters_by_issuer_domain_and_effective_time` |
+| 结果模型 | 命中片段、分数、来源文档、条款编号、章节路径、citation；结果字段与 OpenAPI 对齐 | `test_retrieve_contract_and_citation` |
+| 单路超时降级 | 召回线程按剩余预算等待；超时返回 `degraded=true`/`VECTOR_TIMEOUT` 与空 hits，不报错 | `test_vector_timeout_degrades`、`test_backend_error_degrades` |
+| P1/P2 预留 | `retrievalMode=bm25|hybrid` → 200 + `RETRIEVAL_MODE_NOT_ENABLED`；`rerank=true` → 结果照常返回 + `RERANK_NOT_ENABLED`；`sessionId` 接收不保上下文 | `test_p1_modes_return_not_enabled_instead_of_error`、`test_retrieve_p1_mode_returns_not_enabled` |
+| 契约预留 | `kbIds`、`retrievalMode/rerank/sessionId/topK`、`securityLevel/domain/effectiveAt` 均已入 OpenAPI | `aipaas-openapi-v1.yaml` RetrieveRequest/RetrievalFilters |
+
+### 12.3 #88 行级权限过滤
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| 召回阶段过滤 | 后端先按 `allowed_kb_ids + tenant + max_security_level` 前置过滤再打分；越权条款不进入候选集 | `test_unauthorized_kb_is_filtered_before_scoring` |
+| 0 泄露兜底 | 服务层对每条命中复核 KB/密级/租户，后端误返回也会被丢弃并审计 | `test_leak_guard_drops_backend_leak_and_audits` |
+| 密级 | `PUBLIC < INTERNAL < CONFIDENTIAL < SECRET`，未知密级按最高级拒绝；管理员未授权 KB 仍不可见 | `test_security_level_is_enforced` |
+| 越权审计 | 显式越权 KB、缺少 `retrieval:query`、行级丢弃均写 `permission.denied`；成功检索写 `retrieval.query` | `test_explicit_forbidden_kb_is_denied_and_audited`、`test_missing_permission_is_denied_and_audited`、`test_successful_query_is_audited_with_metrics` |
+| 实时生效 | 权限快照按请求实时解析（不缓存），授权/回收下一请求立即生效 | `test_permission_changes_take_effect_immediately` |
+
+### 12.4 性能与回归
+
+| 项 | 结果 |
+| --- | --- |
+| 检索 P95 | 300 chunk × 60 次查询（含编号锚点/纯语义混合），P95 与最大耗时均 ≤ 500ms；默认超时预算 300ms |
+| Python 回归 | `pytest tests` **129 passed**（新增 `tests/retrieval` 40 项） |
+| Java 回归 | `mvn -pl apps/platform-api -am test` **66 tests, 0 failures**（新增 `retrieval:query` 权限点与 KB 授权种子） |
+| 契约 | OpenAPI YAML 校验通过；`x-p95-ms: 500`、审计动作、权限点与实现一致 |
+
+性能测试：`tests/retrieval/test_retrieval_performance.py::test_retrieval_p95_within_500ms`。
+
+## 13. 生成链路验收（#98 / #103 / #106 / #108 / #110 / #114）
+
+### 13.1 实现位置
+
+- `pymodules/packages/generation/aipaas_generation/llm_client.py`：双供应商直连客户端、注册表、故障切换、可用率统计、密钥脱敏。
+- `prompt_templates.py`：Prompt 模板库（名称@版本）、上下文窗口截断/压缩、组装结果指纹。
+- `grounding.py`：引用编号校验、无依据断言标注/移除。
+- `refusal.py`：置信度阈值、拒答文案、拒答统计。
+- `formatting.py`：Markdown 整理与超长分段。
+- `validation.py`：入口校验规则（空/超长/无有效字符/注入）。
+- `service.py`：校验 → 检索 → Prompt → LLM → 引用/拒答 → 格式化编排。
+- `pymodules/apps/query-worker/query_worker/api/routers/generation.py`：`POST /internal/llm/chat/completions`、`POST /models/chat`、`POST /chat`、`/models/providers`、`/models/health`、`/prompts/templates*`、`/internal/generation/stats`。
+
+P0 边界：只做“双供应商直连 + 简单故障切换”。按成本/质量/租户路由、熔断半开、版本回滚归 P1 #99/#100/#240；对外 OpenAI 兼容 `/v1/chat/completions` 归 P1 #411，本服务未注册该路径（测试断言 404）。
+
+### 13.2 #98 LLM 基础调用
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| 两家供应商 + 手动切换 | 默认装配 `qwen`（DashScope 兼容）与 `openai` 两家；`switch(code)` 持久切换，请求级 `provider` 可临时指定 | `test_manual_switch_and_request_override`、`test_internal_llm_completion_and_manual_switch` |
+| 故障切换与降级提示 | 主供应商失败按优先级切换下一家，`degraded=true`、`LLM_FAILOVER` 告警、`attempts` 尝试链 | `test_failover_to_secondary` |
+| 不可用明确错误 | 全部失败返回 503 `MODEL_UNAVAILABLE`，携带脱敏 `attempts` 与 `retryable`；问答链路转为可配置兜底文案 | `test_all_providers_unavailable`、`test_internal_llm_all_unavailable_returns_503`、`test_all_llm_unavailable_degrades_with_configured_message` |
+| 密钥安全 | `api_key` 不参与 repr；错误/日志经 `sanitize_text` 替换密钥；只记录供应商、模型、消息数、字符数，不记录 Prompt 正文 | `test_secret_never_in_error_or_repr`、`test_prompt_and_secret_not_logged` |
+| 可用率口径 | `AvailabilityTracker` 按供应商累计 `success/total`、P95 延迟；999 成功 + 1 失败 = 0.999 | `test_success_rate_meets_999_target` |
+| 接口路径 | 内部固定 `/internal/llm/chat/completions`；`/models/chat` 为契约别名；不注册 `/v1/chat/completions` | `test_openai_compatible_path_not_registered` |
+
+### 13.3 #103 Prompt 组装
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| 三段结构 | 系统指令 + `【检索条款】`（标准号/条款号/正文，`[n]` 编号）+ 用户问题 | `test_assembly_contains_system_context_and_question` |
+| 超长不报错 | `ContextWindowPolicy` 按字符预算压缩单条、丢弃低排名条款；极端小窗口仍保留首条片段 | `test_overlong_context_truncated_without_error`、`test_extremely_small_window_still_builds_prompt` |
+| 压缩 | `per_clause_chars` 截断单条并加省略号 | `test_per_clause_compression` |
+| 版本可追溯 | `templateId = name@version` 写入 `promptTemplateVersion`；`contentHash` 与 `promptFingerprint` 入审计，不含正文 | `test_template_versions_are_traceable`、`test_describe_has_no_prompt_content`、`test_prompt_version_is_configurable` |
+
+### 13.4 #106 幻觉抑制与 #108 拒答
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| 引用可对应 | `[n]` 映射到本次 Prompt 条款；输出 `Citation(chunkId/documentId/clauseNo/...)`；答案直接写条款号也建立引用 | `test_citations_resolve_to_chunk_doc_and_clause`、`test_explicit_clause_number_creates_citation` |
+| 未知引用 | 越界 `[9]` 移除并告警 `CITATION_UNKNOWN_MARKER` | `test_unknown_marker_removed_and_annotated` |
+| 无依据断言 0 输出 | 无有效引用且含规范性断言（应当/必须/不得…）→ 默认追加“未检索到直接依据”标注，或 `drop` 模式移除 | `test_unsupported_normative_claim_annotated`、`test_drop_mode_removes_unsupported_claim`、`test_unsupported_claim_annotated_in_final_answer` |
+| 拒答不编造 | 无检索结果 / 空答案 / 无引用 / 低置信度 / 模型不可用分别拒答，返回可理解理由与查阅指引 | `test_refusal_for_no_evidence_and_low_confidence`、`test_no_retrieval_result_refuses_with_guidance`、`test_answer_without_citation_refused` |
+| 阈值与文案可配置 | `confidence_threshold`、`min_citations`、五类文案与指引均可注入 | `test_refusal_messages_and_threshold_configurable`、`test_low_confidence_threshold_refuses_with_citations_kept` |
+| 拒答可统计 | 按原因/租户累计，`/internal/generation/stats` 暴露总数与拒答率 | `test_refusal_statistics_by_reason_and_tenant`、`test_prompt_template_and_refusal_stats_endpoints` |
+
+### 13.5 #110 格式化与 #114 输入校验
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| Markdown 格式化 | 保留标题、列表、引用、表格；仅整理空行/行尾空白 | `test_markdown_structures_preserved_and_no_information_change` |
+| 超长分段连续 | 按段落/句边界切分，单句超长才硬切；`plain_information` 断言信息不增删 | `test_long_answer_segmented_without_information_loss`、`test_single_very_long_sentence_hard_split` |
+| 引用区块可选 | 结构化 `citations` 默认不注入正文；显式 `append_citations` 才渲染 | `test_citation_appendix_is_optional` |
+| 空/超长/无有效字符 | `EMPTY_QUERY`、`QUERY_TOO_LONG`（默认 2000 可配置）、`NO_EFFECTIVE_CHAR` 入口拦截 | `test_empty_and_blank_query_blocked`、`test_overlong_query_blocked_with_configured_limit`、`test_query_without_effective_characters_blocked` |
+| 恶意注入 | 忽略指令、探测系统提示词、角色劫持、越狱、对话模板、密钥索取；中英文规则 | `test_prompt_injection_blocked` |
+| 规则可配置 | 自定义 `ValidationRule` 增删/改阈值；`block=false` 可降级为放行 | `test_rules_are_configurable`、`test_blocking_rule_can_be_disabled` |
+| 拦截写审计 | `security.input.blocked` / `security.prompt_injection.blocked`，记录 ruleId、category、长度，不落 Prompt 正文 | `test_prompt_injection_blocked_and_audited_before_retrieval`、`test_overlong_input_blocked_and_audited` |
+
+### 13.6 契约与回归
+
+| 项 | 结果 |
+| --- | --- |
+| OpenAPI | 新增 `/internal/llm/chat/completions`、`/internal/generation/stats`；`ModelChatRequest.provider`、`ModelChatResponse.degraded/warnings/attempts`、`ModelProvider.active`、`RefusalStats`；YAML 校验通过 |
+| Python 回归 | `pytest tests` **196 passed**（新增 `tests/generation` 67 项） |
+| Java 回归 | 本次未改动 Java；沿用第 12 步 **66 tests, 0 failures** |
+| 锁定文件 | `uv lock` 已纳入 `aipaas-generation`，容器内 `uv sync --frozen` 可用 |
+
+测试命令：`cd pymodules && .venv/bin/python -m pytest tests/generation -q`。
+
+## 14. 端到端问答与对话界面验收（#407 / #113 / #242 / #402）
+
+### 14.1 实现位置
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| Java 编排 | `javaplat/apps/platform-api/.../chat/ChatController.java` | 统一对外 `/api/v1/chat`、`/api/v1/chat/stream`：输入校验 → 内容安全 → 身份/权限/KB 授权头注入 → 下游转发 → 审计 |
+| Java 授权 | `auth/UserRepository.java` | `permittedKbIds` 查询用户可检索知识库，经 `X-Kb-Ids` 下发前置过滤 |
+| Python SSE | `pymodules/apps/query-worker/query_worker/api/generation_stream.py` | 事件缓冲、单调序号、Last-Event-ID 续传、心跳、TTL/容量淘汰 |
+| Python 流式生成 | `aipaas_generation/llm_client.py`、`service.py` | 供应商 SSE 增量 → `meta/citation/delta/done`；`done.content` 为后处理最终正文 |
+| 前端 | `web/src/pages/Chat.jsx`、`components/MarkdownView.jsx`、`CitationCard.jsx`、`CapabilityBar.jsx` | 流式对话、Markdown 渲染、引用卡片/原文抽屉、能力选择栏、自动续传 |
+
+### 14.2 #407 金融标准问答编排
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| 全链路编排 | 查询归一与召回在 Python 检索层；Java 统一编排校验、权限、Prompt/生成/后处理下游调用 | `test_chat_stream_endpoint_emits_contract_events`、`ChatControllerTest#chatForwardsIdentityAndKnowledgeBaseHeadersAndAudits` |
+| 标准号直达 / 条款定位 / 筛选 | 复用第 7 步 `RetrievalService`（标准号/条款号归一、`filters` 域与机构），问答链路原样透传 | 第 12 节检索用例；`ChatIn.filters` |
+| 答案带条款编号与引用 | `done.citations` 含 `chunkId/documentId/docId/clauseNo/chapterPath/pageNo/quote` | `test_stream_event_order_and_final_answer_consistency` |
+| sessionId / conversationMode 预留 | 契约 `ConversationMode` 增加 `stream`/`non-stream`；P0 单轮不透传上下文 | OpenAPI `ConversationMode`、`ChatController#secure` |
+| 统一 TraceID | 网关 TraceID 同时写 `X-Request-Id` 与 `X-Trace-Id`，Python 审计/响应回传同一 traceId | `ChatControllerTest` 断言下游收到两个头 |
+
+### 14.3 #113 流式输出
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| SSE 事件固定 | `meta → citation → delta* → done`，异常为 `error`；`ping` 保活 | `test_chat_stream_endpoint_emits_contract_events` |
+| 首 token ≤1s（目标） | LLM 供应商级 SSE 增量直传；`timings.firstTokenMs` 记录；Java 逐块 flush 不缓冲 | `test_stream_event_order_and_final_answer_consistency`、`copyFlushing` |
+| 断线可重连 | 事件 `id=<streamKey>:<seq>`；`Last-Event-ID` 从断点续传；缓冲过期则重新生成并重置气泡 | `test_last_event_id_resumes_without_duplicates` |
+| 流式与最终一致 | `done.content` 为后处理正文，前端以其覆盖流式预览 | 同上（与非流式 `answer()` 内容一致断言） |
+| 保留非流式 | `/chat` 与 `/chat/stream` 并存，前端可切换输出模式 | `Chat.jsx` 输出模式开关 |
+
+### 14.4 #242 对话界面与 #402 能力选择器
+
+| 能力 | 实现 | 验收证据 |
+| --- | --- | --- |
+| 输入→流式→完整回答→引用 | `Chat.jsx` 气泡流、首 token/总耗时/模型/降级提示、停止生成 | 前端构建通过（50 modules） |
+| 引用可点击查看原文 | 正文 `[n]` 角标与 `CitationCard` 双向联动，抽屉展示摘录与章节/页码/chunkId | `CitationCard.jsx`、`CitationDrawer` |
+| Markdown 展示 | 标题/列表/引用/表格/代码/加粗，安全渲染不使用 `dangerouslySetInnerHTML` | `MarkdownView.jsx` |
+| 能力选择栏 | 底部 RAG 可选、Skill 占位禁用；默认能力 `VITE_DEFAULT_CAPABILITY` 可配置 | `CapabilityBar.jsx` |
+| 与 #403 区分 | 能力选择=路由；工具栏“流式/完整返回”=输出模式，二者独立 | `Chat.jsx` |
+
+### 14.5 契约与回归
+
+| 项 | 结果 |
+| --- | --- |
+| OpenAPI | `/chat`、`/chat/stream` 已存在；补充 SSE `id=<streamKey>:<seq>`、`SseDone.content/confidence/provider/degraded/warnings/timings`、`ConversationMode=stream/non-stream`；YAML 校验通过（paths=68） |
+| Python 回归 | `pytest tests` **204 passed**（新增 `tests/generation/test_streaming.py` 8 项） |
+| Java 回归 | `mvn -pl apps/platform-api -am test` **69 tests, 0 failures**（新增 `ChatControllerTest` 6 项，移除旧 `ChatSecurityControllerTest`） |
+| 前端构建 | `vite build` 通过（50 modules；本机 `dist/` 权限受限，产物输出到临时目录验证） |
+| 部署 | `AIPAAS_CHAT_SERVICE_URL` 可覆盖下游地址，P0 compose 缺省仍指向 `rag-ai-api:8100` |
+
+测试命令：
+`cd pymodules && .venv/bin/python -m pytest tests/generation/test_streaming.py -q`；
+`docker run --rm -v $PWD:/ws -v ~/.m2:/root/.m2 -w /ws maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-api -am test`。
+
+## 15. 标准简介与条目化导出验收（#405 / #406）
+
+### 15.1 实现位置
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| Python 抽取 | `pymodules/packages/pipeline/aipaas_pipeline/summary.py` | 五要素确定性抽取、来源标注（`sourceClauseNo`/`sourceQuote`）、缺失标“未识别”、版本化持久化（`v{n}.json` + `latest.json` + `audit.jsonl`） |
+| Python 查询 | `service.py#list_clauses`、`apps/ingest-worker/.../routers/{parse,summary}.py` | `GET /documents/{id}/clauses` 分页条款清单；`POST/GET /documents/{id}/summaries` |
+| Java 简介网关 | `export/SummaryController.java`、`SummaryProxyService.java` | 文档归属 + KB 权限校验、代理解析服务、审计 `summary.generate`；下游 404/403/503 语义映射 |
+| Java 导出 | `export/ExportService.java`、`ExportController.java` | 创建（202）/查询/下载/重试；双重 KB 权限校验、幂等键、异步执行、自动重试、TTL 清理 |
+| Java 渲染 | `export/ExportRenderer.java` | 手写 PDF（Adobe CJK `STSong-Light`/`UniGB-UCS2-H`）、XLSX（OOXML）、DOCX（WordprocessingML），不引入 POI/PDFBox |
+| Java 存储/任务 | `EncryptedExportFileStore.java`、`ExportRepository.java`、`V7__export_jobs.sql` | AES-GCM 对象存储（AAD `export:<objectKey>`）、任务状态机与幂等唯一索引 |
+| 前端 | `web/src/pages/Exports.jsx`、`api/p0Client.js` | 简介生成/重新生成与五要素预览、导出创建、任务进度轮询、下载与重试 |
+
+### 15.2 #405 标准简介
+
+| 验收要素 | 实现 | 证据 |
+| --- | --- | --- |
+| 五要素 | 固定顺序 `standard_no`、`standard_name`、`scope`、`main_content`、`effective_date`，顶层同时输出 `standardNo/standardName/scope/mainContent/effectiveAt` | `test_summary.py` 五要素断言 |
+| 不编造 | 纯抽取式（`model=extractive-v1`、`promptTemplateVersion=summary-extract-v1`），无 LLM 补全；缺失值统一为“未识别”，`confidence = 已识别数/5` | 缺失要素用例断言“未识别”与 `confidence` |
+| 可核对 | 每个要素携带 `sourceClauseNo`/`sourceQuote`；编号/名称在元数据命中时以值本身回退为引用 | `test_summary.py` 来源字段断言 |
+| 可追溯 | 记录 `documentVersion`、`clauseCount`、`trace.{metadataSource,metadataConfidence,missingElements}`；每次生成落版本文件并追加审计 | `FileSummaryStore`、`test_summary.py` 版本用例 |
+| 生成/重新生成 | `regenerate=false` 复用最新版本；`true` 递增版本 | `test_summary.py` 幂等/版本用例 |
+| 跨租户拦截 | 文档 `tenantId` 与请求租户不一致 → 403 | `test_summary.py` 跨租户用例；`SummaryController` 审计 `DENIED` |
+| Word/PDF 导出 | `STANDARD_SUMMARY` 支持 `PDF`/`DOCX`，DOCX 输出五要素标签与值 | `ExportRendererTest#summaryDocxContainsFiveElements`、`#summaryPdfIsWellFormed` |
+
+### 15.3 #406 条目化导出
+
+| 验收要素 | 实现 | 证据 |
+| --- | --- | --- |
+| 导出字段 | 条款编号、标题、正文、所属章节（`chapterPath`），附加页码；XLSX 每条一行（A1:E{n}），PDF/DOCX 同序 | `ExportRendererTest` 行数/维度断言 |
+| 无遗漏 | 分页拉取全部条款（`pageSize=500`）并断言 `items.size() == clauseCount`，不一致直接失败且不生成残缺文件 | `ExportServiceTest#failsWhenClauseCountMismatch` |
+| 异步任务 | `POST /kbs/{kbId}/exports` → **202**；`GET /exports/{exportId}` 查状态；`GET /exports/{exportId}/download` 下载 | `ExportController`；`ExportServiceTest` |
+| 任务可重试 | 失败按 `max-retries` 自动重试，耗尽后 `FAILED`；`POST /exports/{exportId}:retry` 仅允许 `FAILED/EXPIRED` 重新入队并审计 | `ExportServiceTest#retryRequeuesFailedJob` |
+| 对象存储 + 有效期 | 文件写加密对象存储，默认 TTL `PT24H`；`expires_at` 到期后下载返回 409 并置 `EXPIRED`；`@Scheduled` 定时清理对象 | `ExportServiceTest#downloadRejectsExpired` |
+| 任务记录 | 含操作人 `actorId`、范围 `scope/kbId/documentId`、`clauseCount`、`fileHash`（SHA-256，响应头 `X-Content-SHA256`） | `V7__export_jobs.sql`；`ExportServiceTest` 断言 hash 64 位 |
+| 幂等 | `Idempotency-Key` + 唯一索引 `(tenant_id, actor_id, idempotency_key)`；重复请求返回既有任务 | `ExportServiceTest#idempotentCreateReturnsExistingJob` |
+| 契约路径不变 | P2 #272 的多格式/水印/审批在 `/kbs/{kbId}/exports`、`/exports/{exportId}` 之上扩展，不改路径 | OpenAPI `x-owner`/描述 |
+
+### 15.4 权限与审计
+
+| 场景 | 行为 | 证据 |
+| --- | --- | --- |
+| 创建导出 | `@RequirePermission("export:create")` + `RbacService.allowed(..., kbId)` 行级校验；**先鉴权后幂等回查**，避免权限回收后泄露任务元数据 | `ExportServiceTest#createDeniedForForeignKbAudits` |
+| 下载导出 | 下载时重新校验 `export:download` + KB 归属；过期/权限回收均拒绝 | `ExportServiceTest#downloadRechecksPermissionAndAudits` |
+| 越权审计 | `export.create` / `export.download` 结果为 `DENIED` 并写 `AuditService`；成功侧记录 `export.create`、`export.finish`、`export.retry`、`summary.generate` | `ExportService#requireAllowed`、`SummaryController#requireAccess` |
+| 不泄露未授权条款 | 条款数据仅从已通过 KB 校验的任务范围拉取；下载再次校验，文件不对外提供无鉴权 URL | 同上 |
+
+### 15.5 契约与回归
+
+| 项 | 结果 |
+| --- | --- |
+| OpenAPI | 新增 `/kbs/{kbId}/exports`（202）、`/exports/{exportId}:retry`；`ExportFormat` 增 `DOCX`、`ExportStatus` 增 `EXPIRED`；`ExportJob` 增 `kbId/scope/clauseCount/retryCount/maxRetries/fileHash/errorCode/errorMessage/expiresAt`；`Summary` 增 `summaryVersion/documentVersion/clauseCount/source/trace`；YAML 校验通过（paths=70） |
+| Python 回归 | `pytest tests` **210 passed**（新增 `tests/parsing/test_summary.py` 6 项） |
+| Java 回归 | `mvn -pl apps/platform-api -am test` **80 tests, 0 failures**（新增 `ExportServiceTest` 7 项、`ExportRendererTest` 4 项） |
+| 前端构建 | `vite build` 通过（51 modules；新增 `pages/Exports.jsx` 与 `/exports` 路由） |
+
+测试命令：
+`cd pymodules && uv run pytest tests -q`；
+`docker run --rm -v $PWD:/workspace -v ~/.m2:/root/.m2 -w /workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-api -am test`。
+
+## 16. 输出合规与可观测验收（#157 / #173 / #175 / #177）
+
+### 16.1 实现位置
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| Python 可观测内核 | `pymodules/packages/common/aipaas_common/core/observability.py` | `traceparent` 传播、Span/TraceStore、结构化请求日志、Prometheus 文本指标、`/metrics` 与 `/observability/traces/{id}` |
+| Python 埋点 | `pipeline/service.py`、`retrieval/service.py`、`generation/service.py`、`ingest-worker/.../routers/embedding.py` | 解析/分块/元数据/索引、检索与向量召回的 Span；检索命中与拒答指标 |
+| Java 输出合规 | `content/OutputComplianceGuard.java`、`ContentSecurityService#checkOutput`、`chat/ChatController.java` | 非流式 JSON 与 SSE 输出的 BLOCK/REPLACE，跨 chunk 合成检查，拦截审计与告警指标 |
+| Java 请求日志 | `observability/RequestLog{Filter,Service,Repository,Controller,Query,Entry}.java`、`V8__request_logs.sql`、`logback-spring.xml` | 全量请求留痕（DB + JSONL）、检索接口、保留期清理、敏感字段不外泄 |
+| Java Trace | `observability/{TraceFilter,TracingService,TraceStore,TraceSpan,TraceQueryService,PythonTraceClient,TraceController}.java` | 本地 Span 采集、MDC TraceID、跨语言按 TraceID 合并回放 |
+| Java 指标 | `observability/ObservabilityMetrics.java`、`MetricsController.java`、`application.yml` | Micrometer 计数器/直方图、P50/P95/P99、`/observability/metrics/summary` |
+| 部署 | `deploy/docker/prometheus/{prometheus-p0.yml,alerts/alerts-p0.yml}`、`alertmanager/alertmanager-p0.yml`、`grafana/{provisioning,dashboards}` | 抓取、告警规则、聚合抑制、看板自动装载 |
+
+### 16.2 #157 输出合规检查
+
+| 验收要素 | 实现 | 证据 |
+| --- | --- | --- |
+| 违规输出拦截 | 非流式命中 `BLOCK` 规则返回 422 `BIZ.CONTENT_BLOCKED`，不返回模型原文；流式命中即输出 `event: error` 并终止，不转发违规片段 | `OutputComplianceGuardTest#blockedBodyIsRejectedWithAuditableCode`、`#sseBlockStopsStreamingAndNeverForwardsViolation` |
+| 违规内容替换 | `REPLACE` 规则在 `data.content/answer` 或 SSE `delta/done` 中原位替换，保留其余字段 | `#replaceRewritesOnlyContentAndPreservesOtherFields`、`#sseReplaceSanitizesDelta` |
+| 合规内容不误拦 | 未命中规则时 JSON 与 SSE 原样透传（含大小写与结构） | `#benignBodyPassesThroughUnchanged`、`#benignSsePassesThrough` |
+| 跨 chunk 规则 | SSE 逐事件解析，`delta` 延迟一个事件写出后合成检查，避免规则被分片绕过 | `#sseCrossChunkPatternIsStillBlocked` |
+| 规则可配置可更新 | 复用 `/security/policies`（`ContentSecurityService#policies/updatePolicies`）持久化规则（正则/关键词/权重/动作），更新即生效 | `ContentSecurityServiceTest`、`ContentSecurityController` |
+| 拦截审计与告警 | `security.output.blocked` 审计 + `aipaas.security.checks.total{result=BLOCKED}`、`aipaas.security.blocks.total`；告警规则 `AipaasSecurityBlocksSpike` | `ChatController#audit`、`ObservabilityMetrics`、`alerts-p0.yml` |
+
+### 16.3 #173 基础请求日志
+
+| 验收要素 | 实现 | 证据 |
+| --- | --- | --- |
+| 成功/失败全覆盖 | `RequestLogFilter` 位于安全链之前并以 `finally` 记录，覆盖 2xx/4xx/5xx 与异常 | `RequestLogFilter`、`RequestLogServiceTest`（含 403/500 用例） |
+| 字段 | `requestId/tenantId/userId/method/path/status/latencyMs/outcome/service/traceId/clientIpHash/occurredAt` | `RequestLogEntry`、`V8__request_logs.sql` |
+| 结构化与可检索 | DB `request_logs` 多索引（时间/TraceID/用户/状态/保留期）+ `REQUEST_LOG` JSONL（按天滚动、gz、maxHistory 与保留期一致）；`GET /observability/request-logs` 支持 TraceID/用户/路径/状态/时间过滤 | `RequestLogRepository`、`RequestLogController`、`logback-spring.xml` |
+| 保留期可配置 | `aipaas.observability.request-log-retention-days`（默认 30），`@Scheduled` 清理；文件滚动上限同源 | `RequestLogService#purgeExpired`、`application.yml` |
+| 不记录敏感内容 | 仅记录 URI 路径（去掉 query string）、不落 body/header/令牌；客户端 IP 仅存 SHA-256 前 32 位 | `RequestLogFilter`；Python `test_observability.py` 断言 token/password/Authorization 不出现、IP 归一 |
+
+### 16.4 #175 全链路 Trace
+
+| 验收要素 | 实现 | 证据 |
+| --- | --- | --- |
+| 环节覆盖 | 解析 `parse.clean/chunk/metadata`、分块索引 `parse.chunk.index`、向量化提交 `index.embedding.submit`、检索 `retrieve.query/embed/search`、生成 `generate.answer/stream`、Java `chat.upstream/stream.relay` | 各服务 `span(...)` 埋点 |
+| 耗时可读 | Span 记录 `startTime/endTime/durationMs`，并由 `/observability/metrics/summary` 与 `aipaas.span.duration` Timer 提供聚合 | `TraceSpan`、`TracingService` |
+| 错误标记 | 异常自动置 `ERROR` 并带 `error` 摘要；摘要接口按 `ERROR` 计数，Trace 视图给出 `status` 与 `errorSpanCount` | `TracingServiceTest#errorMarkingIsPropagatedToStore`、`TraceQueryService` |
+| TraceID 贯穿 | W3C `traceparent` 优先，其次 `X-Trace-Id`/`X-Request-Id`，响应回写并用 MDC 贯穿日志 | `TraceIdFilter`、`TraceContext`、Python `install_observability` |
+| 按 TraceID 回放 | `GET /observability/traces/{traceId}` 合并本地与 Python Span（spanId 去重、按开始时间排序），下游不可用时标注 `unavailableSources` | `TraceQueryService`、`PythonTraceClient`、`test_observability.py#test_trace_is_propagated_and_queryable_by_trace_id` |
+
+### 16.5 #177 基础指标、看板与告警
+
+| 验收要素 | 实现 | 证据 |
+| --- | --- | --- |
+| QPS / 延迟 / 成功率 | `aipaas.requests.total`、`aipaas.request.duration`（Micrometer，P50/P95/P99 百分位 + 百分位直方图） | `ObservabilityMetrics`、`ObservabilityMetricsTest#summaryAggregatesLatencyAndSuccessRate` |
+| 检索命中 / 拒答 | `aipaas.retrieval_hits_total`、`aipaas_retrieval_queries_total`、`aipaas_generation_refusals_total{reason}` | `test_observability.py#test_metrics_expose_qps_latency_hit_and_refusal` |
+| 资源占用 | `aipaas_process_resident_memory_bytes`、`aipaas_process_cpu_seconds_total`、JVM 指标；汇总接口返回 `cpuUsage/memoryUsage` | `observability.py`、`/metrics/summary` |
+| 口径一致 | 延迟统一定义为服务端处理耗时；P50/P95/P99 在 Grafana 用 `histogram_quantile`，汇总接口用最近秩法，二者口径写明 | `dashboard`、`ObservabilityMetrics#percentile` |
+| 采集延迟 ≤ 1 分钟 | platform-api 与 Python 均 10s 抓取，告警评估 30s | `prometheus-p0.yml` |
+| Grafana 看板 | 8 面板：QPS、成功率、P50/P95/P99、链路环节 P95、检索命中/拒答、安全拦截、内存、CPU；provisioning 自动装载 | `grafana/dashboards/aipaas-p0-observability.json` |
+| 告警与防风暴 | 2 组 8 条规则（服务不可用、5xx、P95 延迟、Span 延迟、检索命中低、拒答高、安全拦截突增、无流量）；Alertmanager `group_by` + `group_wait 30s` + `repeat_interval 4h`，并抑制：服务不可用压制同服务其他告警、高 5xx 压制延迟/拒答 | `alerts/alerts-p0.yml`、`alertmanager-p0.yml` |
+
+### 16.6 契约与回归
+
+| 项 | 结果 |
+| --- | --- |
+| OpenAPI | 补齐 `/observability/traces/{traceId}` 描述与参数、`/observability/request-logs` 的 `path` 参数；`RequestLogEntry` 增 `outcome/service/clientIpHash`，`TraceSpan` 增 `traceId/service/kind/endTime/attributes`，`TraceDetail` 增 `spanCount/errorSpanCount/services/unavailableSources/queriedAt`，`MetricsSummary` 增 `latencyP50Ms/latencyP99Ms`；契约校验 **PASS**（paths=70、schemas=177、坏引用 0、P0 覆盖 44/44） |
+| Python 回归 | `uv run pytest tests -q` **216 passed**（新增 `tests/observability/test_observability.py` 6 项） |
+| Java 回归 | `mvn -pl apps/platform-api -am test` **97 tests, 0 failures**（新增 `OutputComplianceGuardTest` 7、`TracingServiceTest` 4、`RequestLogServiceTest` 3、`ObservabilityMetricsTest` 3） |
+| 部署校验 | `docker-compose -f deploy/docker/docker-compose-p0.yaml config -q` 通过；告警规则 2 组 8 条、看板 8 面板 JSON 可解析；Prometheus 挂载 `prometheus/alerts` |
+| 前端 | 复用 `p0Client` 既有 `/observability/*` 调用，无构建变更 |
+
+测试命令：
+`cd pymodules && uv run pytest tests -q`；
+`docker run --rm -v $PWD:/workspace -v ~/.m2:/root/.m2 -w /workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-api -am test`；
+`python3 aipaas-contracts/scripts/verify_contract.py`。

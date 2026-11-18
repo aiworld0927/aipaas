@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  #173 结构化日志落盘：REQUEST_LOG 输出 JSON Lines，按天滚动，
+  保留天数由 AIPAAS_REQUEST_LOG_RETENTION_DAYS 控制；控制台保留可读格式。
+-->
+<configuration>
+    <springProperty scope="context" name="requestLogPath" source="aipaas.observability.request-log-path"
+                    defaultValue="logs"/>
+    <springProperty scope="context" name="requestLogRetention" source="aipaas.observability.request-log-retention-days"
+                    defaultValue="30"/>
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="platform-api"/>
+
+    <property name="CONSOLE_PATTERN"
+              value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [traceId=%X{traceId:-}] %logger{36} - %msg%n"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="REQUEST_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${requestLogPath}/${appName}-request.jsonl</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${requestLogPath}/${appName}-request.%d{yyyy-MM-dd}.jsonl.gz</fileNamePattern>
+            <maxHistory>${requestLogRetention}</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 请求日志只写到独立文件与控制台，避免与业务日志混杂。 -->
+    <logger name="REQUEST_LOG" level="INFO" additivity="false">
+        <appender-ref ref="REQUEST_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- 业务异常堆栈中的敏感字段由业务层保证不打印；这里只控制级别。 -->
+    <logger name="com.aipaas" level="INFO"/>
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

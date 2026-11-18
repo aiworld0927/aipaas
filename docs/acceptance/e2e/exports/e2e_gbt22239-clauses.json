@@ -1,0 +1,42 @@
+[
+  {
+    "clauseNo": "7",
+    "clauseTitle": "安全通用要求",
+    "text": "",
+    "chapterPath": "7 安全通用要求",
+    "pageNo": 1,
+    "standardNo": "GB/T 22239-2019"
+  },
+  {
+    "clauseNo": "7.1",
+    "clauseTitle": "身份鉴别",
+    "text": "",
+    "chapterPath": "7 安全通用要求 / 7.1 身份鉴别",
+    "pageNo": 1,
+    "standardNo": "GB/T 22239-2019"
+  },
+  {
+    "clauseNo": "7.1.1",
+    "clauseTitle": "应对登录用户进行身份鉴别。",
+    "text": "",
+    "chapterPath": "7 安全通用要求 / 7.1 身份鉴别 / 7.1.1 应对登录用户进行身份鉴别。",
+    "pageNo": 1,
+    "standardNo": "GB/T 22239-2019"
+  },
+  {
+    "clauseNo": "7.2",
+    "clauseTitle": "访问控制",
+    "text": "",
+    "chapterPath": "7 安全通用要求 / 7.2 访问控制",
+    "pageNo": 1,
+    "standardNo": "GB/T 22239-2019"
+  },
+  {
+    "clauseNo": "7.2.1",
+    "clauseTitle": "应遵循最小权限原则。",
+    "text": "条款号\n要求\n说明\n4.1.1\n最小必要\n收集个人信息应最小必要\n4.1.2\n告知同意\n应告知处理目的",
+    "chapterPath": "7 安全通用要求 / 7.2 访问控制 / 7.2.1 应遵循最小权限原则。",
+    "pageNo": 1,
+    "standardNo": "GB/T 22239-2019"
+  }
+]

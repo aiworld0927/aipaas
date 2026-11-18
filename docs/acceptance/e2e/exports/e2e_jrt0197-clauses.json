@@ -1,0 +1,50 @@
+[
+  {
+    "clauseNo": "1",
+    "clauseTitle": "范围",
+    "text": "本文件适用于金融机构数据安全分级工作。",
+    "chapterPath": "1 范围",
+    "pageNo": 1,
+    "standardNo": "JR/T 0197-2020"
+  },
+  {
+    "clauseNo": "4",
+    "clauseTitle": "数据安全分级",
+    "text": "",
+    "chapterPath": "4 数据安全分级",
+    "pageNo": 1,
+    "standardNo": "JR/T 0197-2020"
+  },
+  {
+    "clauseNo": "4.1",
+    "clauseTitle": "分级要素",
+    "text": "",
+    "chapterPath": "4 数据安全分级 / 4.1 分级要素",
+    "pageNo": 1,
+    "standardNo": "JR/T 0197-2020"
+  },
+  {
+    "clauseNo": "4.1.1",
+    "clauseTitle": "识别数据资产",
+    "text": "金融机构应识别数据资产并形成数据资产目录。",
+    "chapterPath": "4 数据安全分级 / 4.1 分级要素 / 4.1.1 识别数据资产",
+    "pageNo": 1,
+    "standardNo": "JR/T 0197-2020"
+  },
+  {
+    "clauseNo": "附录A",
+    "clauseTitle": "数据安全级别",
+    "text": "",
+    "chapterPath": "附录A 数据安全级别",
+    "pageNo": 1,
+    "standardNo": "JR/T 0197-2020"
+  },
+  {
+    "clauseNo": "A.1",
+    "clauseTitle": "级别定义",
+    "text": "数据安全级别由低到高分为1级至5级。",
+    "chapterPath": "附录A 数据安全级别 / A.1 级别定义",
+    "pageNo": 1,
+    "standardNo": "JR/T 0197-2020"
+  }
+]
