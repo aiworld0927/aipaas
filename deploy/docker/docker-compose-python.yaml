@@ -1,0 +1,187 @@
+# =============================================================================
+# AIPaaS 五级编排 · 第 3 级：Python 业务编排服务
+# -----------------------------------------------------------------------------
+# 依赖：第 2 级 docker-compose-models.yaml（含第 1 级技术组件）
+# 新增：svc-ingest / svc-query / rag-ai-api
+#
+# 在本文件所在目录执行：
+#   docker compose -f docker-compose-python.yaml up -d --build
+#   docker compose -f docker-compose-python.yaml ps
+#   docker compose -f docker-compose-python.yaml down
+#
+# 说明：rag-ai-api 当前为统一契约骨架；真实文档导入与问答流程分别由
+#       svc-ingest、svc-query 执行。
+# =============================================================================
+
+include:
+  - docker-compose-models.yaml
+
+x-logging: &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+      tag: "{{.Name}}/{{.ID}}"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+  svc-ingest:
+    build:
+      context: ../../pymodules
+      dockerfile: apps/ingest-worker/Dockerfile
+    image: aipaas/svc-ingest:${IMAGE_TAG:-latest}
+    container_name: aipaas-svc-ingest
+    env_file: .env
+    environment:
+      APP_ENV: ${APP_ENV:-devcompany}
+      CONFIG_DIR: /app/configs
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MONGO_URL: ${MONGO_URL:-mongodb://admin:123456@mongodb:27017/?authSource=admin}
+      MINERU_API_TOKEN: ${MINERU_API_TOKEN:-}
+      EMBEDDING_SERVICE_URL: http://svc-model-embedding:${MODEL_EMBEDDING_WORKER_PORT:-8003}
+      RERANKER_SERVICE_URL: http://svc-model-reranker:${MODEL_RERANKER_WORKER_PORT:-8004}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      INGEST_WORKER_PORT: ${INGEST_WORKER_PORT:-8001}
+      TZ: Asia/Shanghai
+    ports:
+      - "${INGEST_WORKER_PORT:-8001}:${INGEST_WORKER_PORT:-8001}"
+    volumes:
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-ingest:/app/logs
+      - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${INGEST_WORKER_PORT:-8001}/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      init-app-dirs:
+        condition: service_completed_successfully
+      svc-model-embedding:
+        condition: service_healthy
+      svc-model-reranker:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+      nacos:
+        condition: service_healthy
+        required: false
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+    <<: [*default-restart, *default-logging]
+
+  svc-query:
+    build:
+      context: ../../pymodules
+      dockerfile: apps/query-worker/Dockerfile
+    image: aipaas/svc-query:${IMAGE_TAG:-latest}
+    container_name: aipaas-svc-query
+    env_file: .env
+    environment:
+      APP_ENV: ${APP_ENV:-devcompany}
+      CONFIG_DIR: /app/configs
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MONGO_URL: ${MONGO_URL:-mongodb://admin:123456@mongodb:27017/?authSource=admin}
+      EMBEDDING_SERVICE_URL: http://svc-model-embedding:${MODEL_EMBEDDING_WORKER_PORT:-8003}
+      RERANKER_SERVICE_URL: http://svc-model-reranker:${MODEL_RERANKER_WORKER_PORT:-8004}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      QUERY_WORKER_PORT: ${QUERY_WORKER_PORT:-8002}
+      TZ: Asia/Shanghai
+    ports:
+      - "${QUERY_WORKER_PORT:-8002}:${QUERY_WORKER_PORT:-8002}"
+    volumes:
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-query:/app/logs
+      - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${QUERY_WORKER_PORT:-8002}/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      init-app-dirs:
+        condition: service_completed_successfully
+      svc-model-embedding:
+        condition: service_healthy
+      svc-model-reranker:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+        required: false
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+    <<: [*default-restart, *default-logging]
+
+  rag-ai-api:
+    build:
+      context: ../../pymodules/apps/rag-ai-api
+      dockerfile: Dockerfile
+    image: aipaas/rag-ai-api:${IMAGE_TAG:-latest}
+    container_name: aipaas-rag-ai-api
+    environment:
+      AIPAAS_ENV: ${APP_ENV:-devcompany}
+      AIPAAS_API_VERSION: v1
+      AIPAAS_CONTRACT_VERSION: 1.1.0-p0
+      MILVUS_URI: http://milvus:19530
+      MINIO_ENDPOINT: minio:9000
+      REDIS_URL: redis://redis:6379/0
+      TZ: Asia/Shanghai
+    ports:
+      - "${RAG_AI_API_PORT:-8100}:8100"
+    depends_on:
+      svc-model-embedding:
+        condition: service_healthy
+      svc-model-reranker:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    <<: [*default-restart, *default-logging]

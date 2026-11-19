@@ -9,6 +9,7 @@
 | 文档 | 用途 |
 | --- | --- |
 | [快速使用入门](docs/00_快速使用入门.md) | Mock 演示、P0 Compose、离线验收和开发全量环境的最短路径 |
+| [模块说明文档](docs/08_模块说明文档.md) | Java + Python 双栈的模块清单、职责边界，以及**每个模块的启动方法** |
 | [架构说明](docs/03_架构说明.md) | 实际模块、调用链、数据存储、安全、部署与 P0/P1+ 边界 |
 | [P0 部署手册](docs/acceptance/P0-DEPLOYMENT-MANUAL.md) | 配置、端口、TLS、监控、备份、升级和回滚 |
 | [P0 验收报告](docs/acceptance/P0-ACCEPTANCE-REPORT.md) | 44 项功能、19 项非功能指标及端到端证据 |
@@ -25,6 +26,8 @@
 | `javaplat/apps/platform-api` | Java 21 / Spring Boot 3 / Maven | 统一 `/api/v1` 平台入口；认证、RBAC、文档与任务、审计、内容安全、导出、Trace 和指标 |
 | `pymodules/apps/ingest-worker` | Python 3.12 / FastAPI | 文档解析、清洗、分块、元数据、Embedding 和标准简介；默认 8001 |
 | `pymodules/apps/query-worker` | Python 3.12 / FastAPI | 向量检索、权限过滤、生成、引用、拒答和 SSE；默认 8002 |
+| `pymodules/apps/model-embedding-worker` | Python 3.12 / torch | BGE-M3（或在线 Embedding）独立推理，dense + sparse；默认 8003 |
+| `pymodules/apps/model-reranker-worker` | Python 3.12 / torch | bge-reranker-large（或 DashScope TextReRank）独立推理；默认 8004 |
 | `pymodules/apps/rag-ai-api` | FastAPI | P0 容器契约骨架；健康检查与系统信息，业务路由返回 501 |
 | `pymodules/packages` | uv workspace | `pipeline`、`retrieval`、`generation` 等可复用 AI 业务包 |
 | `web` | React 18 / Vite / Nginx | 对话、导入、知识库、导出和个人中心；登录页当前仍为演示模式 |
@@ -108,12 +111,15 @@ aipaas/
 
 | 范围 | 命令 |
 | --- | --- |
+| 各模块职责与启动 | 见[模块说明文档](docs/08_模块说明文档.md) |
 | 契约校验 | `python3 aipaas-contracts/scripts/verify_contract.py` |
 | Java 测试 | `cd javaplat && ./mvnw -pl apps/platform-api -am test` |
+| Java 本地启动 | `cd javaplat && ./mvnw -pl apps/platform-api -am spring-boot:run`（端口 8080，需可连 PostgreSQL） |
 | Python 环境 | `cd pymodules && uv sync --all-packages --group cpu` |
 | Python 测试 | `cd pymodules && uv run pytest tests -q` |
 | 导入服务 | `cd pymodules && uv run python -m ingest_worker.api.app` |
 | 查询服务 | 另一个终端执行 `cd pymodules && uv run python -m query_worker.api.app` |
+| 嵌入 / 重排服务 | `uv run python -m model_embedding_worker.api.app` / `uv run python -m model_reranker_worker.api.app` |
 | Web 开发 | `cd web && npm ci && npm run dev` |
 | Web 构建 | `cd web && npm run build` |
 

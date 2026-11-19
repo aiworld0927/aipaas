@@ -1,18 +1,17 @@
 # =============================================================================
-# AIPaaS 基础中间件 & 推理引擎编排（被 docker-compose.yaml 通过 include 引用）
+# AIPaaS 五级编排 · 第 1 级：平台技术组件
 # -----------------------------------------------------------------------------
-# 内容：
-#   核心组件（默认启动）      ：etcd / minio / milvus / mongodb
+# 本层可独立启动，并被 docker-compose-models.yaml 通过 include 引用。
+#   核心组件（默认启动）      ：etcd / minio / milvus / mongodb / postgres / redis
 #   可选组件（按 profile 启动，默认不启动）：
 #     attu      —— Milvus 可视化管理 UI
-#     nacos     —— postgres + nacos 配置中心
-#     redis     —— 缓存
+#     nacos     —— Nacos 配置中心（复用核心 postgres）
 #     rocketmq  —— namesrv + broker 消息队列
 #     vllm      —— vLLM 推理引擎（Qwen3-0.6B，OpenAI 兼容接口，需 NVIDIA GPU）
 #
 # 通过 .env 中的 COMPOSE_PROFILES 控制加载哪些可选组件，例如：
 #   COMPOSE_PROFILES=                  # 只起核心组件（默认）
-#   COMPOSE_PROFILES=nacos,redis       # 追加 nacos + redis
+#   COMPOSE_PROFILES=nacos             # 追加 Nacos
 #   COMPOSE_PROFILES=vllm              # 只追加 vLLM
 #   COMPOSE_PROFILES=nacos,rocketmq,vllm
 # 也可命令行临时指定：docker compose --profile nacos up -d
@@ -224,12 +223,11 @@ services:
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
-  # 层 2：可选组件 —— 配置中心（profile: nacos，postgres 为 nacos 主库）
+  # 层 1：核心组件 —— PostgreSQL（Nacos 与 Java 平台共用实例、独立数据库）
   # =========================================================================
   postgres:
     image: pgvector/pgvector:pg17
     container_name: aipaas-postgres
-    profiles: ["nacos"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-nacos}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nacos}
@@ -248,7 +246,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    # PostgreSQL：Nacos 主库，实测常驻约 28MB
+    # PostgreSQL：Nacos / Java 平台共用实例，实测常驻约 28MB
     deploy:
       resources:
         limits:
@@ -259,6 +257,9 @@ services:
           memory: 64M
     <<: [*default-restart, *default-logging]
   
+  # =========================================================================
+  # 层 2：可选组件 —— 配置中心（profile: nacos，复用核心 postgres）
+  # =========================================================================
   nacos:
     image: nacos/nacos-server:v3.3.0
     container_name: aipaas-nacos
@@ -316,13 +317,12 @@ services:
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
-  # 层 2：可选组件 —— 缓存（profile: redis）
+  # 层 1：核心组件 —— Redis 缓存
   # =========================================================================
   redis:
     image: redis:7-alpine                   # 追求极致轻量、启动快速和可控的安全基线
     #image: redis/redis-stack-server:latest # 支持RedisJSON、RedisSearch等模块
     container_name: aipaas-redis
-    profiles: ["redis"]
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "${REDIS_PORT:-6379}:6379"

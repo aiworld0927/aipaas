@@ -1,0 +1,120 @@
+# =============================================================================
+# AIPaaS 五级编排 · 第 4 级：Java 网关与管理平台
+# -----------------------------------------------------------------------------
+# 依赖：第 3 级 docker-compose-python.yaml（含第 1、2 级）
+# 新增：platform-db-init（一次性）/ platform-api
+#
+# platform-api 当前聚合统一网关、认证、知识库、文档、系统管理等能力。
+# 数据库使用核心 PostgreSQL 实例中的独立 PLATFORM_DB，不与 Nacos 表混用。
+#
+# 首次启动前在 .env 设置 PLATFORM_BOOTSTRAP_ADMIN_PASSWORD，然后执行：
+#   docker compose -f docker-compose-java.yaml up -d --build
+#   docker compose -f docker-compose-java.yaml ps
+#   docker compose -f docker-compose-java.yaml down
+# =============================================================================
+
+include:
+  - docker-compose-python.yaml
+
+x-logging: &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+      tag: "{{.Name}}/{{.ID}}"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+  # 幂等创建 Java 平台独立数据库，兼容已存在 PostgreSQL 数据卷的升级场景。
+  platform-db-init:
+    image: pgvector/pgvector:pg17
+    container_name: aipaas-platform-db-init
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nacos}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-nacos}
+      PLATFORM_DB: ${PLATFORM_DB:-aipaas}
+    command:
+      - sh
+      - -c
+      - >
+        psql -v ON_ERROR_STOP=1 -h postgres -U "$${POSTGRES_USER}" -d postgres
+        --set=db_name="$${PLATFORM_DB}"
+        -c "SELECT format('CREATE DATABASE %I', :'db_name')
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name') \gexec"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    <<: *default-logging
+
+  platform-api:
+    build:
+      context: ../../javaplat
+      dockerfile: Dockerfile
+    image: aipaas/platform-api:${IMAGE_TAG:-latest}
+    container_name: aipaas-platform-api
+    environment:
+      AIPAAS_ENV: ${APP_ENV:-devcompany}
+      AIPAAS_API_VERSION: v1
+      AIPAAS_CONTRACT_VERSION: ${AIPAAS_CONTRACT_VERSION:-1.1.0-p0}
+      AIPAAS_DB_URL: jdbc:postgresql://postgres:5432/${PLATFORM_DB:-aipaas}
+      AIPAAS_DB_USERNAME: ${POSTGRES_USER:-nacos}
+      AIPAAS_DB_PASSWORD: ${POSTGRES_PASSWORD:-nacos}
+      AIPAAS_MINIO_ENDPOINT: http://minio:9000
+      AIPAAS_MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      AIPAAS_MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      AIPAAS_MINIO_BUCKET: ${PLATFORM_MINIO_BUCKET:-aipaas}
+      AIPAAS_BOOTSTRAP_ADMIN_PASSWORD: ${PLATFORM_BOOTSTRAP_ADMIN_PASSWORD:?Set PLATFORM_BOOTSTRAP_ADMIN_PASSWORD before starting level 4}
+      AIPAAS_AUDIT_RETENTION_DAYS: ${AIPAAS_AUDIT_RETENTION_DAYS:-180}
+      AIPAAS_REQUEST_LOG_RETENTION_DAYS: ${AIPAAS_REQUEST_LOG_RETENTION_DAYS:-30}
+      AIPAAS_REQUEST_LOG_PATH: /var/log/aipaas
+      AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
+      AIPAAS_CHAT_SERVICE_URL: http://svc-query:${QUERY_WORKER_PORT:-8002}
+      AIPAAS_PARSE_SERVICE_URL: http://svc-ingest:${INGEST_WORKER_PORT:-8001}
+      AIPAAS_TLS_CERTIFICATE_PATH: /etc/aipaas/tls/tls.crt
+      TZ: Asia/Shanghai
+    ports:
+      - "${PLATFORM_API_PORT:-8081}:8080"
+    volumes:
+      - platform-security-keys:/var/lib/aipaas/security
+      - platform-upload-temp:/var/lib/aipaas/uploads
+      - platform-request-logs:/var/log/aipaas
+      - platform-tls:/etc/aipaas/tls:ro
+    depends_on:
+      platform-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      svc-ingest:
+        condition: service_healthy
+      svc-query:
+        condition: service_healthy
+      rag-ai-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.2'
+          memory: 256M
+    <<: [*default-restart, *default-logging]
+
+volumes:
+  platform-security-keys:
+  platform-upload-temp:
+  platform-request-logs:
+  # 与第 5 级 frontend 共用证书；frontend 可为开发环境生成自签证书。
+  platform-tls:

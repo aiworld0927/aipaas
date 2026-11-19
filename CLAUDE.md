@@ -81,12 +81,19 @@ Vite 开发代理：`/query-api` → `127.0.0.1:8002`，`/import-api` → `127.0
 source deploy/scripts/setup-env.sh devcompany   # 或 devhome；导出主机、JDK/Maven、数据卷目录等
 cd deploy/docker
 cp .env.example .env
-docker compose up -d                            # 应用服务 + 核心中间件
-docker compose up -d svc-query                  # 只启动指定服务
-docker compose logs -f svc-query
+# 第 4 级及以上必须先在 .env 配置 PLATFORM_BOOTSTRAP_ADMIN_PASSWORD
+
+docker compose -f docker-compose-base.yaml up -d
+docker compose -f docker-compose-models.yaml up -d --build
+docker compose -f docker-compose-python.yaml up -d --build
+docker compose -f docker-compose-java.yaml up -d --build
+docker compose up -d --build                     # 第 5 级：默认全量入口
+docker compose logs -f platform-api
 ```
 
-`docker-compose.yaml` 通过 `include` 合并 `docker-compose-base.yaml`。核心中间件（etcd、MinIO、Milvus、MongoDB）始终启动；`attu`、`nacos`（含 PostgreSQL）、`redis`、`rocketmq`、`vllm` 由 `.env` 中的 `COMPOSE_PROFILES` 控制。应用服务包括：`svc-model-embedding`、`svc-model-reranker`、`svc-ingest`、`svc-query`、`frontend`。
+五级 `include` 链依次为 base（核心 etcd / MinIO / Milvus / MongoDB / PostgreSQL / Redis，可选 attu / Nacos / RocketMQ / vLLM）→ models（init-app-dirs、嵌入、重排）→ python（svc-ingest、svc-query、契约骨架 rag-ai-api）→ java（幂等 platform-db-init、platform-api）→ 主文件（frontend）。每一级都可独立作为启动入口并自动包含下层；base 无需 `--build`，可选组件仍由 `COMPOSE_PROFILES` 或 `--profile` 控制。
+
+platform-api 是当前 Java 统一网关与管理功能聚合单体，使用 PostgreSQL 中独立的 `PLATFORM_DB`（默认 `aipaas`），聊天下游为 svc-query、解析下游为 svc-ingest。frontend 将 `/api/v1/**` 反代到 `platform-api:8080`，同时保留旧 query / import 直连；HTTP / HTTPS 默认端口为 80 / 443，HTTPS 由 `FRONTEND_HTTPS_PORT` 配置，证书通过共享 `platform-tls` 卷提供。`docker-compose-p0.yaml` 保持独立 P0 骨架编排，不并入五级链。
 
 ## 架构说明
 
@@ -164,14 +171,14 @@ React SPA，路由为 `/login`、`/chat`、`/chat/:sessionId`、`/import`、`/us
 
 ### 部署拓扑
 
-Compose 项目网络为 `aipaas-network`（bridge）。容器之间通过服务名互访（`milvus:19530`、`minio:9000`、`mongodb:27017`、`svc-model-embedding:8003`）。两个 Compose 文件分层：`docker-compose-base.yaml` 管中间件，`docker-compose.yaml` 管应用服务。环境变量优先级：shell 已导出变量（`source deploy/scripts/setup-env.sh`）> `.env` > Compose 内置默认值。`configs/` 目录以只读方式挂载进每个 Python 容器。
+Compose 项目网络为 `aipaas-network`（bridge）。容器之间通过服务名互访（`milvus:19530`、`minio:9000`、`mongodb:27017`、`svc-model-embedding:8003`、`platform-api:8080`）。部署拓扑为五级 `include` 链：`docker-compose-base.yaml` → `docker-compose-models.yaml` → `docker-compose-python.yaml` → `docker-compose-java.yaml` → `docker-compose.yaml`，分别对应技术组件、模型接入、Python 业务、Java 平台和前端；`docker-compose-p0.yaml` 是独立 P0 编排，不属于该链。环境变量优先级：shell 已导出变量（`source deploy/scripts/setup-env.sh`）> `.env` > Compose 内置默认值。`configs/` 目录以只读方式挂载进每个 Python 容器。
 
 ## 改动前必查的坑
 
-- 旧文档中的端口号不可信。当前默认值：导入 8001、查询 8002、嵌入 8003、重排 8004；前端 nginx 80；Java gateway 端口只是规划。
+- 旧文档中的端口号不可信。当前默认值：导入 8001、查询 8002、嵌入 8003、重排 8004、rag-ai-api 8100；platform-api 宿主 8081 / 容器 8080；前端 nginx HTTP 80 / HTTPS 443（`FRONTEND_HTTPS_PORT` 可改）。
 - 配置拼写错误会快速失败（`extra="forbid"`），但只校验当前进程加载的命名空间；改配置后请用 `compileall` 和服务启动验证。
 - `load_settings` 必须先于那些在 import 阶段调用 `get_settings()` 的模块执行；沿用 `api/service.py` 中已有的入口顺序。
 - 不要手工编辑 `uv.lock`；使用 `uv add` / `uv lock`。lock 变更后必须重建模型共享基座镜像。
 - `pymodules/tests/` 不是 CI 测试套件，不要当可靠的回归覆盖。
-- `javaplat/` 虽然有 `gateway` / `svc-*` 目录，但只是文档规划，不能构建。
+- `javaplat/` 当前可部署入口是 platform-api：Java 统一网关与管理功能聚合单体，不再是“仅规划、不能构建”。它使用核心 PostgreSQL 中独立的 `PLATFORM_DB`（默认 `aipaas`），聊天下游为 svc-query、解析下游为 svc-ingest；第 4 级及以上启动前必须配置 `PLATFORM_BOOTSTRAP_ADMIN_PASSWORD`。
 - 未解决的安全问题记录在 `docs/07_风险问题.md`（无认证、CORS 全放开、上传文件名路径穿越、MinIO 桶可匿名读取）。不要基于这些问题已修复的假设开发新行为。

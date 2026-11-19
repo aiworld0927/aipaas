@@ -1,0 +1,140 @@
+# =============================================================================
+# AIPaaS 五级编排 · 第 2 级：模型接入服务
+# -----------------------------------------------------------------------------
+# 依赖：第 1 级 docker-compose-base.yaml
+# 新增：svc-model-embedding / svc-model-reranker
+#
+# 在本文件所在目录执行：
+#   docker compose -f docker-compose-models.yaml up -d --build
+#   docker compose -f docker-compose-models.yaml ps
+#   docker compose -f docker-compose-models.yaml down
+#
+# 离线模型挂载：MODEL_BASE_DIR/bge-m3、MODEL_BASE_DIR/bge-reranker-large
+# 后端开关：EMBEDDING_BACKEND=offline|online、RERANKER_BACKEND=offline|online
+# =============================================================================
+
+include:
+  - docker-compose-base.yaml
+
+x-logging: &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+      tag: "{{.Name}}/{{.ID}}"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+  # 预创建全部 Python 服务日志目录，避免容器内非 root 进程无写权限。
+  init-app-dirs:
+    container_name: aipaas-init-app-dirs
+    image: alpine
+    user: root
+    volumes:
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs:/logs
+    command:
+      - sh
+      - -c
+      - mkdir -p /logs/svc-ingest /logs/svc-query /logs/svc-model-embedding /logs/svc-model-reranker && chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} /logs
+    restart: "no"
+
+  svc-model-embedding:
+    build:
+      context: ../../pymodules
+      dockerfile: apps/model-embedding-worker/Dockerfile
+      # bridge 网络下访问 download.pytorch.org / pypi.nvidia.cn 可能超时。
+      network: host
+      args:
+        BASE_IMAGE: aipaas/aipaas-torch-${TORCH_VARIANT:-gpu}-base:${PY_BASE_TAG:-local}
+    image: aipaas/svc-model-embedding:${IMAGE_TAG:-latest}
+    container_name: aipaas-svc-model-embedding
+    env_file: .env
+    environment:
+      APP_ENV: ${APP_ENV:-devcompany}
+      CONFIG_DIR: /app/configs
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EMBEDDING_ONLINE_API_KEY: ${EMBEDDING_ONLINE_API_KEY:-}
+      MODEL_EMBEDDING_WORKER_PORT: ${MODEL_EMBEDDING_WORKER_PORT:-8003}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MODEL_EMBEDDING_WORKER_PORT:-8003}:${MODEL_EMBEDDING_WORKER_PORT:-8003}"
+    volumes:
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-model-embedding:/app/logs
+      - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
+      - ${MODEL_BASE_DIR:-/home/aipaas/models/BAAI}/bge-m3:${MODEL_BASE_DIR:-/home/aipaas/models/BAAI}/bge-m3:ro
+      # 配置中的 model_path 可能是宿主机绝对路径，按原路径透传。
+      - /coding/models:/coding/models:ro
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${MODEL_EMBEDDING_WORKER_PORT:-8003}/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      init-app-dirs:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    # GPU 部署时在 reservations 下补 devices（需 nvidia-container-toolkit）：
+    #   devices:
+    #     - driver: nvidia
+    #       count: 1
+    #       capabilities: [gpu]
+    <<: [*default-restart, *default-logging]
+
+  svc-model-reranker:
+    build:
+      context: ../../pymodules
+      dockerfile: apps/model-reranker-worker/Dockerfile
+      network: host
+      args:
+        BASE_IMAGE: aipaas/aipaas-torch-${TORCH_VARIANT:-gpu}-base:${PY_BASE_TAG:-local}
+    image: aipaas/svc-model-reranker:${IMAGE_TAG:-latest}
+    container_name: aipaas-svc-model-reranker
+    env_file: .env
+    environment:
+      APP_ENV: ${APP_ENV:-devcompany}
+      CONFIG_DIR: /app/configs
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TEXT_RERANK_API_KEY: ${TEXT_RERANK_API_KEY:-}
+      MODEL_RERANKER_WORKER_PORT: ${MODEL_RERANKER_WORKER_PORT:-8004}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MODEL_RERANKER_WORKER_PORT:-8004}:${MODEL_RERANKER_WORKER_PORT:-8004}"
+    volumes:
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-model-reranker:/app/logs
+      - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
+      - ${MODEL_BASE_DIR:-/home/aipaas/models/BAAI}/bge-reranker-large:${MODEL_BASE_DIR:-/home/aipaas/models/BAAI}/bge-reranker-large:ro
+      - /coding/models:/coding/models:ro
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${MODEL_RERANKER_WORKER_PORT:-8004}/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      init-app-dirs:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    # GPU 部署时在 reservations 下补 devices（需 nvidia-container-toolkit）：
+    #   devices:
+    #     - driver: nvidia
+    #       count: 1
+    #       capabilities: [gpu]
+    <<: [*default-restart, *default-logging]
