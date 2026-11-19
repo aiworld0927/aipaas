@@ -58,9 +58,19 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             // 分片上传天然按 partNo 幂等，且单片 5MB 以内。
             return true;
         }
+        if (request.getRequestURI().endsWith("/chat/stream") || acceptsEventStream(request)) {
+            // SSE 响应由 StreamingResponseBody 异步写出，缓存包装会截断流并占用内存；
+            // 流式问答的幂等由 Idempotency-Key 透传下游保证。
+            return true;
+        }
         return !request.getRequestURI().startsWith("/api/v1")
                 || !METHODS.contains(request.getMethod())
                 || !StringUtils.hasText(request.getHeader(HEADER));
+    }
+
+    private static boolean acceptsEventStream(HttpServletRequest request) {
+        String accept = request.getHeader("Accept");
+        return accept != null && accept.toLowerCase().contains("text/event-stream");
     }
 
     @Override

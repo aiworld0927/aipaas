@@ -15,16 +15,17 @@ docker-compose -f deploy/docker/docker-compose-p0.yaml up -d --build
 docker-compose -f deploy/docker/docker-compose-p0.yaml ps
 ```
 
-首次启动需构建 4 个镜像（platform-api / rag-ai-api / mock / web）并拉取 postgres、redis、minio、etcd、milvus、prometheus。Milvus 冷启动 `start_period` 90s，属正常现象。
+首次启动需构建 5 个镜像（platform-gateway / platform-management / rag-ai-api / mock / web）并拉取 postgres、redis、minio、etcd、milvus、prometheus。Milvus 冷启动 `start_period` 90s，属正常现象。
 
 ### 端口与入口
 
 | 组件 | 宿主端口 | 容器端口 | 用途 |
 |---|---|---|---|
-| platform-api（Java） | 8081 | 8080 | P0 契约主入口 `/api/v1/**` |
-| rag-ai-api（Python） | 8100 | 8100 | AI 能力骨架（未实现路由返回 501） |
+| platform-gateway（Java） | 仅容器内网 | 8080 | P0 契约主入口 `/api/v1/**`（统一入口网关） |
+| platform-management（Java） | 仅容器内网 | 8080 | 管理服务（登录、RBAC、文档、审计落库） |
+| rag-ai-api（Python） | 仅容器内网 | 8100 | AI 能力骨架（未实现路由返回 501） |
 | contracts-mock | 4010 | 4010 | 零依赖契约 mock，前后端独立联调 |
-| web（nginx） | 18080 | 80 | SPA + `/api/` 反代到 platform-api |
+| web（nginx） | 18080 | 80 | SPA + `/api/` 反代到 platform-gateway |
 | postgres | 仅容器内网 | 5432 | 元数据/审计（不暴露宿主机） |
 | redis | 56379 | 6379 | 缓存/幂等键 |
 | minio | 19000 / 19001 | 9000 / 9001 | 对象存储 / 控制台 |
@@ -40,7 +41,6 @@ docker-compose -f deploy/docker/docker-compose-p0.yaml ps
 ```bash
 B=http://127.0.0.1
 for u in \
-  "$B:8081/healthz" "$B:8081/readyz" \
   "$B:8100/healthz" "$B:8100/readyz" \
   "$B:4010/healthz" "$B:4010/readyz" \
   "$B:18080/healthz" "$B:18080/readyz" \
@@ -48,6 +48,12 @@ for u in \
   "$B:19000/minio/health/live"; do
   printf '%-46s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' "$u")"
 done
+
+# Java 服务默认不映射宿主机端口，进入容器内检查
+docker-compose -f deploy/docker/docker-compose-p0.yaml exec p0-platform-gateway \
+  wget -qO- http://127.0.0.1:8080/healthz
+docker-compose -f deploy/docker/docker-compose-p0.yaml exec p0-platform-management \
+  wget -qO- http://127.0.0.1:8080/healthz
 ```
 
 期望全部为 `200`。基础设施容器状态：
@@ -64,7 +70,8 @@ docker-compose -f deploy/docker/docker-compose-p0.yaml ps --format 'table {{.Nam
 | etcd | `etcdctl endpoint health` |
 | milvus | `GET :9091/healthz` → 200 |
 | prometheus | `GET :9090/-/healthy` → 200 |
-| platform-api | `GET :8080/healthz`、`/readyz` → 200 |
+| platform-gateway | `GET :8080/healthz`、`/readyz` → 200 |
+| platform-management | `GET :8080/healthz`、`/readyz` → 200 |
 | rag-ai-api | `GET :8100/healthz`、`/readyz` → 200 |
 | mock | `GET :4010/healthz`、`/readyz` → 200 |
 | web | `GET /healthz`、`/readyz` → 200 |
@@ -115,18 +122,18 @@ python3 aipaas-contracts/mock/smoke_upload_qa.py --base-url http://127.0.0.1:401
 → GET /audit-logs（doc.upload / chat.query / permission.denied）
 ```
 
-### 4.2 对 platform-api（骨架）
+### 4.2 对 platform-gateway（经 web 反代）
 
 ```bash
-curl -s -X POST http://127.0.0.1:8081/api/v1/auth/login \
+curl -s -X POST http://127.0.0.1:18080/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"admin12345"}'
 ```
 
-P0 骨架仅实现 `/api/v1/system/info`；其余契约路径返回 `501 SYS.NOT_IMPLEMENTED`（统一信封，前端可先对接错误分支）。
+> 以下 501 兜底描述属于 Step 0 骨架阶段的历史结论。当前 `platform-gateway` 会把管理请求代理到 `platform-management`，问答请求按 `AIPAAS_CHAT_SERVICE_URL` 直接调用 Python 服务；P0 编排中该地址指向仍是骨架的 `rag-ai-api:8100`。
 
 ```bash
-curl -s http://127.0.0.1:8081/api/v1/system/info -H 'Authorization: Bearer dev'
+curl -s http://127.0.0.1:18080/api/v1/system/info -H 'Authorization: Bearer dev'
 ```
 
 ---
@@ -158,11 +165,13 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8100/healthz   # 200
 # 本机有 JDK 21：
 export JAVA_HOME=/path/to/jdk-21
 cd javaplat && ./mvnw -q -DskipTests package
-java -jar apps/platform-api/target/platform-api.jar
+java -jar apps/platform-management/target/platform-management.jar
+java -jar apps/platform-gateway/target/platform-gateway.jar
 
-# 无本机 JDK：直接用容器构建/运行
-docker build -t aipaas/platform-api:p0 javaplat
-docker run --rm -p 8081:8080 aipaas/platform-api:p0
+# 无本机 JDK：直接用容器构建/运行（构建上下文为 javaplat/）
+docker build -f apps/platform-gateway/Dockerfile -t aipaas/platform-gateway:p0 .
+docker build -f apps/platform-management/Dockerfile -t aipaas/platform-management:p0 .
+docker run --rm -p 8081:8080 aipaas/platform-gateway:p0
 ```
 
 ### 5.4 Web 生产构建
@@ -190,9 +199,9 @@ docker-compose -f deploy/docker/docker-compose-p0.yaml down -v
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | `p0-milvus` 反复重启 | etcd/minio 未就绪 | 等待 etcd/minio healthy；Milvus 冷启动约 90s |
-| `platform-api` 健康检查失败 | 镜像构建期 Maven 依赖未下载完 | `docker-compose build platform-api` 查看日志；`docker logs p0-platform-api` |
-| 端口被占用 | 宿主机已有服务 | 修改 compose 左侧端口（如 8081→18081），或先停旧容器 |
-| web 502 `/api/` | platform-api 未就绪 | 等待其 healthcheck 通过；检查 `PLATFORM_API_UPSTREAM` |
+| `p0-platform-gateway` 健康检查失败 | 镜像构建期 Maven 依赖未下载完 | `docker-compose build p0-platform-gateway` 查看日志；`docker logs p0-platform-gateway` |
+| 端口被占用 | 宿主机已有服务 | 修改 compose 左侧端口（如 18081→18082），或先停旧容器 |
+| web 502 `/api/` | platform-gateway 未就绪 | 等待其 healthcheck 通过；检查 `PLATFORM_API_UPSTREAM` |
 | mock SSE 立即结束 | 客户端使用 HTTP/1.0 或代理缓冲 | mock 已用 `Connection: close`；nginx 已 `proxy_buffering off` |
 | `verify_contract.py` 报坏引用 | 手工编辑 YAML 产生 `#components/...` | 必须写 `#/components/...` |
 | Java 构建报 `release version 21 not supported` | 本机只有 JRE | 使用容器构建（见 5.3） |
@@ -202,6 +211,8 @@ docker-compose -f deploy/docker/docker-compose-p0.yaml down -v
 ## 8. 验收对照
 
 > 2026-11-17 实测（本项目工作机）：除 Prometheus 镜像因 Docker Hub 拉取限速仍在后台拉取外，其余 9 个服务全部 `healthy`，健康端点均返回 200；`verify_contract.py` PASS；mock 串联 23/23。
+>
+> 以下输出为拆分前的历史记录；当时的 `platform-api` 聚合单体现已拆分为 `platform-gateway` 与 `platform-management`，不再存在名为 `platform-api` 的可部署应用。
 
 | 验收项 | 验证方式 | 结果 |
 |---|---|---|

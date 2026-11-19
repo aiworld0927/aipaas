@@ -13,7 +13,8 @@
 
     <modules>
         <module>libs/common</module>
-        <module>apps/platform-api</module>
+        <module>apps/platform-gateway</module>
+        <module>apps/platform-management</module>
     </modules>
 
     <properties>
@@ -22,6 +23,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>3.4.1</spring-boot.version>
         <resilience4j.version>2.2.0</resilience4j.version>
+        <minio.version>8.5.17</minio.version>
     </properties>
 
     <dependencyManagement>
@@ -57,6 +59,8 @@
                     <version>3.13.0</version>
                     <configuration>
                         <release>${maven.compiler.release}</release>
+                        <!-- Spring MVC 解析未显式命名的 @RequestParam/@PathVariable 需要方法参数名反射 -->
+                        <parameters>true</parameters>
                     </configuration>
                 </plugin>
                 <plugin>

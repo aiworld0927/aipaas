@@ -164,7 +164,7 @@
 | Python 骨架 `/healthz`、`/readyz`、`/api/v1/system/info`、`/metrics` | 已验证 200；其余 `/api/v1/**` 返回 501 |
 | Mock 覆盖核心链路 | 登录→建库→上传→任务→分块→问答→SSE→越权→审计，23/23 冒烟通过（容器内运行） |
 | 前端客户端 | `web/src/api/p0Client.js` 覆盖 71 个 operation 的调用封装；nginx `/api/` 反代已验证 |
-| compose 编排 | 10 服务编排；postgres/redis/minio/etcd/milvus/platform-api/rag-ai-api/mock/web 均 healthy |
+| compose 编排 | 13 服务编排；postgres/redis/minio/etcd/milvus/p0-platform-management/p0-platform-gateway/rag-ai-api/mock/web 均 healthy |
 
 ---
 

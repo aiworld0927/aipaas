@@ -14,7 +14,7 @@
 | --- | --- |
 | 功能范围 | 契约 `aipaas-openapi-v1.yaml` 中 `x-p0-feature` 标注的 44 项 P0 功能（70 path / 80 operation） |
 | 非功能范围 | 性能、稳定性、降级、熔断限流、质量门禁、安全与合规共 19 项 |
-| 代码基线 | `javaplat`（platform-api）、`pymodules`（uv workspace）、`web`、`aipaas-contracts`、`deploy/docker` |
+| 代码基线 | `javaplat`（platform-gateway / platform-management）、`pymodules`（uv workspace）、`web`、`aipaas-contracts`、`deploy/docker` |
 | 验收方式 | 生产代码路径 + 确定性替身（离线可复现）；自动化脚本 + 指标快照 + 报告 |
 | 脚本位置 | `pymodules/scripts/acceptance/` |
 | 证据目录 | `docs/acceptance/` |
@@ -41,7 +41,7 @@ uv run python scripts/acceptance/security_checks.py
 # 6) 全量回归
 uv run pytest tests -q
 docker run --rm -v /home/aipaas/aipaas/javaplat:/workspace -v /home/aipaas/.m2:/root/.m2 \
-  -w /workspace maven:3.9-eclipse-temurin-21 mvn -o -B -pl apps/platform-api -am test
+  -w /workspace maven:3.9-eclipse-temurin-21 mvn -o -B clean test
 python3 aipaas-contracts/scripts/verify_contract.py
 cd deploy/docker && docker-compose -f docker-compose.yaml config -q
 cd web && npx vite build --outDir dist-acceptance --emptyOutDir

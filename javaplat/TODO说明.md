@@ -1,6 +1,9 @@
 # javaplat Java 平台模块规划（TODO）
 
-> **状态：规划中，暂不打包部署。** 本目录暂只做模块规划与功能拆解，待评审通过后再补充源码、pom.xml 与 Dockerfile，并纳入 `deploy/docker/docker-compose.yaml` 编排。
+> **状态：已废弃（被网关+管理拆分方案替代）。** 本文描述的 gateway / svc-auth / svc-document /
+> svc-search / svc-agent 五微服务规划不再是目标架构，仅保留作历史参考。
+> 当前 Java 侧只有 `platform-gateway` 与 `platform-management` 两个可部署应用，共享 `libs/common`；
+> 真实结构以 `javaplat/pom.xml` 和 `docs/AI编程/Java网关与管理拆分实施提示词.md` 为准，不得依据本文恢复五微服务。
 >
 > 上次会话预创建的 5 个 Dockerfile 已删除，避免与最终方案冲突。
 

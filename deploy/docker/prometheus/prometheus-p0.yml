@@ -2,7 +2,7 @@
 # P0 骨架 Prometheus 抓取与告警配置（deploy/docker/docker-compose-p0.yaml 专用）
 # ---------------------------------------------------------------------------
 # 目标对齐 P0 #177（QPS/延迟/成功率/资源/检索命中/拒答）与 #175（Trace 指标）。
-# 采集延迟：platform-api 10s，Python 10s，均 ≤ 1 分钟；告警评估 30s。
+# 采集延迟：platform-gateway / platform-management 10s，Python 10s，均 ≤ 1 分钟；告警评估 30s。
 # 仅抓取 compose 内网服务，不暴露到宿主机公网。
 # ===========================================================================
 global:
@@ -25,14 +25,24 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # Java 平台 API：Spring Boot Actuator + Micrometer
-  - job_name: platform-api
+  # Java 统一网关：Spring Boot Actuator + Micrometer
+  - job_name: platform-gateway
     metrics_path: /actuator/prometheus
     scrape_interval: 10s
     static_configs:
-      - targets: ["platform-api:8080"]
+      - targets: ["platform-gateway:8080"]
         labels:
-          service: platform-api
+          service: platform-gateway
+          language: java
+
+  # Java 管理服务：Spring Boot Actuator + Micrometer（容器网络内抓取）
+  - job_name: platform-management
+    metrics_path: /actuator/prometheus
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["platform-management:8080"]
+        labels:
+          service: platform-management
           language: java
 
   # Python AI 服务：/metrics 暴露请求 QPS/延迟与业务指标

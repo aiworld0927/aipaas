@@ -61,6 +61,7 @@ RUN uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation
       -e packages/nacos \
       -e packages/retrieval \
       -e packages/storage \
+      -e packages/pipeline \
       -e apps/ingest-worker
 
 # ---- 阶段 2：运行时 ----

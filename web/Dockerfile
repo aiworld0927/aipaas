@@ -61,7 +61,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
 
 # 默认反代目标（会被运行时环境变量覆盖）
-# PLATFORM_API_UPSTREAM：P0 契约网关（platform-api），/api/v1/** 原样透传
+# PLATFORM_API_UPSTREAM：Java 统一网关（platform-gateway），/api/v1/** 原样透传
 ENV QUERY_API_UPSTREAM=http://localhost:8081 \
     IMPORT_API_UPSTREAM=http://localhost:8081 \
     PLATFORM_API_UPSTREAM=http://localhost:8081 \

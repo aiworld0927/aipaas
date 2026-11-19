@@ -23,7 +23,8 @@
 
 | 模块 | 技术栈 | 当前职责 |
 | --- | --- | --- |
-| `javaplat/apps/platform-api` | Java 21 / Spring Boot 3 / Maven | 统一 `/api/v1` 平台入口；认证、RBAC、文档与任务、审计、内容安全、导出、Trace 和指标 |
+| `javaplat/apps/platform-management` | Java 21 / Spring Boot 3 / Maven | 管理服务：登录/刷新/注销、用户与 RBAC、知识库、文档、审计落库、内容策略、系统配置、导入任务和数据库、Flyway、MinIO、完整密钥 |
+| `javaplat/apps/platform-gateway` | Java 21 / Spring Boot 3 / Maven | 统一入口网关：本地 JWT 验签与 JTI 撤销校验、身份头重建、`/api/v1/**` 流式代理、问答安全编排、审计事件发布、Trace/幂等/SSE |
 | `pymodules/apps/ingest-worker` | Python 3.12 / FastAPI | 文档解析、清洗、分块、元数据、Embedding 和标准简介；默认 8001 |
 | `pymodules/apps/query-worker` | Python 3.12 / FastAPI | 向量检索、权限过滤、生成、引用、拒答和 SSE；默认 8002 |
 | `pymodules/apps/model-embedding-worker` | Python 3.12 / torch | BGE-M3（或在线 Embedding）独立推理，dense + sparse；默认 8003 |
@@ -94,7 +95,7 @@ uv run pytest tests -q
 ```text
 aipaas/
 ├── aipaas-contracts/          # OpenAPI、Mock、契约校验与版本策略
-├── javaplat/                  # Java 21 Maven 多模块：platform-api + common
+├── javaplat/                  # Java 21 Maven 多模块：platform-gateway + platform-management + common
 ├── pymodules/                 # Python uv workspace：apps + packages + tests
 │   ├── apps/                  # ingest/query/model/rag-ai-api
 │   ├── packages/              # pipeline/retrieval/generation/common 等
@@ -113,8 +114,8 @@ aipaas/
 | --- | --- |
 | 各模块职责与启动 | 见[模块说明文档](docs/08_模块说明文档.md) |
 | 契约校验 | `python3 aipaas-contracts/scripts/verify_contract.py` |
-| Java 测试 | `cd javaplat && ./mvnw -pl apps/platform-api -am test` |
-| Java 本地启动 | `cd javaplat && ./mvnw -pl apps/platform-api -am spring-boot:run`（端口 8080，需可连 PostgreSQL） |
+| Java 测试 | `cd javaplat && ./mvnw clean test`（管理 91 + 网关 18，共 109 个测试） |
+| Java 本地启动 | `cd javaplat && ./mvnw -pl apps/platform-gateway -am spring-boot:run`（容器内端口 8080，宿主机默认 8081）、`./mvnw -pl apps/platform-management -am spring-boot:run`（8080，需可连 PostgreSQL 与 Redis） |
 | Python 环境 | `cd pymodules && uv sync --all-packages --group cpu` |
 | Python 测试 | `cd pymodules && uv run pytest tests -q` |
 | 导入服务 | `cd pymodules && uv run python -m ingest_worker.api.app` |

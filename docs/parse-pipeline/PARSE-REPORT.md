@@ -126,7 +126,7 @@ parse/{tenantId}/{docId}/latest-chunk.json        # 最新分块指针
 | 自动重试 ≤2 次 | 传输异常按 `retry_count<max_retries` 重新排队，复用任务行 | `transportFailureIsRetriedAtMostMaxRetriesAndNeverSwallowed` |
 | ≥10 并发不阻塞 | `ingestExecutor` 核心 16 线程；12 并发全部成功 | `twelveConcurrentTasksAllCompleteWithoutBlocking` |
 
-Java 全量测试：`docker run --rm -v $PWD:/workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-api -am test` → 60 passed。
+Java 全量测试：`docker run --rm -v $PWD:/workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-management -am test` → 60 passed。
 
 ## 9. #14 数据清洗基础（规则、差异与保护）
 
@@ -227,7 +227,7 @@ Java 全量测试：`docker run --rm -v $PWD:/workspace maven:3.9-eclipse-temuri
 ### 11.4 回归结果
 
 - Python：`pytest tests/parsing` **89 passed**（新增 #57/#44/#49 共 23 项）。
-- Java：`mvn -pl apps/platform-api -am test` **66 tests, 0 failures**，新增 `VectorIndexServiceTest` 6 项。
+- Java：`mvn -pl apps/platform-management -am test` **66 tests, 0 failures**，新增 `VectorIndexServiceTest` 6 项。
 - 数据库：Flyway `V6__vector_index_builds.sql` 建表、唯一幂等键与查询索引。
 
 ## 12. 检索链路验收（#63 / #70 / #88）
@@ -281,7 +281,7 @@ Java 全量测试：`docker run --rm -v $PWD:/workspace maven:3.9-eclipse-temuri
 | --- | --- |
 | 检索 P95 | 300 chunk × 60 次查询（含编号锚点/纯语义混合），P95 与最大耗时均 ≤ 500ms；默认超时预算 300ms |
 | Python 回归 | `pytest tests` **129 passed**（新增 `tests/retrieval` 40 项） |
-| Java 回归 | `mvn -pl apps/platform-api -am test` **66 tests, 0 failures**（新增 `retrieval:query` 权限点与 KB 授权种子） |
+| Java 回归 | `mvn -pl apps/platform-management -am test` **66 tests, 0 failures**（新增 `retrieval:query` 权限点与 KB 授权种子） |
 | 契约 | OpenAPI YAML 校验通过；`x-p95-ms: 500`、审计动作、权限点与实现一致 |
 
 性能测试：`tests/retrieval/test_retrieval_performance.py::test_retrieval_p95_within_500ms`。
@@ -361,7 +361,7 @@ P0 边界：只做“双供应商直连 + 简单故障切换”。按成本/质�
 
 | 层 | 文件 | 职责 |
 | --- | --- | --- |
-| Java 编排 | `javaplat/apps/platform-api/.../chat/ChatController.java` | 统一对外 `/api/v1/chat`、`/api/v1/chat/stream`：输入校验 → 内容安全 → 身份/权限/KB 授权头注入 → 下游转发 → 审计 |
+| Java 编排 | `javaplat/apps/platform-gateway/.../chat/ChatController.java` | 统一对外 `/api/v1/chat`、`/api/v1/chat/stream`：输入校验 → 内容安全 → 身份/权限/KB 授权头注入 → 下游转发 → 审计 |
 | Java 授权 | `auth/UserRepository.java` | `permittedKbIds` 查询用户可检索知识库，经 `X-Kb-Ids` 下发前置过滤 |
 | Python SSE | `pymodules/apps/query-worker/query_worker/api/generation_stream.py` | 事件缓冲、单调序号、Last-Event-ID 续传、心跳、TTL/容量淘汰 |
 | Python 流式生成 | `aipaas_generation/llm_client.py`、`service.py` | 供应商 SSE 增量 → `meta/citation/delta/done`；`done.content` 为后处理最终正文 |
@@ -403,13 +403,13 @@ P0 边界：只做“双供应商直连 + 简单故障切换”。按成本/质�
 | --- | --- |
 | OpenAPI | `/chat`、`/chat/stream` 已存在；补充 SSE `id=<streamKey>:<seq>`、`SseDone.content/confidence/provider/degraded/warnings/timings`、`ConversationMode=stream/non-stream`；YAML 校验通过（paths=68） |
 | Python 回归 | `pytest tests` **204 passed**（新增 `tests/generation/test_streaming.py` 8 项） |
-| Java 回归 | `mvn -pl apps/platform-api -am test` **69 tests, 0 failures**（新增 `ChatControllerTest` 6 项，移除旧 `ChatSecurityControllerTest`） |
+| Java 回归 | `mvn -pl apps/platform-gateway -am test` **69 tests, 0 failures**（新增 `ChatControllerTest` 6 项，移除旧 `ChatSecurityControllerTest`） |
 | 前端构建 | `vite build` 通过（50 modules；本机 `dist/` 权限受限，产物输出到临时目录验证） |
 | 部署 | `AIPAAS_CHAT_SERVICE_URL` 可覆盖下游地址，P0 compose 缺省仍指向 `rag-ai-api:8100` |
 
 测试命令：
 `cd pymodules && .venv/bin/python -m pytest tests/generation/test_streaming.py -q`；
-`docker run --rm -v $PWD:/ws -v ~/.m2:/root/.m2 -w /ws maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-api -am test`。
+`docker run --rm -v $PWD:/ws -v ~/.m2:/root/.m2 -w /ws maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-gateway -am test`。
 
 ## 15. 标准简介与条目化导出验收（#405 / #406）
 
@@ -465,12 +465,12 @@ P0 边界：只做“双供应商直连 + 简单故障切换”。按成本/质�
 | --- | --- |
 | OpenAPI | 新增 `/kbs/{kbId}/exports`（202）、`/exports/{exportId}:retry`；`ExportFormat` 增 `DOCX`、`ExportStatus` 增 `EXPIRED`；`ExportJob` 增 `kbId/scope/clauseCount/retryCount/maxRetries/fileHash/errorCode/errorMessage/expiresAt`；`Summary` 增 `summaryVersion/documentVersion/clauseCount/source/trace`；YAML 校验通过（paths=70） |
 | Python 回归 | `pytest tests` **210 passed**（新增 `tests/parsing/test_summary.py` 6 项） |
-| Java 回归 | `mvn -pl apps/platform-api -am test` **80 tests, 0 failures**（新增 `ExportServiceTest` 7 项、`ExportRendererTest` 4 项） |
+| Java 回归 | `mvn -pl apps/platform-management -am test` **80 tests, 0 failures**（新增 `ExportServiceTest` 7 项、`ExportRendererTest` 4 项） |
 | 前端构建 | `vite build` 通过（51 modules；新增 `pages/Exports.jsx` 与 `/exports` 路由） |
 
 测试命令：
 `cd pymodules && uv run pytest tests -q`；
-`docker run --rm -v $PWD:/workspace -v ~/.m2:/root/.m2 -w /workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-api -am test`。
+`docker run --rm -v $PWD:/workspace -v ~/.m2:/root/.m2 -w /workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-management -am test`。
 
 ## 16. 输出合规与可观测验收（#157 / #173 / #175 / #177）
 
@@ -525,7 +525,7 @@ P0 边界：只做“双供应商直连 + 简单故障切换”。按成本/质�
 | 检索命中 / 拒答 | `aipaas.retrieval_hits_total`、`aipaas_retrieval_queries_total`、`aipaas_generation_refusals_total{reason}` | `test_observability.py#test_metrics_expose_qps_latency_hit_and_refusal` |
 | 资源占用 | `aipaas_process_resident_memory_bytes`、`aipaas_process_cpu_seconds_total`、JVM 指标；汇总接口返回 `cpuUsage/memoryUsage` | `observability.py`、`/metrics/summary` |
 | 口径一致 | 延迟统一定义为服务端处理耗时；P50/P95/P99 在 Grafana 用 `histogram_quantile`，汇总接口用最近秩法，二者口径写明 | `dashboard`、`ObservabilityMetrics#percentile` |
-| 采集延迟 ≤ 1 分钟 | platform-api 与 Python 均 10s 抓取，告警评估 30s | `prometheus-p0.yml` |
+| 采集延迟 ≤ 1 分钟 | platform-gateway / platform-management 与 Python 均 10s 抓取，告警评估 30s | `prometheus-p0.yml` |
 | Grafana 看板 | 8 面板：QPS、成功率、P50/P95/P99、链路环节 P95、检索命中/拒答、安全拦截、内存、CPU；provisioning 自动装载 | `grafana/dashboards/aipaas-p0-observability.json` |
 | 告警与防风暴 | 2 组 8 条规则（服务不可用、5xx、P95 延迟、Span 延迟、检索命中低、拒答高、安全拦截突增、无流量）；Alertmanager `group_by` + `group_wait 30s` + `repeat_interval 4h`，并抑制：服务不可用压制同服务其他告警、高 5xx 压制延迟/拒答 | `alerts/alerts-p0.yml`、`alertmanager-p0.yml` |
 
@@ -535,11 +535,11 @@ P0 边界：只做“双供应商直连 + 简单故障切换”。按成本/质�
 | --- | --- |
 | OpenAPI | 补齐 `/observability/traces/{traceId}` 描述与参数、`/observability/request-logs` 的 `path` 参数；`RequestLogEntry` 增 `outcome/service/clientIpHash`，`TraceSpan` 增 `traceId/service/kind/endTime/attributes`，`TraceDetail` 增 `spanCount/errorSpanCount/services/unavailableSources/queriedAt`，`MetricsSummary` 增 `latencyP50Ms/latencyP99Ms`；契约校验 **PASS**（paths=70、schemas=177、坏引用 0、P0 覆盖 44/44） |
 | Python 回归 | `uv run pytest tests -q` **216 passed**（新增 `tests/observability/test_observability.py` 6 项） |
-| Java 回归 | `mvn -pl apps/platform-api -am test` **97 tests, 0 failures**（新增 `OutputComplianceGuardTest` 7、`TracingServiceTest` 4、`RequestLogServiceTest` 3、`ObservabilityMetricsTest` 3） |
+| Java 回归 | `mvn -pl apps/platform-management -am test` **97 tests, 0 failures**（新增 `OutputComplianceGuardTest` 7、`TracingServiceTest` 4、`RequestLogServiceTest` 3、`ObservabilityMetricsTest` 3） |
 | 部署校验 | `docker-compose -f deploy/docker/docker-compose-p0.yaml config -q` 通过；告警规则 2 组 8 条、看板 8 面板 JSON 可解析；Prometheus 挂载 `prometheus/alerts` |
 | 前端 | 复用 `p0Client` 既有 `/observability/*` 调用，无构建变更 |
 
 测试命令：
 `cd pymodules && uv run pytest tests -q`；
-`docker run --rm -v $PWD:/workspace -v ~/.m2:/root/.m2 -w /workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-api -am test`；
+`docker run --rm -v $PWD:/workspace -v ~/.m2:/root/.m2 -w /workspace maven:3.9-eclipse-temurin-21 mvn -o -pl apps/platform-management -am test`；
 `python3 aipaas-contracts/scripts/verify_contract.py`。

@@ -2,11 +2,14 @@
 # AIPaaS 五级编排 · 第 4 级：Java 网关与管理平台
 # -----------------------------------------------------------------------------
 # 依赖：第 3 级 docker-compose-python.yaml（含第 1、2 级）
-# 新增：platform-db-init（一次性）/ platform-api
+# 新增：platform-db-init（一次性）/ platform-management / platform-gateway
 #
-# platform-api 当前聚合统一网关、认证、知识库、文档、系统管理等能力。
+# platform-management：登录、用户与 RBAC、知识库、文档、审计落库、内容策略、
+#   系统配置、导入任务，持有数据库/Flyway/MinIO/完整密钥；只在容器网络内 expose。
+# platform-gateway：唯一 Java 对外入口，负责 JWT 验签、撤销与用户状态校验、
+#   身份头治理、管理请求代理、问答安全编排与审计事件发布。
+#
 # 数据库使用核心 PostgreSQL 实例中的独立 PLATFORM_DB，不与 Nacos 表混用。
-#
 # 首次启动前在 .env 设置 PLATFORM_BOOTSTRAP_ADMIN_PASSWORD，然后执行：
 #   docker compose -f docker-compose-java.yaml up -d --build
 #   docker compose -f docker-compose-java.yaml ps
@@ -39,23 +42,27 @@ services:
     command:
       - sh
       - -c
+      # 注意：pgvector:pg17 自带的 psql 在 -c 单串模式下既不展开 :变量 也不解析
+      # \gexec 元命令（实测报 syntax error at or near ":" / "\"），故改用 stdin
+      # 管道投递，让 psql 以脚本模式处理：变量替换与 \gexec 均正常工作。
       - >
-        psql -v ON_ERROR_STOP=1 -h postgres -U "$${POSTGRES_USER}" -d postgres
+        printf "SELECT format('CREATE DATABASE %%I', :'db_name')
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name') \\gexec\n"
+        | psql -v ON_ERROR_STOP=1 -h postgres -U "$${POSTGRES_USER}" -d postgres
         --set=db_name="$${PLATFORM_DB}"
-        -c "SELECT format('CREATE DATABASE %I', :'db_name')
-        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name') \gexec"
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
     <<: *default-logging
 
-  platform-api:
+  # 管理服务：业务数据、RBAC、文档与导入任务、审计落库、内容策略与系统配置。
+  platform-management:
     build:
       context: ../../javaplat
-      dockerfile: Dockerfile
-    image: aipaas/platform-api:${IMAGE_TAG:-latest}
-    container_name: aipaas-platform-api
+      dockerfile: apps/platform-management/Dockerfile
+    image: aipaas/platform-management:${IMAGE_TAG:-latest}
+    container_name: aipaas-platform-management
     environment:
       AIPAAS_ENV: ${APP_ENV:-devcompany}
       AIPAAS_API_VERSION: v1
@@ -72,17 +79,25 @@ services:
       AIPAAS_REQUEST_LOG_RETENTION_DAYS: ${AIPAAS_REQUEST_LOG_RETENTION_DAYS:-30}
       AIPAAS_REQUEST_LOG_PATH: /var/log/aipaas
       AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
-      AIPAAS_CHAT_SERVICE_URL: http://svc-query:${QUERY_WORKER_PORT:-8002}
       AIPAAS_PARSE_SERVICE_URL: http://svc-ingest:${INGEST_WORKER_PORT:-8001}
       AIPAAS_TLS_CERTIFICATE_PATH: /etc/aipaas/tls/tls.crt
+      # 完整密钥只在管理服务内；只向网关导出 JWT 验证密钥。
+      AIPAAS_KEYRING_PATH: /var/lib/aipaas/security/keyring.json
+      AIPAAS_JWT_VERIFY_EXPORT_PATH: /var/lib/aipaas/jwt-verify/jwt-secret
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      AIPAAS_GATEWAY_STATE_SYNC_INTERVAL_MS: ${AIPAAS_GATEWAY_STATE_SYNC_INTERVAL_MS:-60000}
+      AIPAAS_GATEWAY_AUDIT_POLL_INTERVAL_MS: ${AIPAAS_GATEWAY_AUDIT_POLL_INTERVAL_MS:-1000}
       TZ: Asia/Shanghai
-    ports:
-      - "${PLATFORM_API_PORT:-8081}:8080"
+    expose:
+      - "8080"
     volumes:
       - platform-security-keys:/var/lib/aipaas/security
       - platform-upload-temp:/var/lib/aipaas/uploads
       - platform-request-logs:/var/log/aipaas
       - platform-tls:/etc/aipaas/tls:ro
+      - platform-jwt-verify:/var/lib/aipaas/jwt-verify
     depends_on:
       platform-db-init:
         condition: service_completed_successfully
@@ -91,10 +106,6 @@ services:
       minio:
         condition: service_healthy
       svc-ingest:
-        condition: service_healthy
-      svc-query:
-        condition: service_healthy
-      rag-ai-api:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
@@ -112,9 +123,62 @@ services:
           memory: 256M
     <<: [*default-restart, *default-logging]
 
+  # 统一入口：认证、身份头治理、管理代理、问答安全编排与审计事件发布。
+  platform-gateway:
+    build:
+      context: ../../javaplat
+      dockerfile: apps/platform-gateway/Dockerfile
+    image: aipaas/platform-gateway:${IMAGE_TAG:-latest}
+    container_name: aipaas-platform-gateway
+    environment:
+      AIPAAS_ENV: ${APP_ENV:-devcompany}
+      AIPAAS_API_VERSION: v1
+      AIPAAS_CONTRACT_VERSION: ${AIPAAS_CONTRACT_VERSION:-1.1.0-p0}
+      PLATFORM_MANAGEMENT_URL: http://platform-management:8080
+      PLATFORM_MANAGEMENT_CONNECT_TIMEOUT: ${PLATFORM_MANAGEMENT_CONNECT_TIMEOUT:-PT5S}
+      PLATFORM_MANAGEMENT_READ_TIMEOUT: ${PLATFORM_MANAGEMENT_READ_TIMEOUT:-PT180S}
+      AIPAAS_CHAT_SERVICE_URL: http://svc-query:${QUERY_WORKER_PORT:-8002}
+      AIPAAS_CHAT_CONNECT_TIMEOUT: ${AIPAAS_CHAT_CONNECT_TIMEOUT:-PT5S}
+      AIPAAS_CHAT_READ_TIMEOUT: ${AIPAAS_CHAT_READ_TIMEOUT:-PT120S}
+      AIPAAS_JWT_VERIFY_SECRET_FILE: /var/lib/aipaas/jwt-verify/jwt-secret
+      AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      TZ: Asia/Shanghai
+    ports:
+      - "${PLATFORM_GATEWAY_PORT:-8081}:8080"
+    volumes:
+      # 只读挂载 JWT 验证密钥；不挂载业务数据、MinIO、AES 或审计密钥。
+      - platform-jwt-verify:/var/lib/aipaas/jwt-verify:ro
+    depends_on:
+      platform-management:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      svc-query:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    <<: [*default-restart, *default-logging]
+
 volumes:
   platform-security-keys:
   platform-upload-temp:
   platform-request-logs:
+  # 管理服务导出的 JWT 验证密钥，仅平台网关只读使用。
+  platform-jwt-verify:
   # 与第 5 级 frontend 共用证书；frontend 可为开发环境生成自签证书。
   platform-tls:

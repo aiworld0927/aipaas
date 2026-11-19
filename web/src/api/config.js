@@ -7,9 +7,9 @@ export const IMPORT_API_BASE = import.meta.env.VITE_IMPORT_API_BASE || '/import-
 
 /**
  * P0 契约网关入口（BasePath /api/v1 已包含在 p0Client 的路径拼装里）
- * - 开发：Vite 代理 /api → 127.0.0.1:8081（platform-api）
+ * - 开发：Vite 代理 /api → 127.0.0.1:8081（platform-gateway 统一网关）
  * - 联调：把 VITE_PLATFORM_API_BASE 指向 mock（http://127.0.0.1:4010/api/v1）
- * - 生产：nginx /api/ 反代到 platform-api
+ * - 生产：nginx /api/ 反代到 platform-gateway
  */
 export const PLATFORM_API_BASE =
   import.meta.env.VITE_PLATFORM_API_BASE || '/api/v1';

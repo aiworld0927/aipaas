@@ -120,7 +120,7 @@
       "datasource": {"type": "prometheus", "uid": "aipaas-prom"},
       "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
       "targets": [
-        {"refId": "JVM", "expr": "sum(rate(process_cpu_seconds_total{job=\"platform-api\"}[5m]))", "legendFormat": "platform-api"},
+        {"refId": "JVM", "expr": "sum(rate(process_cpu_seconds_total{job=\"platform-gateway\"}[5m]))", "legendFormat": "platform-gateway"},
         {"refId": "PY", "expr": "sum by (service) (rate(aipaas_process_cpu_seconds_total[5m]))", "legendFormat": "{{service}}"}
       ]
     }

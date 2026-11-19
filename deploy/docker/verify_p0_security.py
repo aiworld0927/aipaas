@@ -37,7 +37,7 @@ def container_env(name):
     return dict(value.split("=", 1) for value in values if "=" in value)
 
 
-PLATFORM_ENV = container_env("p0-platform-api")
+PLATFORM_ENV = container_env("p0-platform-management")
 ADMIN_PASSWORD = os.environ.get("P0_BOOTSTRAP_ADMIN_PASSWORD") or PLATFORM_ENV.get(
     "AIPAAS_BOOTSTRAP_ADMIN_PASSWORD", "")
 
@@ -100,7 +100,8 @@ def upload(token, kb_id, filename, content, standard_no=None):
 
 
 def wait_ready():
-    required = ["p0-platform-api", "p0-web", "p0-postgres", "p0-minio", "p0-rag-ai-api"]
+    required = ["p0-platform-management", "p0-platform-gateway", "p0-web", "p0-postgres",
+                "p0-minio", "p0-rag-ai-api"]
     for _ in range(90):
         states = []
         for name in required:
@@ -278,17 +279,20 @@ def main():
         old_tls = False
     check("TLS 1.1 被拒绝", not old_tls)
 
-    key_mode = subprocess.check_output(["docker", "exec", "p0-platform-api", "stat", "-c", "%a",
+    key_mode = subprocess.check_output(["docker", "exec", "p0-platform-management", "stat", "-c", "%a",
                                         "/var/lib/aipaas/security/keyring.json"], text=True).strip()
     check("集中密钥环权限为 0600", key_mode == "600")
     check("Java/Python 业务端口不暴露宿主机",
-          subprocess.check_output(["docker", "port", "p0-platform-api"], text=True).strip() == ""
-          and subprocess.check_output(["docker", "port", "p0-rag-ai-api"], text=True).strip() == "")
+          all(subprocess.check_output(["docker", "port", name], text=True).strip() == ""
+              for name in ("p0-platform-management", "p0-platform-gateway", "p0-rag-ai-api")))
 
     expect(api("POST", "/api/v1/auth/logout", uploader), 200)
     expect(api("GET", "/api/v1/auth/me", uploader), 401)
     final_audit = expect(api("GET", "/api/v1/audit-logs?format=csv", admin), 200)[1].decode("utf-8-sig")
-    logs = subprocess.check_output(["docker", "logs", "p0-platform-api"], stderr=subprocess.STDOUT, text=True)
+    logs = (subprocess.check_output(["docker", "logs", "p0-platform-management"],
+                                    stderr=subprocess.STDOUT, text=True)
+            + subprocess.check_output(["docker", "logs", "p0-platform-gateway"],
+                                      stderr=subprocess.STDOUT, text=True))
     secrets_to_check = [ADMIN_PASSWORD, password, lock_password, admin, uploader, original_refresh, replacement_refresh]
     check("审计与运行日志不泄露口令或令牌",
           all(not value or (value not in final_audit and value not in logs) for value in secrets_to_check))

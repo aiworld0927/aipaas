@@ -82,7 +82,7 @@ python3 aipaas-contracts/mock/smoke_upload_qa.py --base-url http://127.0.0.1:401
 
 ### 4. 后端接入
 
-- Java：`javaplat/apps/platform-api`（统一信封、Trace、幂等过滤器已在 `libs/common`）
+- Java：`javaplat/apps/platform-gateway`（统一入口与代理）与 `javaplat/apps/platform-management`（管理服务）（统一信封、Trace、幂等过滤器已在 `libs/common`）
 - Python：`pymodules/apps/rag-ai-api`（FastAPI 骨架，未实现路由返回 501 `SYS.NOT_IMPLEMENTED`）
 
 ### 5. 契约校验

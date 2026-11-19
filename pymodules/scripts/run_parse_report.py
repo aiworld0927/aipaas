@@ -344,7 +344,7 @@ def render_report(rows: list[dict], idempotency: list[dict], concurrent_results:
                  "`twelveConcurrentTasksAllCompleteWithoutBlocking` |")
     lines.append("")
     lines.append("Java 全量测试：`docker run --rm -v $PWD:/workspace maven:3.9-eclipse-temurin-21 "
-                 "mvn -o -pl apps/platform-api -am test` → 60 passed。")
+                 "mvn -o -pl apps/platform-management -am test` → 60 passed。")
     lines.append("")
 
     lines.append("## 9. #14 数据清洗基础（规则、差异与保护）")

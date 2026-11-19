@@ -1,0 +1,69 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: platform-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:PT2S}
+  servlet:
+    multipart:
+      max-file-size: 120MB
+      max-request-size: 120MB
+      file-size-threshold: 10MB
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+  jackson:
+    default-property-inclusion: non_null
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+    prometheus:
+      access: read_only
+  metrics:
+    tags:
+      application: platform-gateway
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+
+aipaas:
+  api-version: ${AIPAAS_API_VERSION:v1}
+  contract-version: ${AIPAAS_CONTRACT_VERSION:1.1.0-p0}
+  env: ${AIPAAS_ENV:prod}
+  management:
+    service-url: ${PLATFORM_MANAGEMENT_URL:http://platform-management:8080}
+    connect-timeout: ${PLATFORM_MANAGEMENT_CONNECT_TIMEOUT:PT5S}
+    read-timeout: ${PLATFORM_MANAGEMENT_READ_TIMEOUT:PT180S}
+  chat:
+    service-url: ${AIPAAS_CHAT_SERVICE_URL:http://svc-query:8002}
+    connect-timeout: ${AIPAAS_CHAT_CONNECT_TIMEOUT:PT5S}
+    read-timeout: ${AIPAAS_CHAT_READ_TIMEOUT:PT120S}
+  security:
+    jwt-verify-secret-file: ${AIPAAS_JWT_VERIFY_SECRET_FILE:/var/lib/aipaas/jwt-verify/jwt-secret}
+  observability:
+    service-name: platform-gateway
+    trace-max-spans: ${AIPAAS_TRACE_MAX_SPANS:20000}
+
+logging:
+  pattern:
+    level: "%5p [traceId=%X{traceId:-}]"
+  level:
+    com.aipaas: INFO

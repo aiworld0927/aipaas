@@ -43,7 +43,7 @@ services:
     container_name: aipaas-frontend
     environment:
       # /api/v1/** 走 Java 统一网关；旧链路保留 Python 服务直连。
-      PLATFORM_API_UPSTREAM: http://platform-api:8080
+      PLATFORM_API_UPSTREAM: http://platform-gateway:8080
       QUERY_API_UPSTREAM: http://svc-query:${QUERY_WORKER_PORT:-8002}
       IMPORT_API_UPSTREAM: http://svc-ingest:${INGEST_WORKER_PORT:-8001}
       TLS_GENERATE_SELF_SIGNED: ${TLS_GENERATE_SELF_SIGNED:-true}
@@ -54,7 +54,7 @@ services:
     volumes:
       - platform-tls:/etc/nginx/tls
     depends_on:
-      platform-api:
+      platform-gateway:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]

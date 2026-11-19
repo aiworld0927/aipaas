@@ -1,9 +1,14 @@
 # AIPaaS Java 微服务开发部署文档
 
-> ⚠️ **状态声明：javaplat 暂为规划状态，暂不打包部署。** 规划内容（模块拆解、端口、落地步骤）见 [`javaplat/TODO说明.md`](../javaplat/TODO说明.md)。本文档保留原有章节结构作为**规划参考**，正文中的 Docker 构建、compose 部署 Java 服务等命令均为**待实现**，落地评审通过后需按 TODO 说明更新为实际部署文档。
+> ⚠️ **状态声明：本文档已废弃（被网关+管理拆分方案替代）。** 本文描述的 gateway / svc-auth /
+> svc-document / svc-search / svc-agent 五微服务规划**不再是目标架构**，仅保留作历史参考，
+> 正文中的模块拆解、端口、Docker 构建与 compose 命令均为已废弃的早期规划，不得据此实施。
+> 当前 Java 侧只有 `platform-gateway` 与 `platform-management` 两个可部署应用，共享 `libs/common`；
+> 真实结构与部署方式以 [`docs/AI编程/Java网关与管理拆分实施提示词.md`](AI编程/Java网关与管理拆分实施提示词.md)
+> 和 `javaplat/pom.xml`、`deploy/docker/docker-compose-java.yaml` 为准。
 >
-> 文档范围：`javaplat/` 目录下的 5 个 Java 微服务（Spring Boot 21）
-> 适用场景：本地开发调试 / Docker 镜像构建 / docker compose 部署（均待实现）
+> 文档范围（历史）：`javaplat/` 目录下早期规划的 5 个 Java 微服务（Spring Boot 21）
+> 适用场景（历史）：本地开发调试 / Docker 镜像构建 / docker compose 部署
 
 ---
 

@@ -1,8 +1,8 @@
 # Java 网关与管理服务拆分实施提示词
 
-> 状态：待执行。本文件仅用于后续向编码 Agent 下达实施任务，不代表拆分已经完成。
->
-> 使用方式：后续实施时，将本文件完整提供给编码 Agent，并要求先阅读真实代码、给出基线检查结果，再按阶段修改和验证。
+> 状态：**已执行完成**。网关 + 管理拆分已落地，并通过 Maven 测试/打包与 Compose 静态校验。
+> 本文件保留作为实施规范与验收依据；实际执行结果见末尾「执行结果（交付报告）」。
+> 本会话在既有实施基础上补充修复了若干残留项（详见报告）。
 
 ---
 
@@ -357,18 +357,18 @@ git diff --check
 
 只有同时满足以下条件，才能宣称任务完成：
 
-- [ ] 只有两个 Java 可部署应用：`platform-gateway`、`platform-management`。
-- [ ] 没有新增任何业务微服务或第三 Java 应用。
-- [ ] 两个应用拥有独立 POM、配置、测试、JAR 和 Dockerfile。
-- [ ] 共享依赖仍由 `libs/common` 和根 POM 合理管理。
-- [ ] 前端只访问网关，管理服务不再作为公开入口。
-- [ ] 管理请求为 `gateway → management`，没有额外 Java 服务跳转。
-- [ ] 问答主链路为 `gateway → svc-query`，没有同步经过管理服务。
-- [ ] 导入链路已直连，或有基于代码证据的暂缓说明。
-- [ ] 认证、权限、审计、内容安全、幂等和 SSE 未被削弱。
-- [ ] Maven 测试与打包、Compose 静态校验通过。
-- [ ] 相关文档已更新，不再把旧五微服务规划描述为目标架构。
-- [ ] 未修改真实密钥，未创建未授权的 Git commit。
+- [x] 只有两个 Java 可部署应用：`platform-gateway`、`platform-management`。
+- [x] 没有新增任何业务微服务或第三 Java 应用。
+- [x] 两个应用拥有独立 POM、配置、测试、JAR 和 Dockerfile。
+- [x] 共享依赖仍由 `libs/common` 和根 POM 合理管理。
+- [x] 前端只访问网关，管理服务不再作为公开入口。
+- [x] 管理请求为 `gateway → management`，没有额外 Java 服务跳转。
+- [x] 问答主链路为 `gateway → svc-query`，没有同步经过管理服务。
+- [x] 导入链路已直连，或有基于代码证据的暂缓说明。
+- [x] 认证、权限、审计、内容安全、幂等和 SSE 未被削弱。
+- [x] Maven 测试与打包、Compose 静态校验通过。
+- [x] 相关文档已更新，不再把旧五微服务规划描述为目标架构。
+- [x] 未修改真实密钥，未创建未授权的 Git commit。
 
 ## 十二、停止并报告的情况
 
@@ -393,3 +393,72 @@ git diff --check
 4. 已执行的测试、构建、Compose 校验及结果。
 5. 未完成的导入直连或其他阻断项。
 6. 仍需用户决定的兼容性或运维事项。
+
+---
+
+## 十四、执行结果（交付报告）
+
+> 本报告由验收 Agent 在 JDK 21（`/usr/local/jdk21`）环境下复核并补充生成。
+
+### 1. 模块与文件
+
+- **新增应用**：`javaplat/apps/platform-gateway`、`javaplat/apps/platform-management`（各自独立 `pom.xml`、`Dockerfile`、`application.yml`、`src/main` 与 `src/test`）。
+- **删除**：旧单体 `javaplat/apps/platform-api` 与根 `javaplat/Dockerfile`（根 POM `<modules>` 仅含 `libs/common`、`apps/platform-gateway`、`apps/platform-management`）。
+- **共享库**：`javaplat/libs/common` 保留 `JwtTokenVerifier`、`SecurityPrincipal`、`GatewayAuthSnapshot`、`ContentSecurityEngine`、`OutputComplianceGuard`、`IdempotencyFilter`、`TracingService` 等稳定共享代码，不反向依赖应用。
+- **新增迁移**：`apps/platform-management/.../V9__request_logs_service_default.sql`（不修改已应用的 V8，保持 Flyway checksum 兼容）。
+- **编排**：`deploy/docker/docker-compose-java.yaml`（第 4 级：`platform-db-init` / `platform-management` / `platform-gateway`）、`docker-compose.yaml`（第 5 级：`frontend` 仅依赖网关）、`docker-compose-p0.yaml`（P0 栈同步拆分）。
+
+### 2. 最终路由表与调用链
+
+| 路径/类别 | 目标上游 | 说明 |
+|---|---|---|
+| `/api/v1/chat`、`/api/v1/chat/stream` | `svc-query` | 网关 `ChatController` 直连，**不经过管理服务**；本地验签 + 内容安全 + 审计 + SSE 透传 |
+| `/api/v1/auth/login`、`/api/v1/auth/refresh` | `platform-management` | 白名单放行后代理，管理服务签发/刷新令牌 |
+| 其余 `/api/v1/**`（用户/角色/权限/知识库/文档/审计/系统配置/导入任务等） | `platform-management` | 网关 `ManagementProxyController` 流式代理；管理服务二次验签与 `@RequirePermission` 授权 |
+| 导入（上传/解析/任务状态） | `platform-management → svc-ingest` | 暂不直连（见第 5 节阻断项） |
+
+实现要点：`ChatController` 的具体路径映射 `/api/v1/chat` 在 Spring 路由匹配中优先于代理的 `/api/v1/**`；代理清理外部 `X-User-Id/X-Tenant-Id/X-Roles/X-Permissions/X-Kb-Ids` 等身份头并由可信组件重建，同时转发 `Authorization` 供管理服务重新验签（不盲信网关头）。
+
+### 3. 认证 / 权限 / 审计 / 内容安全
+
+- **认证**：管理服务持有完整 keyring 与 AES 密钥；仅向共享卷 `platform-jwt-verify` 导出只读 HS256 验证密钥（600 权限、原子移动），网关以该密钥本地验签。
+- **权限与撤销**：用户/角色/权限/知识库快照写入 Redis（`aipaas:gateway:auth:{userId}`），JTI 撤销写入 `aipaas:gateway:revoked:{jti}`；缺失快照或 Redis 故障 → 网关 fail-closed（401/503），不回退旧权限。
+- **审计**：网关问答审计事件经 Redis Stream `aipaas:gateway:audit` 异步发布，管理服务 `GatewayAuditStreamConsumer` 落库（ACK 在持久化成功之后），非 fire-and-forget。
+- **内容安全**：网关 `GatewayContentSecurityService` 读取 Redis 内容策略快照（`aipaas:gateway:content-policies`），缺失时 fail-closed 503；输出合规由 `OutputComplianceGuard` 对非流式 JSON 与 SSE 流分别处理。
+- **幂等 / SSE / Trace**：`IdempotencyFilter` 跳过 `/chat/stream` 与 `Accept: text/event-stream`，避免缓冲破坏流式；Trace/Request-Id/traceparent 头在网关重建并透传。
+
+### 4. 已执行的验证（JDK 21）
+
+```bash
+cd javaplat && JAVA_HOME=/usr/local/jdk21 PATH=/usr/local/jdk21/bin:$PATH ./mvnw -o clean test
+# → BUILD SUCCESS：platform-gateway + platform-management（管理 92 个测试）全部通过
+./mvnw -o -DskipTests -pl apps/platform-gateway -am clean package      # → platform-gateway.jar
+./mvnw -o -DskipTests -pl apps/platform-management -am clean package   # → platform-management.jar
+
+cd deploy/docker && PLATFORM_BOOTSTRAP_ADMIN_PASSWORD='VerifyOnly-1a!' \
+  docker compose -f docker-compose-java.yaml config          # exit 0
+  docker compose -f docker-compose.yaml config               # exit 0
+  P0_BOOTSTRAP_ADMIN_PASSWORD='VerifyOnly-1a!' \
+  docker compose -f docker-compose-p0.yaml config            # exit 0
+
+git diff --check   # 无空白错误
+```
+
+> 说明：`./mvnw` 首次运行会下载 Maven 发行版到 `~/.m2/wrapper/dists/`，之后 `-o`（离线）可正常工作。务必显式 `export JAVA_HOME=/usr/local/jdk21 PATH=/usr/local/jdk21/bin:$PATH`（默认 `java` 仍解析为 JDK 25）。
+
+### 5. 未完成项与阻断项
+
+- **导入直连 `svc-ingest` 暂缓**（有代码证据）：导入任务状态机、失败恢复、文档关联、权限校验与审计仍归 `platform-management` 所有；直连会绕过这些能力，故保留 `gateway → management → svc-ingest`。阻断项与边界见 `docs/02a_总体部署手册.md` 与 `docs/08_模块说明文档.md`。
+- **集成烟测**：Maven 单测 + Compose 静态校验已通过；端到端容器烟测（401/403/撤销/审计流）需在完整 Docker 栈运行后执行，非本次必需项。
+
+### 6. 本会话补充修复的残留项
+
+在既有实施基础上，复核发现并修复了以下未完成项：
+
+1. `ContentSecurityServiceTest` 中遗漏的 `ObservabilityMetrics` 构造调用（构造器已加 `serviceName` 参数）→ 补充第二参数，恢复编译与测试通过。
+2. `deploy/docker/verify_p0_security.py` 仍引用已不存在的 `p0-platform-api` 容器 → 改为 `p0-platform-management`（密钥环/环境/日志）与 `p0-platform-gateway`（端口/日志），保持 P0 验收脚本可用。
+3. `docker-compose-p0.yaml` 中 `postgres` 注释残留 `platform-api` → 更正为 `platform-management`。
+4. `javaplat/TODO说明.md` 与 `docs/02d_java模块开发部署.md` 仍把旧五微服务规划描述为目标 → 顶部增加「已废弃 / 被网关+管理拆分替代」醒目标识，避免后续误用。
+5. 本提示词状态由「待执行」更新为「已执行完成」，完成标准全部勾选。
+
+未修改真实 `.env` 密钥，未创建 Git commit。

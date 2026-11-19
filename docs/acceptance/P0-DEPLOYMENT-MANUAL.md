@@ -13,7 +13,7 @@ P0 提供两套编排，按场景选择：
 
 | 编排 | 文件 | 用途 | 服务 |
 | --- | --- | --- | --- |
-| P0 验收/联调编排 | `deploy/docker/docker-compose-p0.yaml` | 一键起 P0 全链路 + 监控 + 前端 | postgres / redis / minio / etcd / milvus / platform-api / rag-ai-api / mock / web / prometheus / alertmanager / grafana（12 个） |
+| P0 验收/联调编排 | `deploy/docker/docker-compose-p0.yaml` | 一键起 P0 全链路 + 监控 + 前端 | postgres / redis / minio / etcd / milvus / p0-platform-management / p0-platform-gateway / rag-ai-api / mock / web / prometheus / alertmanager / grafana（13 个） |
 | 开发全量编排 | `deploy/docker/docker-compose.yaml` | 开发环境全量中间件与 Python 服务 | 基础编排（etcd/minio/milvus/attu/mongodb/postgres/redis/nacos/rocketmq/vllm）+ svc-ingest / svc-query / svc-model-embedding / svc-model-reranker / frontend |
 
 > 生产环境建议在 P0 编排基础上替换为托管 PostgreSQL/Redis/对象存储/Milvus，并前置反向代理与网关限流。
@@ -33,7 +33,8 @@ P0 提供两套编排，按场景选择：
 | minio | 19000 / 19001 | S3 API / 控制台 |
 | redis | 56379 | 缓存 |
 | postgres | 内部 5432 | 不对外暴露 |
-| platform-api | 内部 8080 | Java 平台 API |
+| p0-platform-gateway | 内部 8080 | Java 统一入口网关 |
+| p0-platform-management | 内部 8080 | Java 管理服务（只 `expose`，不映射宿主机端口） |
 | rag-ai-api | 内部 8100 | Python RAG API |
 
 服务间通过 Compose 网络以服务名通信（如 `postgres:5432`、`milvus:19530`、`rag-ai-api:8100`）。
@@ -84,14 +85,15 @@ docker compose -f docker-compose-p0.yaml ps
 
 > 若环境只有 Compose v1，将 `docker compose` 替换为 `docker-compose`。
 
-首次启动顺序：postgres/redis/minio/etcd → milvus → platform-api / rag-ai-api → web；prometheus 依赖 platform-api 启动，alertmanager/grafana 依赖 prometheus。
+首次启动顺序：postgres/redis/minio/etcd → milvus → p0-platform-management → p0-platform-gateway / rag-ai-api → web；网关通过卷 `p0-jwt-verify` 只读获得管理服务导出的 JWT 验证密钥，prometheus 抓取 platform-gateway 与 platform-management，alertmanager/grafana 依赖 prometheus。
 
 ### 3.1 访问入口
 
 | 入口 | 地址 |
 | --- | --- |
 | Web | `http://localhost:18080` 或 `https://localhost:18443` |
-| Platform API（容器内） | `http://platform-api:8080` |
+| 统一入口网关（容器内） | `http://platform-gateway:8080` |
+| 管理服务（容器内） | `http://platform-management:8080` |
 | RAG API（容器内） | `http://rag-ai-api:8100` |
 | Prometheus | `http://localhost:19090` |
 | Grafana | `http://localhost:13000` |
@@ -130,7 +132,8 @@ P0 编排通过环境变量注入，默认值写在 `docker-compose-p0.yaml`：
 docker compose -f docker-compose-p0.yaml ps
 
 # 2) 服务健康（容器内）
-docker compose -f docker-compose-p0.yaml exec platform-api wget -qO- http://127.0.0.1:8080/healthz
+docker compose -f docker-compose-p0.yaml exec p0-platform-gateway wget -qO- http://127.0.0.1:8080/healthz
+docker compose -f docker-compose-p0.yaml exec p0-platform-management wget -qO- http://127.0.0.1:8080/healthz
 docker compose -f docker-compose-p0.yaml exec rag-ai-api python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8100/healthz').read().decode())"
 
 # 3) 指标
@@ -155,7 +158,7 @@ uv run python scripts/acceptance/security_checks.py
 
 | 资源 | 路径 | 说明 |
 | --- | --- | --- |
-| Prometheus 配置 | `deploy/docker/prometheus/` | 抓取 platform-api `/observability/metrics` 与 rag-ai-api `/metrics` |
+| Prometheus 配置 | `deploy/docker/prometheus/` | 抓取 platform-gateway / platform-management `/observability/metrics` 与 rag-ai-api `/metrics` |
 | 告警规则 | `deploy/docker/prometheus/alerts/alerts-p0.yml` | 2 组 8 条（可用性、延迟、错误率、资源、拒答率等） |
 | 告警抑制 | `deploy/docker/alertmanager/` | 聚合与抑制，避免风暴 |
 | Grafana 数据源 | `deploy/docker/grafana/provisioning/` | 自动注入 Prometheus |
@@ -198,7 +201,7 @@ docker compose -f docker-compose-p0.yaml up -d --build
 
 # 回滚到上一镜像（示例）
 export IMAGE_TAG=<previous-tag>
-docker compose -f docker-compose-p0.yaml up -d --no-deps platform-api rag-ai-api web
+docker compose -f docker-compose-p0.yaml up -d --no-deps p0-platform-gateway p0-platform-management rag-ai-api web
 
 # 数据库迁移异常时按备份恢复
 # 1) 停止写入 2) 恢复 pg_dump 3) 重建索引 4) 健康检查
@@ -215,7 +218,7 @@ docker compose -f docker-compose-p0.yaml up -d --no-deps platform-api rag-ai-api
 | 启动报 `Set P0_BOOTSTRAP_ADMIN_PASSWORD` | 未设置管理员口令 | 导出变量后重启 |
 | 审计保留期启动失败 | `AIPAAS_AUDIT_RETENTION_DAYS < 180` | 调整为 ≥180 |
 | Milvus unhealthy | etcd/minio 未就绪或磁盘不足 | 检查依赖健康与磁盘，重建容器 |
-| 前端 502 | platform-api/rag-ai-api 未 healthy | 查看容器日志与依赖健康 |
+| 前端 502 | platform-gateway/rag-ai-api 未 healthy | 查看容器日志与依赖健康 |
 | 指标无数据 | Prometheus target down | 检查抓取地址与网络 |
 | 告警风暴 | 抑制规则未加载 | 检查 Alertmanager 配置与路由 |
 | 导出 403 | 缺少 `export:create/read` 或 KB 归属不符 | 授予权限并检查审计 |

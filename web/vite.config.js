@@ -18,7 +18,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/import-api/, ''),
       },
-      // P0 契约入口：/api/v1/** 直通 platform-api（保留前缀，不做 rewrite）
+      // 统一入口：/api/v1/** 直通 platform-gateway（保留前缀，不做 rewrite）
       // 联调 mock：PLATFORM_API_TARGET=http://127.0.0.1:4010 npm run dev
       '/api': {
         target: process.env.PLATFORM_API_TARGET || 'http://127.0.0.1:8081',

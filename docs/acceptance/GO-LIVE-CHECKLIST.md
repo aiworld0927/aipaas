@@ -2,7 +2,7 @@
 
 - 版本：v1.0
 - 日期：2026-11-19
-- 适用范围：金融标准化 RAG 平台 P0（platform-api / rag-ai-api / ingest-worker / query-worker / web / mock）
+- 适用范围：金融标准化 RAG 平台 P0（platform-gateway / platform-management / rag-ai-api / ingest-worker / query-worker / web / mock）
 - 关联：[P0-ACCEPTANCE-REPORT.md](./P0-ACCEPTANCE-REPORT.md)、[P0-DEPLOYMENT-MANUAL.md](./P0-DEPLOYMENT-MANUAL.md)
 
 > 使用方式：逐项执行并在「结果」列填写 `PASS/FAIL/N/A` + 证据（命令输出、截图、链接）。FAIL 项不得放行。
@@ -12,7 +12,7 @@
 | # | 检查项 | 命令/方法 | 通过标准 | 结果 |
 | --- | --- | --- | --- | --- |
 | 1.1 | Python 回归 | `cd pymodules && uv run pytest tests -q` | 216 passed，0 failed | PASS |
-| 1.2 | Java 回归 | `mvn -o -B -pl apps/platform-api -am test` | 97 tests，0 failures | PASS |
+| 1.2 | Java 回归 | `cd javaplat && ./mvnw -o -B clean test` | 历史记录：拆分前 97 tests，0 failures | PASS |
 | 1.3 | 契约校验 | `python3 aipaas-contracts/scripts/verify_contract.py` | PASS，44/44，坏引用 0 | PASS |
 | 1.4 | Compose 语法 | `cd deploy/docker && docker-compose -f docker-compose.yaml config -q` | 退出码 0 | PASS |
 | 1.5 | 前端构建 | `cd web && npx vite build --outDir dist-acceptance --emptyOutDir` | 构建成功，无报错 | PASS |

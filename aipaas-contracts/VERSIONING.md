@@ -1,7 +1,7 @@
 # API 版本与兼容策略（对齐 P1 NFR#31）
 
 > 契约版本：`1.1.0-p0`
-> 适用范围：`aipaas-openapi-v1.yaml` 及其实现（Java platform-api、Python rag-ai-api、Web 客户端）
+> 适用范围：`aipaas-openapi-v1.yaml` 及其实现（Java platform-gateway / platform-management、Python rag-ai-api、Web 客户端）
 
 ## 1. 版本号方案
 

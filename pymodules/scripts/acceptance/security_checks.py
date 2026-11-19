@@ -184,7 +184,7 @@ def main() -> None:
     # 4) 审计保留期（源码默认值与下限校验）
     retention_source = (
         WORKSPACE
-        / "javaplat/apps/platform-api/src/main/java/com/aipaas/platform/audit/AuditRetentionService.java"
+        / "javaplat/apps/platform-management/src/main/java/com/aipaas/platform/audit/AuditRetentionService.java"
     ).read_text(encoding="utf-8")
     retention_days = int(
         (re.search(r"audit-retention-days:(\d+)", retention_source) or re.search(r":(\d+)\)", retention_source)).group(1)
@@ -194,7 +194,7 @@ def main() -> None:
     # 5) 内容审核（Java 单测证据）
     content_tests = (
         WORKSPACE
-        / "javaplat/apps/platform-api/src/test/java/com/aipaas/platform/content"
+        / "javaplat/apps/platform-management/src/test/java/com/aipaas/platform/content"
     )
     content_test_files = sorted(path.name for path in content_tests.glob("*.java"))
     content_evidence = []

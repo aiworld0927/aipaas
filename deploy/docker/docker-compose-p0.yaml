@@ -3,12 +3,12 @@
 # ---------------------------------------------------------------------------
 # 目标：
 #   - 基础设施：postgres / redis / minio / etcd+milvus / prometheus
-#   - 应用骨架：platform-api(Java) / rag-ai-api(Python) / web(React) / mock(契约)
+#   - 应用骨架：platform-gateway + platform-management(Java) / rag-ai-api(Python) / web(React) / mock(契约)
 #   - 全部服务具备 /healthz、/readyz（或等价健康检查）
 #
 # 端口刻意避开宿主机已占用的 8080/5432/6379/9000/19530/9091：
 #   postgres（仅内网 5432） · redis 56379 · minio 19000/19001 · milvus 29530/29091
-#   prometheus 19090 · alertmanager 19093 · grafana 13000 · platform-api 8081 · rag-ai-api 8100 · mock 4010 · web 18080
+#   prometheus 19090 · alertmanager 19093 · grafana 13000 · platform-gateway 8081 · rag-ai-api 8100 · mock 4010 · web 18080
 #
 # 用法：
 #   docker-compose -f deploy/docker/docker-compose-p0.yaml up -d --build
@@ -38,7 +38,7 @@ services:
       POSTGRES_USER: ${P0_PG_USER:-aipaas}
       POSTGRES_PASSWORD: ${P0_PG_PASSWORD:-aipaas_p0}
       POSTGRES_DB: ${P0_PG_DB:-aipaas}
-    # 仅容器网络内可见（platform-api 通过 postgres:5432 访问），不向宿主机暴露
+    # 仅容器网络内可见（platform-management 通过 postgres:5432 访问），不向宿主机暴露
     expose:
       - "5432"
     volumes:
@@ -177,7 +177,7 @@ services:
     ports:
       - "19090:9090"
     depends_on:
-      platform-api:
+      platform-gateway:
         condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
@@ -255,12 +255,13 @@ services:
   # -------------------------------------------------------------------------
   # 应用骨架
   # -------------------------------------------------------------------------
-  platform-api:
+  # 管理服务：业务数据、RBAC、文档与导入任务、审计落库、内容策略与系统配置。
+  platform-management:
     build:
       context: ../../javaplat
-      dockerfile: Dockerfile
-    image: aipaas/platform-api:p0
-    container_name: p0-platform-api
+      dockerfile: apps/platform-management/Dockerfile
+    image: aipaas/platform-management:p0
+    container_name: p0-platform-management
     environment:
       AIPAAS_ENV: ${AIPAAS_ENV:-prod}
       AIPAAS_API_VERSION: v1
@@ -277,9 +278,10 @@ services:
       AIPAAS_REQUEST_LOG_RETENTION_DAYS: ${AIPAAS_REQUEST_LOG_RETENTION_DAYS:-30}
       AIPAAS_REQUEST_LOG_PATH: /var/log/aipaas
       AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
-      # 问答编排下游：#407/#113 指向真正执行检索与生成的 Python 服务
-      AIPAAS_CHAT_SERVICE_URL: ${AIPAAS_CHAT_SERVICE_URL:-http://rag-ai-api:8100}
       AIPAAS_TLS_CERTIFICATE_PATH: /etc/aipaas/tls/tls.crt
+      AIPAAS_JWT_VERIFY_EXPORT_PATH: /var/lib/aipaas/jwt-verify/jwt-secret
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
     expose:
       - "8080"
@@ -288,6 +290,7 @@ services:
       - p0-upload-temp:/var/lib/aipaas/uploads
       - p0-request-logs:/var/log/aipaas
       - p0-tls:/etc/aipaas/tls:ro
+      - p0-jwt-verify:/var/lib/aipaas/jwt-verify
     depends_on:
       postgres:
         condition: service_healthy
@@ -306,6 +309,48 @@ services:
         limits:
           cpus: '1.0'
           memory: 1G
+    <<: *default-restart
+    logging: *default-logging
+
+  # 统一入口：认证、身份头治理、管理代理与问答安全编排。
+  platform-gateway:
+    build:
+      context: ../../javaplat
+      dockerfile: apps/platform-gateway/Dockerfile
+    image: aipaas/platform-gateway:p0
+    container_name: p0-platform-gateway
+    environment:
+      AIPAAS_ENV: ${AIPAAS_ENV:-prod}
+      AIPAAS_API_VERSION: v1
+      AIPAAS_CONTRACT_VERSION: 1.1.0-p0
+      PLATFORM_MANAGEMENT_URL: http://platform-management:8080
+      # 问答编排下游：#407/#113 指向真正执行检索与生成的 Python 服务
+      AIPAAS_CHAT_SERVICE_URL: ${AIPAAS_CHAT_SERVICE_URL:-http://rag-ai-api:8100}
+      AIPAAS_JWT_VERIFY_SECRET_FILE: /var/lib/aipaas/jwt-verify/jwt-secret
+      AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70"
+    expose:
+      - "8080"
+    volumes:
+      - p0-jwt-verify:/var/lib/aipaas/jwt-verify:ro
+    depends_on:
+      platform-management:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
     <<: *default-restart
     logging: *default-logging
 
@@ -372,11 +417,11 @@ services:
     image: aipaas/frontend:p0
     container_name: p0-web
     environment:
-      # /api/v1/** 反代到 P0 契约网关
-      PLATFORM_API_UPSTREAM: http://platform-api:8080
+      # /api/v1/** 反代到 Java 统一网关
+      PLATFORM_API_UPSTREAM: http://platform-gateway:8080
       # 旧链路占位（P0 骨架由 rag-ai-api 返回 501，保持统一信封）
-      QUERY_API_UPSTREAM: http://platform-api:8080
-      IMPORT_API_UPSTREAM: http://platform-api:8080
+      QUERY_API_UPSTREAM: http://rag-ai-api:8100
+      IMPORT_API_UPSTREAM: http://rag-ai-api:8100
       TLS_GENERATE_SELF_SIGNED: ${TLS_GENERATE_SELF_SIGNED:-true}
       TLS_SERVER_NAME: ${TLS_SERVER_NAME:-localhost}
     ports:
@@ -385,7 +430,7 @@ services:
     volumes:
       - p0-tls:/etc/nginx/tls
     depends_on:
-      platform-api:
+      platform-gateway:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
@@ -412,5 +457,6 @@ volumes:
   p0-grafana-data:
   p0-request-logs:
   p0-security-keys:
+  p0-jwt-verify:
   p0-upload-temp:
   p0-tls:
