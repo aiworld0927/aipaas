@@ -448,7 +448,7 @@ git diff --check   # 无空白错误
 
 ### 5. 未完成项与阻断项
 
-- **导入直连 `svc-ingest` 暂缓**（有代码证据）：导入任务状态机、失败恢复、文档关联、权限校验与审计仍归 `platform-management` 所有；直连会绕过这些能力，故保留 `gateway → management → svc-ingest`。阻断项与边界见 `docs/02a_总体部署手册.md` 与 `docs/08_模块说明文档.md`。
+- **导入直连 `svc-ingest` 暂缓**（有代码证据）：导入任务状态机、失败恢复、文档关联、权限校验与审计仍归 `platform-management` 所有；直连会绕过这些能力，故保留 `gateway → management → svc-ingest`。阻断项与边界见 `docs/02a_总体部署手册.md` 与 `docs/01_入门指南/10_模块说明文档.md`。
 - **集成烟测**：Maven 单测 + Compose 静态校验已通过；端到端容器烟测（401/403/撤销/审计流）需在完整 Docker 栈运行后执行，非本次必需项。
 
 ### 6. 本会话补充修复的残留项

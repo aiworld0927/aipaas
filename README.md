@@ -8,11 +8,11 @@
 
 | 文档 | 用途 |
 | --- | --- |
-| [快速使用入门](docs/00_快速使用入门.md) | Mock 演示、P0 Compose、离线验收和开发全量环境的最短路径 |
-| [模块说明文档](docs/08_模块说明文档.md) | Java + Python 双栈的模块清单、职责边界，以及**每个模块的启动方法** |
-| [架构说明](docs/03_架构说明.md) | 实际模块、调用链、数据存储、安全、部署与 P0/P1+ 边界 |
-| [P0 部署手册](docs/acceptance/P0-DEPLOYMENT-MANUAL.md) | 配置、端口、TLS、监控、备份、升级和回滚 |
-| [P0 验收报告](docs/acceptance/P0-ACCEPTANCE-REPORT.md) | 44 项功能、19 项非功能指标及端到端证据 |
+| [快速使用入门](docs/01_入门指南/01_快速使用入门.md) | Mock 演示、P0 Compose、离线验收和开发全量环境的最短路径 |
+| [模块说明文档](docs/01_入门指南/10_模块说明文档.md) | Java + Python 双栈的模块清单、职责边界，以及**每个模块的启动方法** |
+| [架构说明](docs/02_架构设计/01_系统架构说明.md) | 实际模块、调用链、数据存储、安全、部署与 P0/P1+ 边界 |
+| [P0 部署手册](docs/03_运维验收/02_P0部署手册.md) | 配置、端口、TLS、监控、备份、升级和回滚 |
+| [P0 验收报告](docs/03_运维验收/01_P0验收报告.md) | 44 项功能、19 项非功能指标及端到端证据 |
 | [接口契约](aipaas-contracts/README.md) | OpenAPI、Mock、版本兼容与契约变更流程 |
 | [Python 工程](pymodules/README.md) | uv workspace、业务服务、共享包和模型配置 |
 | [贡献指南](CONTRIBUTING.md) | 分支、开发、测试、提交和 Pull Request 规范 |
@@ -36,7 +36,7 @@
 | `deploy/docker` | Docker Compose | P0 交付骨架与开发全量两套编排，含 Prometheus/Grafana/Alertmanager |
 | `docs` | Markdown | 架构、部署、解析、质量、安全、验收和上线材料 |
 
-> 状态说明：P0 已有可复现验收材料，但 P0 Compose 中的 `rag-ai-api` 仍是骨架，真实 AI 能力位于 `ingest-worker`、`query-worker` 和共享包。不要把“契约冻结”“容器健康”或“离线 Stub 验收”理解为真实模型生产链路已经全部接通，详见[架构说明的集成边界](docs/03_架构说明.md#81-p0-compose契约与平台交付骨架)。
+> 状态说明：P0 已有可复现验收材料，但 P0 Compose 中的 `rag-ai-api` 仍是骨架，真实 AI 能力位于 `ingest-worker`、`query-worker` 和共享包。不要把“契约冻结”“容器健康”或“离线 Stub 验收”理解为真实模型生产链路已经全部接通，详见[架构说明的集成边界](docs/02_架构设计/01_系统架构说明.md#81-p0-compose契约与平台交付骨架)。
 
 ## 快速开始
 
@@ -76,7 +76,7 @@ docker compose -f docker-compose-p0.yaml up -d --build
 docker compose -f docker-compose-p0.yaml ps
 ```
 
-Web：`http://localhost:18080`；Grafana：`http://localhost:13000`；Prometheus：`http://localhost:19090`。平台 API 默认仅在容器内网暴露，完整健康检查和边界见[快速入门](docs/00_快速使用入门.md#3-b-p0-compose-部署)。
+Web：`http://localhost:18080`；Grafana：`http://localhost:13000`；Prometheus：`http://localhost:19090`。平台 API 默认仅在容器内网暴露，完整健康检查和边界见[快速入门](docs/01_入门指南/01_快速使用入门.md#3-b-p0-compose-部署)。
 
 ### 3. 复现真实 Python 业务包验收
 
@@ -88,7 +88,7 @@ uv run python scripts/acceptance/golden_eval.py
 uv run pytest tests -q
 ```
 
-该路径复用生产解析、检索和生成代码，并使用明确标注的确定性替身；证据输出到 `docs/acceptance/`。
+该路径复用生产解析、检索和生成代码，并使用明确标注的确定性替身；证据输出到 `docs/03_运维验收/`。
 
 ## 仓库结构
 
@@ -112,7 +112,7 @@ aipaas/
 
 | 范围 | 命令 |
 | --- | --- |
-| 各模块职责与启动 | 见[模块说明文档](docs/08_模块说明文档.md) |
+| 各模块职责与启动 | 见[模块说明文档](docs/01_入门指南/10_模块说明文档.md) |
 | 契约校验 | `python3 aipaas-contracts/scripts/verify_contract.py` |
 | Java 测试 | `cd javaplat && ./mvnw clean test`（管理 91 + 网关 18，共 109 个测试） |
 | Java 本地启动 | `cd javaplat && ./mvnw -pl apps/platform-gateway -am spring-boot:run`（容器内端口 8080，宿主机默认 8081）、`./mvnw -pl apps/platform-management -am spring-boot:run`（8080，需可连 PostgreSQL 与 Redis） |
@@ -133,7 +133,7 @@ aipaas/
 
 ## 参与贡献
 
-1. 阅读[贡献指南](CONTRIBUTING.md)和[架构说明](docs/03_架构说明.md)。
+1. 阅读[贡献指南](CONTRIBUTING.md)和[架构说明](docs/02_架构设计/01_系统架构说明.md)。
 2. 从最新默认分支创建 `feat/<scope>-<summary>`、`fix/<scope>-<summary>` 或 `docs/<scope>-<summary>` 分支。
 3. 按变更范围运行契约、Java、Python、Web 和端到端验证。
 4. 使用 Issue/PR 模板提交，说明契约、权限、审计、部署和文档影响。

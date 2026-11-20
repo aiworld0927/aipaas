@@ -4,8 +4,8 @@
     .venv/bin/python scripts/run_parse_report.py
 
 产物：
-    docs/parse-pipeline/samples/{pdf,word,excel,markdown}/*   样例原文
-    docs/parse-pipeline/PARSE-REPORT.md                       解析验收报告
+    docs/06_解析链路/02_解析样例/{pdf,word,excel,markdown}/*   样例原文
+    docs/06_解析链路/01_解析链路报告.md                       解析验收报告
 """
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DOCS_DIR = REPO_ROOT / "docs" / "parse-pipeline"
-SAMPLES_DIR = DOCS_DIR / "samples"
-REPORT_PATH = DOCS_DIR / "PARSE-REPORT.md"
+DOCS_DIR = REPO_ROOT / "docs" / "06_解析链路"
+SAMPLES_DIR = DOCS_DIR / "02_解析样例"
+REPORT_PATH = DOCS_DIR / "01_解析链路报告.md"
 
 # 让脚本既能从仓库根运行，也能从 pymodules 目录运行
 PYMODULES = REPO_ROOT / "pymodules"

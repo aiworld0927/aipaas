@@ -35,8 +35,8 @@ from harness import (  # noqa: E402
     write_json,
 )
 
-SAMPLE_DIR = ACCEPTANCE_DIR.parent / "parse-pipeline" / "samples" / "pdf"
-OUT_DIR = ACCEPTANCE_DIR / "e2e"
+SAMPLE_DIR = ACCEPTANCE_DIR.parent / "06_解析链路" / "02_解析样例" / "pdf"
+OUT_DIR = ACCEPTANCE_DIR / "05_端到端测试"
 KB_ID = "kb_e2e"
 
 
@@ -406,7 +406,7 @@ def main() -> None:
 
 {'端到端链路全部通过，可重复执行' if not failed else '存在失败步骤，见缺陷清单'}。
 """
-    (OUT_DIR / "E2E-REPORT.md").write_text(md, encoding="utf-8")
+    (OUT_DIR / "01_E2E测试报告.md").write_text(md, encoding="utf-8")
     print(md)
     if failed:
         raise SystemExit(1)

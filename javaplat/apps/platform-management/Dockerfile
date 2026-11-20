@@ -11,8 +11,8 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN addgroup -S aipaas && adduser -S aipaas -G aipaas \
  && mkdir -p /var/lib/aipaas/security /var/lib/aipaas/uploads /var/lib/aipaas/objects \
-      /var/lib/aipaas/jwt-verify \
- && chown -R aipaas:aipaas /var/lib/aipaas
+      /var/lib/aipaas/jwt-verify /var/log/aipaas \
+ && chown -R aipaas:aipaas /var/lib/aipaas /var/log/aipaas
 COPY --from=build /workspace/apps/platform-management/target/platform-management.jar /app/app.jar
 USER aipaas
 EXPOSE 8080

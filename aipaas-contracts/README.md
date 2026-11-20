@@ -101,4 +101,4 @@ PY
 1. 在 `openapi/aipaas-openapi-v1.yaml` 修改，并同步 `x-p0-feature`/`x-permission`/`x-audit` 声明。
 2. 运行 mock 与冒烟脚本，确认串联链路不回归。
 3. 破坏性变更必须先走 [VERSIONING.md](./VERSIONING.md) 的告警流程（≥2 个次版本 + `Deprecation`/`Sunset` 头）。
-4. 更新 `docs/architecture/01-p0-api-review.md` 的评审记录。
+4. 更新 `docs/02_架构设计/08_P0_API契约评审.md` 的评审记录。

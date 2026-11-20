@@ -13,9 +13,9 @@ spring:
       timeout: ${REDIS_TIMEOUT:PT2S}
   servlet:
     multipart:
-      max-file-size: 120MB
-      max-request-size: 120MB
-      file-size-threshold: 10MB
+      # 网关只做流式转发：必须关闭 multipart 解析，否则请求体被提前消费，
+      # 下游管理服务会收到空 body 并报 MissingServletRequestPartException。
+      enabled: false
   mvc:
     throw-exception-if-no-handler-found: true
   web:

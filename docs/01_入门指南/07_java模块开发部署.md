@@ -4,7 +4,7 @@
 > svc-document / svc-search / svc-agent 五微服务规划**不再是目标架构**，仅保留作历史参考，
 > 正文中的模块拆解、端口、Docker 构建与 compose 命令均为已废弃的早期规划，不得据此实施。
 > 当前 Java 侧只有 `platform-gateway` 与 `platform-management` 两个可部署应用，共享 `libs/common`；
-> 真实结构与部署方式以 [`docs/AI编程/Java网关与管理拆分实施提示词.md`](AI编程/Java网关与管理拆分实施提示词.md)
+> 真实结构与部署方式以 [`docs/../ai-programming/Java网关与管理拆分实施提示词.md`](../05_AI编程/01_Java网关与管理拆分实施提示词.md)
 > 和 `javaplat/pom.xml`、`deploy/docker/docker-compose-java.yaml` 为准。
 >
 > 文档范围（历史）：`javaplat/` 目录下早期规划的 5 个 Java 微服务（Spring Boot 21）

@@ -252,7 +252,7 @@ def main() -> None:
         "passed": all(checks.values()),
         "stub": "LLM 为抽取式桩；真实 LLM 时延与配额属后置期依赖",
     }
-    out = ACCEPTANCE_DIR / "perf"
+    out = ACCEPTANCE_DIR / "06_性能压测"
     write_json(out / "load_test_snapshot.json", payload)
 
     md = f"""# P0 性能与稳定性压测报告
@@ -285,14 +285,14 @@ def main() -> None:
 
 {'性能与稳定性门槛通过（后置期依赖见报告）' if payload['passed'] else '存在未达标项，见缺陷清单'}。
 """
-    (out / "LOAD-TEST-REPORT.md").write_text(md, encoding="utf-8")
+    (out / "01_压测报告.md").write_text(md, encoding="utf-8")
     print(md)
     if not payload["passed"]:
         raise SystemExit(1)
 
 
 def _golden(name: str) -> Path:
-    return ACCEPTANCE_DIR / "golden" / name
+    return ACCEPTANCE_DIR / "09_黄金数据集" / name
 
 
 if __name__ == "__main__":

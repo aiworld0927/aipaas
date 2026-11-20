@@ -43,14 +43,14 @@
 - 生产环境替换所有默认口令，关闭不必要的宿主端口和 Mock 服务；
 - 生产 TLS 使用正式证书，不使用开发自签证书；
 - 审计保留期不得低于 180 天，导出创建和下载均需重新授权；
-- 统一网口限流、BM25 回退等已知受限项按[缺陷清单](docs/acceptance/DEFECT-LIST.md)跟踪，不以文档描述代替修复。
+- 统一网口限流、BM25 回退等已知受限项按[缺陷清单](docs/03_运维验收/03_缺陷清单.md)跟踪，不以文档描述代替修复。
 
 ## 安全测试证据
 
 常规安全回归见：
 
 - `pymodules/scripts/acceptance/security_checks.py`
-- [安全验收报告](docs/acceptance/security/SECURITY-REPORT.md)
+- [安全验收报告](docs/03_运维验收/08_安全审计/01_安全报告.md)
 - Java `ContentSecurityServiceTest`、`OutputComplianceGuardTest`、`UploadAuthorizationFilterTest` 等测试
 
 这些自动化证据不能替代威胁建模、真实环境渗透测试和依赖漏洞治理。

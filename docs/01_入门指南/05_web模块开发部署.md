@@ -145,7 +145,7 @@ cp .env.example .env   # 首次使用
 docker compose up -d
 ```
 
-前端服务 `frontend` 定义在主编排 [docker-compose.yaml](../deploy/docker/docker-compose.yaml) 中（主编排 `include` 基础编排 `docker-compose-base.yaml`），全量启动会自动拉起（等待依赖的 svc-ingest / svc-query healthy）。
+前端服务 `frontend` 定义在主编排 [docker-compose.yaml](../../deploy/docker/docker-compose.yaml) 中（主编排 `include` 基础编排 `docker-compose-base.yaml`），全量启动会自动拉起（等待依赖的 svc-ingest / svc-query healthy）。
 
 ### 只启前端模块
 
@@ -157,7 +157,7 @@ docker compose up -d frontend
 
 ### compose 中前端的环境变量
 
-在 [docker-compose.yaml](../deploy/docker/docker-compose.yaml) 中，前端服务自动注入：
+在 [docker-compose.yaml](../../deploy/docker/docker-compose.yaml) 中，前端服务自动注入：
 
 ```yaml
 environment:

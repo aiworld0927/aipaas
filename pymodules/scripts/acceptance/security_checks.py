@@ -66,7 +66,7 @@ BENIGN_PROMPTS = [
 
 
 def main() -> None:
-    corpus = load_jsonl(ACCEPTANCE_DIR / "golden" / "corpus.jsonl")
+    corpus = load_jsonl(ACCEPTANCE_DIR / "09_黄金数据集" / "corpus.jsonl")
     encoder = build_encoder(corpus)
     searcher = build_searcher(corpus, encoder)
     audit = R.InMemoryAuditSink()
@@ -241,7 +241,7 @@ def main() -> None:
         "checks": checks,
         "passed": all(checks.values()),
     }
-    out = ACCEPTANCE_DIR / "security"
+    out = ACCEPTANCE_DIR / "08_安全审计"
     write_json(out / "security_snapshot.json", payload)
 
     md = f"""# P0 安全与合规验收报告
@@ -274,7 +274,7 @@ def main() -> None:
 
 {'安全与合规验收通过' if payload['passed'] else '存在未达标项，见缺陷清单'}。
 """
-    (out / "SECURITY-REPORT.md").write_text(md, encoding="utf-8")
+    (out / "01_安全报告.md").write_text(md, encoding="utf-8")
     print(md)
     if not payload["passed"]:
         raise SystemExit(1)

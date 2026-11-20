@@ -276,7 +276,7 @@ def main() -> None:
         },
     }
 
-    out_dir = ACCEPTANCE_DIR / "quality"
+    out_dir = ACCEPTANCE_DIR / "07_质量评估"
     write_json(out_dir / "golden_eval_result.json", payload)
     write_jsonl(out_dir / "golden_eval_items.jsonl", details)
 
@@ -331,7 +331,7 @@ def main() -> None:
 
 {'质量门禁通过' if passed else '质量门禁未通过，见缺陷清单'}。
 """
-    (out_dir / "GOLDEN-EVAL-REPORT.md").write_text(md, encoding="utf-8")
+    (out_dir / "01_Golden评估报告.md").write_text(md, encoding="utf-8")
     print(md)
     if not passed:
         raise SystemExit(1)

@@ -3,8 +3,8 @@
 用法：
     cd pymodules && uv run python scripts/acceptance/build_golden.py
 输出：
-    docs/acceptance/golden/corpus.jsonl
-    docs/acceptance/golden/golden_set.jsonl
+    docs/03_运维验收/09_黄金数据集/corpus.jsonl
+    docs/03_运维验收/09_黄金数据集/golden_set.jsonl
 """
 
 from __future__ import annotations

@@ -24,8 +24,8 @@ import aipaas_retrieval as R
 import aipaas_generation as G
 
 WORKSPACE = Path(__file__).resolve().parents[3]
-ACCEPTANCE_DIR = WORKSPACE / "docs" / "acceptance"
-GOLDEN_DIR = ACCEPTANCE_DIR / "golden"
+ACCEPTANCE_DIR = WORKSPACE / "docs" / "03_运维验收"
+GOLDEN_DIR = ACCEPTANCE_DIR / "09_黄金数据集"
 
 _CJK = re.compile(r"[\u4e00-\u9fff]+")
 _ASCII = re.compile(r"[A-Za-z0-9]+(?:[/.\-][A-Za-z0-9]+)*")

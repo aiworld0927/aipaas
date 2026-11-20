@@ -40,7 +40,7 @@ info:
     - P0 任务调度仅事件驱动队列；`/ingest/tasks` 为幂等状态机，不做 cron。
   contact:
     name: AIPaaS 架构组
-    url: https://aipaas.local/docs/architecture/01-p0-api-review.md
+    url: https://aipaas.local/docs/02_架构设计/08_P0_API契约评审.md
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
