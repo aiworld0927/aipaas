@@ -3,12 +3,12 @@
 # ---------------------------------------------------------------------------
 # 目标：
 #   - 基础设施：postgres / redis / minio / etcd+milvus / prometheus
-#   - 应用骨架：platform-gateway + platform-management(Java) / rag-ai-api(Python) / web(React) / mock(契约)
+#   - 应用骨架：platform-gateway + platform-management(Java) / web(React) / mock(契约)
 #   - 全部服务具备 /healthz、/readyz（或等价健康检查）
 #
 # 端口刻意避开宿主机已占用的 8080/5432/6379/9000/19530/9091：
 #   postgres（仅内网 5432） · redis 56379 · minio 19000/19001 · milvus 29530/29091
-#   prometheus 19090 · alertmanager 19093 · grafana 13000 · platform-gateway 8081 · rag-ai-api 8100 · mock 4010 · web 18080
+#   prometheus 19090 · alertmanager 19093 · grafana 13000 · platform-gateway 8081 · mock 4010 · web 18080
 #
 # 用法：
 #   docker-compose -f deploy/docker/docker-compose-p0.yaml up -d --build
@@ -324,8 +324,8 @@ services:
       AIPAAS_API_VERSION: v1
       AIPAAS_CONTRACT_VERSION: 1.1.0-p0
       PLATFORM_MANAGEMENT_URL: http://platform-management:8080
-      # 问答编排下游：#407/#113 指向真正执行检索与生成的 Python 服务
-      AIPAAS_CHAT_SERVICE_URL: ${AIPAAS_CHAT_SERVICE_URL:-http://rag-ai-api:8100}
+      # 问答编排下游：指向真正执行检索与生成的 Python 服务（svc-query）
+      AIPAAS_CHAT_SERVICE_URL: ${AIPAAS_CHAT_SERVICE_URL:-http://svc-query:8002}
       AIPAAS_JWT_VERIFY_SECRET_FILE: /var/lib/aipaas/jwt-verify/jwt-secret
       AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
       REDIS_HOST: redis
@@ -351,40 +351,6 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
-    <<: *default-restart
-    logging: *default-logging
-
-  rag-ai-api:
-    build:
-      context: ../../pymodules/apps/rag-ai-api
-      dockerfile: Dockerfile
-    image: aipaas/rag-ai-api:p0
-    container_name: p0-rag-ai-api
-    environment:
-      AIPAAS_ENV: ${AIPAAS_ENV:-dev}
-      AIPAAS_API_VERSION: v1
-      AIPAAS_CONTRACT_VERSION: 1.1.0-p0
-      MILVUS_URI: http://milvus:19530
-      MINIO_ENDPOINT: minio:9000
-      REDIS_URL: redis://redis:6379/0
-    expose:
-      - "8100"
-    depends_on:
-      milvus:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8100/healthz')"]
-      interval: 10s
-      timeout: 5s
-      start_period: 15s
-      retries: 12
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
     <<: *default-restart
     logging: *default-logging
 
@@ -417,11 +383,8 @@ services:
     image: aipaas/frontend:p0
     container_name: p0-web
     environment:
-      # /api/v1/** 反代到 Java 统一网关
+      # /api/v1/** 反代到 Java 统一网关；前端不再直连后端服务
       PLATFORM_API_UPSTREAM: http://platform-gateway:8080
-      # 旧链路占位（P0 骨架由 rag-ai-api 返回 501，保持统一信封）
-      QUERY_API_UPSTREAM: http://rag-ai-api:8100
-      IMPORT_API_UPSTREAM: http://rag-ai-api:8100
       TLS_GENERATE_SELF_SIGNED: ${TLS_GENERATE_SELF_SIGNED:-true}
       TLS_SERVER_NAME: ${TLS_SERVER_NAME:-localhost}
     ports:

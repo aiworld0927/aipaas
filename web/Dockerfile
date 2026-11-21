@@ -10,16 +10,14 @@
 #     前端构建只跑 npm ci + vite build，从 npm registry 取包，
 #     不需要 torch / NVIDIA CUDA wheel，因此也不需要 --network host。
 #
-# 运行（手动，反代到本机后端）：
+# 运行（手动，反代到本机统一网关）：
 #     docker run -d --name aipaas-frontend \
 #         -p 80:80 \
-#         -e QUERY_API_UPSTREAM=http://host.docker.internal:8001 \
-#         -e IMPORT_API_UPSTREAM=http://host.docker.internal:8000 \
+#         -e PLATFORM_API_UPSTREAM=http://host.docker.internal:8081 \
 #         aipaas/frontend:latest
 #
 # 运行（docker-compose，反代到服务名）：
-#     QUERY_API_UPSTREAM=http://svc-query:8002
-#     IMPORT_API_UPSTREAM=http://svc-ingest:8001
+#     PLATFORM_API_UPSTREAM=http://platform-gateway:8080
 # ===========================================================================
 
 # ---- 阶段 1：构建 ----
@@ -28,14 +26,16 @@ WORKDIR /app
 
 # 先只复制依赖清单 → npm ci 层可被 Docker 缓存命中，改 src 不会重装依赖
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# 国内网络环境下 npmjs 官方源不可达，使用 npmmirror 保证依赖安装可用
+RUN npm config set registry https://registry.npmmirror.com \
+ && npm ci --no-audit --no-fund
 
 # 关键：把容器自己的 node_modules 挪到隐藏目录，
 # 这样后面 COPY . . 时（无论宿主有没有 node_modules、有没有 .dockerignore）
 # 都不会覆盖/破坏容器已装的依赖
 RUN mv /app/node_modules /app/.container-node_modules
 
-# 可选：如果用户有 .env（VITE_QUERY_API_BASE 等），一起复制进去
+# 可选：如果用户有 .env，一起复制进去
 COPY .env* ./
 
 # 复制源码（宿主 node_modules / dist 等即使没 .dockerignore 也不会影响
@@ -52,19 +52,19 @@ RUN rm -rf /app/node_modules \
 # ---- 阶段 2：运行 ----
 FROM nginx:alpine AS runtime
 
-RUN apk add --no-cache openssl
+# 默认 alpine 镜像源在部分网络环境不可达，切换到阿里云镜像保证构建可用
+RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories \
+ && apk add --no-cache openssl
 
 # 把构建产物拷到 nginx 默认站点目录
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# 自定义 nginx 配置（SPA fallback + /query-api /import-api 反代）
+# 自定义 nginx 配置（SPA fallback + /api/ 反代到 platform-gateway）
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
 
 # 默认反代目标（会被运行时环境变量覆盖）
 # PLATFORM_API_UPSTREAM：Java 统一网关（platform-gateway），/api/v1/** 原样透传
-ENV QUERY_API_UPSTREAM=http://localhost:8081 \
-    IMPORT_API_UPSTREAM=http://localhost:8081 \
-    PLATFORM_API_UPSTREAM=http://localhost:8081 \
+ENV PLATFORM_API_UPSTREAM=http://localhost:8081 \
     TLS_CERT_PATH=/etc/nginx/tls/tls.crt \
     TLS_KEY_PATH=/etc/nginx/tls/tls.key \
     TLS_GENERATE_SELF_SIGNED=true
@@ -87,10 +87,8 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
 RUN printf '#!/bin/sh\n\
 set -eu\n\
 # a) 去掉末尾的 /（只去最后一个，避免 http://host/a/b 被破坏）\n\
-QUERY_API_UPSTREAM="${QUERY_API_UPSTREAM%%/}"\n\
-IMPORT_API_UPSTREAM="${IMPORT_API_UPSTREAM%%/}"\n\
 PLATFORM_API_UPSTREAM="${PLATFORM_API_UPSTREAM%%/}"\n\
-export QUERY_API_UPSTREAM IMPORT_API_UPSTREAM PLATFORM_API_UPSTREAM\n\
+export PLATFORM_API_UPSTREAM\n\
 # b) 仅在显式允许且证书缺失时生成开发自签证书；生产应挂载正式证书并关闭生成。\n\
 if [ ! -s "${TLS_CERT_PATH}" ] || [ ! -s "${TLS_KEY_PATH}" ]; then\n\
   if [ "${TLS_GENERATE_SELF_SIGNED}" != "true" ]; then\n\
@@ -108,7 +106,7 @@ if [ ! -s "${TLS_CERT_PATH}" ] || [ ! -s "${TLS_KEY_PATH}" ]; then\n\
 fi\n\
 export TLS_CERT_PATH TLS_KEY_PATH\n\
 # c) envsubst 替换 template 中的占位符 → nginx 主配置\n\
-envsubst '"'"'${QUERY_API_UPSTREAM} ${IMPORT_API_UPSTREAM} ${PLATFORM_API_UPSTREAM} ${TLS_CERT_PATH} ${TLS_KEY_PATH}'"'"' \\\n\
+envsubst '"'"'${PLATFORM_API_UPSTREAM} ${TLS_CERT_PATH} ${TLS_KEY_PATH}'"'"' \\\n\
   < /etc/nginx/nginx.conf.template \\\n\
   > /etc/nginx/conf.d/default.conf\n\
 # d) 前台 nginx\n\

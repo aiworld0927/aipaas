@@ -41,9 +41,30 @@ public class AuthController {
         return ApiEnvelope.ok(Map.of("ok", true), TraceContext.current());
     }
 
+    @PostMapping("/auth/register")
+    @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public ApiEnvelope<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request,
+                                                     HttpServletRequest http) {
+        return ApiEnvelope.ok(auth.register(request.tenantId(), request.username(), request.password(),
+                request.displayName(), request.email(), clientIp(http), http.getHeader("User-Agent"),
+                TraceContext.current()), TraceContext.current());
+    }
+
     @GetMapping("/auth/me")
     public ApiEnvelope<Map<String, Object>> me() {
-        return ApiEnvelope.ok(SecurityPrincipal.current().toCurrentUser(), TraceContext.current());
+        return ApiEnvelope.ok(auth.currentUser(SecurityPrincipal.current()), TraceContext.current());
+    }
+
+    @PatchMapping("/auth/me")
+    public ApiEnvelope<Map<String, Object>> updateProfile(@Valid @RequestBody ProfileUpdateRequest request) {
+        return ApiEnvelope.ok(auth.updateProfile(SecurityPrincipal.current(), request.displayName(), request.email()),
+                TraceContext.current());
+    }
+
+    @PostMapping("/auth/password")
+    public ApiEnvelope<Map<String, Object>> changePassword(@Valid @RequestBody PasswordChangeRequest request) {
+        auth.changePassword(SecurityPrincipal.current(), request.oldPassword(), request.newPassword());
+        return ApiEnvelope.ok(Map.of("ok", true), TraceContext.current());
     }
 
     private static String clientIp(HttpServletRequest request) {
@@ -56,5 +77,19 @@ public class AuthController {
     }
 
     public record RefreshRequest(@Size(min = 32, max = 256) @NotBlank String refreshToken) {
+    }
+
+    public record RegisterRequest(@Size(min = 3, max = 64) @NotBlank String username,
+                                  @Size(min = 8, max = 128) @NotBlank String password,
+                                  @Size(max = 64) String displayName, @Size(max = 128) String email,
+                                  @Size(max = 64) String tenantId) {
+    }
+
+    public record ProfileUpdateRequest(@Size(min = 1, max = 64) String displayName,
+                                       @Size(max = 128) String email) {
+    }
+
+    public record PasswordChangeRequest(@NotBlank @Size(min = 8, max = 128) String oldPassword,
+                                        @NotBlank @Size(min = 8, max = 128) String newPassword) {
     }
 }

@@ -20,9 +20,11 @@ import java.util.Map;
 public class DocumentController {
 
     private final DocumentService documents;
+    private final DocumentGrantService grants;
 
-    public DocumentController(DocumentService documents) {
+    public DocumentController(DocumentService documents, DocumentGrantService grants) {
         this.documents = documents;
+        this.grants = grants;
     }
 
     @PostMapping("/knowledge-bases/{kbId}/documents")
@@ -88,21 +90,40 @@ public class DocumentController {
                                @RequestParam(required = false) String status,
                                @RequestParam(required = false) String keyword) {
         SecurityPrincipal principal = SecurityPrincipal.current();
-        return ApiEnvelope.ok(documents.list(principal.tenantId(), kbId, status, keyword, page, pageSize),
+        return ApiEnvelope.ok(documents.list(principal, kbId, status, keyword, page, pageSize),
                 TraceContext.current());
     }
 
     @GetMapping("/documents/{documentId}")
     @RequirePermission("doc:read")
     public ApiEnvelope<?> get(@PathVariable String documentId) {
-        return ApiEnvelope.ok(documents.get(SecurityPrincipal.current().tenantId(), documentId),
+        return ApiEnvelope.ok(documents.get(SecurityPrincipal.current(), documentId),
                 TraceContext.current());
     }
 
     @DeleteMapping("/documents/{documentId}")
     @RequirePermission("doc:delete")
     public ApiEnvelope<?> delete(@PathVariable String documentId) {
-        return ApiEnvelope.ok(documents.delete(SecurityPrincipal.current().tenantId(), documentId),
+        return ApiEnvelope.ok(documents.delete(SecurityPrincipal.current(), documentId),
                 TraceContext.current());
+    }
+
+    @GetMapping("/documents/{documentId}/grants")
+    @RequirePermission("doc:read")
+    public ApiEnvelope<?> listGrants(@PathVariable String documentId) {
+        return ApiEnvelope.ok(grants.list(SecurityPrincipal.current().tenantId(), documentId),
+                TraceContext.current());
+    }
+
+    @PutMapping("/documents/{documentId}/grants")
+    @RequirePermission("doc:write")
+    public ApiEnvelope<?> replaceGrants(@PathVariable String documentId,
+                                        @RequestBody GrantUpdateRequest request) {
+        SecurityPrincipal principal = SecurityPrincipal.current();
+        return ApiEnvelope.ok(grants.replace(principal.tenantId(), documentId, principal, request.grants()),
+                TraceContext.current());
+    }
+
+    public record GrantUpdateRequest(java.util.List<DocumentGrantRepository.GrantInput> grants) {
     }
 }

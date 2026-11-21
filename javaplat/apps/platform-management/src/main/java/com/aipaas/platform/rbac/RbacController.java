@@ -34,9 +34,11 @@ public class RbacController {
     @GetMapping("/roles")
     @RequirePermission("role:read")
     public ApiEnvelope<?> roles(@RequestParam(defaultValue = "1") int page,
-                                @RequestParam(defaultValue = "20") int pageSize) {
+                                @RequestParam(defaultValue = "20") int pageSize,
+                                @RequestParam(required = false) String tenantId) {
         validatePage(page, pageSize);
-        return ApiEnvelope.ok(rbac.roles(SecurityPrincipal.current().tenantId(), page, pageSize), TraceContext.current());
+        SecurityPrincipal principal = SecurityPrincipal.current();
+        return ApiEnvelope.ok(rbac.roles(resolveTenant(principal, tenantId), page, pageSize), TraceContext.current());
     }
 
     @PostMapping("/roles")
@@ -53,6 +55,17 @@ public class RbacController {
                                                    @Valid @RequestBody RolePermissionUpdateRequest request) {
         return ApiEnvelope.ok(rbac.updateMatrix(SecurityPrincipal.current().tenantId(), roleId,
                 request.permissions(), request.grants()), TraceContext.current());
+    }
+
+    private static String resolveTenant(SecurityPrincipal principal, String requested) {
+        if (requested == null || requested.isBlank() || requested.equals(principal.tenantId())) {
+            return principal.tenantId();
+        }
+        if (principal.permissions().contains("*") || principal.permissions().contains("tenant:read")) {
+            return requested;
+        }
+        throw new ApiException(ErrorCodes.PERM_FORBIDDEN, org.springframework.http.HttpStatus.FORBIDDEN,
+                "无权查看其他租户角色");
     }
 
     private static void validatePage(int page, int pageSize) {

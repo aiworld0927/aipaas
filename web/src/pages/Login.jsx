@@ -1,6 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { login } from '../utils/auth.js';
+
+/** 演示账号（真实后端）：走 /api/v1/auth/login，拥有平台管理员权限 */
+const DEMO_ACCOUNT = { username: 'demo', password: 'Fin@Rag2026#Kb' };
 
 /** 登录页：登录成功自动跳转 /chat */
 export default function Login() {
@@ -68,7 +71,27 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="login-tip">当前为演示模式：任意用户名密码均可登录</div>
+        <button
+          type="button"
+          className="login-demo"
+          onClick={() => {
+            setUsername(DEMO_ACCOUNT.username);
+            setPassword(DEMO_ACCOUNT.password);
+            setError('');
+          }}
+        >
+          <span className="login-demo-title">演示账号</span>
+          <span className="login-demo-cred">
+            {DEMO_ACCOUNT.username} / {DEMO_ACCOUNT.password}
+          </span>
+          <span className="login-demo-fill">一键填入</span>
+        </button>
+
+        <div className="login-tip">
+          还没有账号？<Link to="/register">立即注册</Link>
+          <span style={{ margin: '0 8px', color: 'var(--border)' }}>|</span>
+          也可使用平台分配的账号密码登录
+        </div>
       </div>
 
       <style>{`
@@ -115,7 +138,19 @@ export default function Login() {
           padding: 9px 12px; margin-bottom: 14px; text-align: left;
         }
         .login-btn { width: 100%; padding: 12px; font-size: 15px; letter-spacing: 4px; margin-top: 4px; }
-        .login-tip { margin-top: 20px; font-size: 12px; color: var(--muted); }
+        .login-demo {
+          margin-top: 18px; width: 100%;
+          display: flex; align-items: center; gap: 8px;
+          padding: 10px 12px; border-radius: 12px;
+          border: 1px dashed rgba(61,123,255,.45); background: rgba(61,123,255,.05);
+          color: #4a5570; font-size: 12px; cursor: pointer;
+          transition: background .2s, border-color .2s;
+        }
+        .login-demo:hover { background: rgba(61,123,255,.1); border-color: rgba(61,123,255,.7); }
+        .login-demo-title { font-weight: 700; color: var(--brand); }
+        .login-demo-cred { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .login-demo-fill { margin-left: auto; color: var(--brand); font-weight: 600; }
+        .login-tip { margin-top: 14px; font-size: 12px; color: var(--muted); }
       `}</style>
     </div>
   );

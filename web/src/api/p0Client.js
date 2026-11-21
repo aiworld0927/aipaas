@@ -253,16 +253,38 @@ export const systemInfo = () => request('/system/info');
 export const login = (username, password) =>
   request('/auth/login', { method: 'POST', body: { username, password } });
 
+export const register = (body) => request('/auth/register', { method: 'POST', body });
+
 export const logout = () => request('/auth/logout', { method: 'POST', body: {} });
 export const me = () => request('/auth/me');
+export const updateProfile = (body) => request('/auth/me', { method: 'PATCH', body });
+export const changePassword = (oldPassword, newPassword) =>
+  request('/auth/password', { method: 'POST', body: { oldPassword, newPassword } });
 export const listPermissions = () => request('/permissions');
 export const listRoles = (query) => request('/roles', { query });
 export const createRole = (body) => request('/roles', { method: 'POST', body });
-export const updateRolePermissions = (roleId, permissionCodes) =>
+export const updateRolePermissions = (roleId, permissionCodes, grants = []) =>
   request(`/roles/${encodeURIComponent(roleId)}/permissions`, {
     method: 'PUT',
-    body: { permissions: permissionCodes },
+    body: { permissions: permissionCodes, grants },
   });
+
+/* ------------------------------------------------------------------ */
+/* 对话管理                                                             */
+/* ------------------------------------------------------------------ */
+
+export const listConversations = (query) => request('/conversations', { query });
+export const createConversation = (body) => request('/conversations', { method: 'POST', body: body || {} });
+export const renameConversation = (conversationId, title) =>
+  request(`/conversations/${encodeURIComponent(conversationId)}`, { method: 'PATCH', body: { title } });
+export const deleteConversation = (conversationId) =>
+  request(`/conversations/${encodeURIComponent(conversationId)}`, { method: 'DELETE' });
+export const listConversationMessages = (conversationId) =>
+  request(`/conversations/${encodeURIComponent(conversationId)}/messages`);
+export const clearConversationMessages = (conversationId) =>
+  request(`/conversations/${encodeURIComponent(conversationId)}/messages`, { method: 'DELETE' });
+export const appendConversationMessage = (conversationId, body) =>
+  request(`/conversations/${encodeURIComponent(conversationId)}/messages`, { method: 'POST', body });
 
 /* ------------------------------------------------------------------ */
 /* 知识治理：知识库                                                     */
@@ -294,10 +316,58 @@ export function uploadDocument(kbId, file, extra = {}) {
   });
 }
 
+/** 上传文档（multipart, XHR 提供真实上传进度）；返回后端 { document, ingestTask } */
+export function uploadDocumentWithProgress(kbId, file, extra = {}, onProgress) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(
+      `${PLATFORM_API_BASE}/knowledge-bases/${encodeURIComponent(kbId)}/documents`,
+      window.location.origin,
+    );
+    const form = new FormData();
+    form.append('file', file, file.name);
+    Object.entries(extra).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') form.append(k, v);
+    });
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url.toString());
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.setRequestHeader('X-Request-Id', newTraceId());
+    const token = getToken();
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('Idempotency-Key', extra.idempotencyKey || newIdempotencyKey());
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+      };
+    }
+    xhr.onload = () => {
+      let payload = null;
+      try {
+        payload = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        reject(new ApiError('SYS.BAD_RESPONSE', `响应不是合法 JSON（HTTP ${xhr.status}）`));
+        return;
+      }
+      try {
+        resolve(unwrap(payload));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    xhr.onerror = () => reject(new ApiError('NETWORK.ERROR', '网络错误，上传失败'));
+    xhr.onabort = () => reject(new ApiError('NETWORK.ABORTED', '上传已取消'));
+    xhr.send(form);
+  });
+}
+
 export const listDocuments = (query) => request('/documents', { query });
 export const getDocument = (documentId) => request(`/documents/${encodeURIComponent(documentId)}`);
 export const deleteDocument = (documentId) =>
   request(`/documents/${encodeURIComponent(documentId)}`, { method: 'DELETE' });
+export const listDocumentGrants = (documentId) =>
+  request(`/documents/${encodeURIComponent(documentId)}/grants`);
+export const replaceDocumentGrants = (documentId, grants) =>
+  request(`/documents/${encodeURIComponent(documentId)}/grants`, { method: 'PUT', body: { grants } });
 
 /* ---------- 分片上传（P0 100MB，P1 #253 断点续传复用同一路径） ---------- */
 
@@ -461,6 +531,10 @@ export const updateUser = (userId, body) =>
 export const getSystemConfig = () => request('/admin/system-config');
 export const updateSystemConfig = (body) => request('/admin/system-config', { method: 'PUT', body });
 export const getAdminOverview = () => request('/admin/overview');
+export const listTenants = () => request('/admin/tenants');
+export const createTenant = (body) => request('/admin/tenants', { method: 'POST', body });
+export const updateTenant = (tenantId, body) =>
+  request(`/admin/tenants/${encodeURIComponent(tenantId)}`, { method: 'PATCH', body });
 
 export const getCapabilities = () => request('/ui/capabilities');
 export const getUIConfig = () => request('/ui/config');
@@ -482,6 +556,7 @@ export default {
   listKnowledgeBases,
   createKnowledgeBase,
   uploadDocument,
+  uploadDocumentWithProgress,
   listIngestTasks,
   getIngestTask,
   retryIngestTask,

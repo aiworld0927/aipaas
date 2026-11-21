@@ -52,6 +52,7 @@ public class BootstrapInitializer implements ApplicationRunner {
         record P(String code, String name, String domain) {}
         List<P> permissions = List.of(
                 new P("user:write", "创建用户", "平台"), new P("user:read", "查询用户", "平台"),
+                new P("tenant:read", "查询租户", "平台"), new P("tenant:write", "管理租户", "平台"),
                 new P("role:read", "查询角色", "权限"),
                 new P("role:write", "修改角色", "权限"), new P("audit:read", "检索导出审计", "审计"),
                 new P("config:read", "查询系统配置", "平台"), new P("config:write", "修改系统配置", "平台"),

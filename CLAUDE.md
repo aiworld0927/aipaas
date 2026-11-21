@@ -91,11 +91,11 @@ docker compose up -d --build                     # 第 5 级：默认全量入�
 docker compose logs -f platform-gateway platform-management
 ```
 
-五级 `include` 链依次为 base（核心 etcd / MinIO / Milvus / MongoDB / PostgreSQL / Redis，可选 attu / Nacos / RocketMQ / vLLM）→ models（init-app-dirs、嵌入、重排）→ python（svc-ingest、svc-query、契约骨架 rag-ai-api）→ java（幂等 platform-db-init、platform-management、platform-gateway）→ 主文件（frontend）。每一级都可独立作为启动入口并自动包含下层；base 无需 `--build`，可选组件仍由 `COMPOSE_PROFILES` 或 `--profile` 控制。
+五级 `include` 链依次为 base（核心 etcd / MinIO / Milvus / MongoDB / PostgreSQL / Redis，可选 attu / Nacos / RocketMQ / vLLM）→ models（init-app-dirs、嵌入、重排）→ python（svc-ingest、svc-query）→ java（幂等 platform-db-init、platform-management、platform-gateway）→ 主文件（frontend）。每一级都可独立作为启动入口并自动包含下层；base 无需 `--build`，可选组件仍由 `COMPOSE_PROFILES` 或 `--profile` 控制。
 
 Java 侧已拆分为两个可部署应用，共享 `libs/common`：`platform-management` 是管理服务（登录/刷新/注销、用户与 RBAC、知识库、文档、审计落库、内容策略、系统配置、导入任务，并持有完整密钥与数据库/Flyway/MinIO 依赖），`platform-gateway` 是统一入口（本地 HS256 验签 + Redis 用户安全快照与 JTI 撤销校验、外部身份头清理与可信身份头重建、`/api/v1/**` 流式代理、问答安全编排、审计事件发布、Trace/幂等/SSE）。原 `platform-api` 聚合单体已删除，不再存在该可部署应用。
 
-管理链路为 `frontend → platform-gateway → platform-management`，问答链路为 `frontend → platform-gateway → svc-query`（`/api/v1/chat`、`/api/v1/chat/stream` 由网关直接调用），导入链路为 `frontend → platform-gateway → platform-management → svc-ingest`。frontend 将 `/api/v1/**` 反代到 `PLATFORM_API_UPSTREAM=http://platform-gateway:8080`，同时保留旧 query / import 直连 Python 的链路；HTTP / HTTPS 默认端口为 80 / 443，HTTPS 由 `FRONTEND_HTTPS_PORT` 配置，证书通过共享 `platform-tls` 卷提供。`docker-compose-p0.yaml` 保持独立 P0 骨架编排，不并入五级链。
+管理链路为 `frontend → platform-gateway → platform-management`，问答链路为 `frontend → platform-gateway → svc-query`（`/api/v1/chat`、`/api/v1/chat/stream` 由网关直接调用），导入链路为 `frontend → platform-gateway → platform-management → svc-ingest`。frontend 仅将 `/api/` 反代到 `PLATFORM_API_UPSTREAM=http://platform-gateway:8080`，不再保留直连 Python 的 `/query-api`、`/import-api` 旁路；HTTP / HTTPS 默认端口为 80 / 443，HTTPS 由 `FRONTEND_HTTPS_PORT` 配置，证书通过共享 `platform-tls` 卷提供。`docker-compose-p0.yaml` 保持独立 P0 编排，不并入五级链。
 
 认证与状态同步：管理服务启动时以 0600 权限原子导出 Base64 JWT 验证密钥到 `/var/lib/aipaas/jwt-verify/jwt-secret`，网关只读挂载卷 `platform-jwt-verify`，不挂载 AES/审计密钥或业务数据卷。Redis 键为用户快照 `aipaas:gateway:auth:{userId}`、JTI 撤销 `aipaas:gateway:revoked:{jti}`、内容策略快照 `aipaas:gateway:content-policies`、审计 Stream `aipaas:gateway:audit`。用户/角色/内容策略变更采用 fail-closed（先失效旧快照，再改库，提交后重新发布），快照缺失或 Redis 故障时网关返回 401/503；网关把审计事件同步 `XADD` 到 Stream，管理服务消费并在成功落库/告警后才 ACK，失败保持 pending 重试（至少一次）。
 
@@ -179,7 +179,7 @@ Compose 项目网络为 `aipaas-network`（bridge）。容器之间通过服务�
 
 ## 改动前必查的坑
 
-- 旧文档中的端口号不可信。当前默认值：导入 8001、查询 8002、嵌入 8003、重排 8004、rag-ai-api 8100；platform-gateway 宿主 8081（`PLATFORM_GATEWAY_PORT`）/ 容器 8080，platform-management 仅容器内 8080、不映射宿主机；前端 nginx HTTP 80 / HTTPS 443（`FRONTEND_HTTPS_PORT` 可改）。
+- 旧文档中的端口号不可信。当前默认值：导入 8001、查询 8002、嵌入 8003、重排 8004；platform-gateway 宿主 8081（`PLATFORM_GATEWAY_PORT`）/ 容器 8080，platform-management 仅容器内 8080、不映射宿主机；前端 nginx HTTP 80 / HTTPS 443（`FRONTEND_HTTPS_PORT` 可改）。
 - 配置拼写错误会快速失败（`extra="forbid"`），但只校验当前进程加载的命名空间；改配置后请用 `compileall` 和服务启动验证。
 - `load_settings` 必须先于那些在 import 阶段调用 `get_settings()` 的模块执行；沿用 `api/service.py` 中已有的入口顺序。
 - 不要手工编辑 `uv.lock`；使用 `uv add` / `uv lock`。lock 变更后必须重建模型共享基座镜像。

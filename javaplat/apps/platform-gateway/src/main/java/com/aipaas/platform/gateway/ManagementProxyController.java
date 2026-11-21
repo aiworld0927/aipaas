@@ -54,7 +54,7 @@ public class ManagementProxyController {
     }
 
     @RequestMapping("/api/v1/**")
-    public ResponseEntity<StreamingResponseBody> proxy(HttpServletRequest request) {
+    public ResponseEntity<?> proxy(HttpServletRequest request) {
         HttpResponse<InputStream> upstream;
         try {
             upstream = client.send(upstreamRequest(request), HttpResponse.BodyHandlers.ofInputStream());
@@ -75,18 +75,29 @@ public class ManagementProxyController {
         });
         headers.remove(HttpHeaders.CONTENT_LENGTH);
         headers.set(TraceContext.TRACE_HEADER, TraceContext.current());
-        if (upstream.headers().firstValue(HttpHeaders.CONTENT_TYPE)
-                .filter(value -> value.startsWith(MediaType.TEXT_EVENT_STREAM_VALUE)).isPresent()) {
+        boolean sse = upstream.headers().firstValue(HttpHeaders.CONTENT_TYPE)
+                .filter(value -> value.startsWith(MediaType.TEXT_EVENT_STREAM_VALUE)).isPresent();
+        if (sse) {
             headers.set(HttpHeaders.CACHE_CONTROL, "no-cache");
             headers.set("X-Accel-Buffering", "no");
+            StreamingResponseBody body = output -> {
+                try (InputStream input = upstream.body()) {
+                    input.transferTo(output);
+                    output.flush();
+                }
+            };
+            return ResponseEntity.status(upstream.statusCode()).headers(headers).body(body);
         }
-        StreamingResponseBody body = output -> {
-            try (InputStream input = upstream.body()) {
-                input.transferTo(output);
-                output.flush();
-            }
-        };
-        return ResponseEntity.status(upstream.statusCode()).headers(headers).body(body);
+
+        // 普通 JSON 响应同步缓冲后返回：避免异步流式写出在部分连接上产生空响应体。
+        byte[] payload;
+        try (InputStream input = upstream.body()) {
+            payload = input.readAllBytes();
+        } catch (IOException ex) {
+            throw new ApiException(ErrorCodes.SYS_DEPENDENCY_UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE,
+                    "管理服务响应读取失败");
+        }
+        return ResponseEntity.status(upstream.statusCode()).headers(headers).body(payload);
     }
 
     private HttpRequest upstreamRequest(HttpServletRequest request) {

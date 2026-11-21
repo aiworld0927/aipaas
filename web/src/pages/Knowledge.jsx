@@ -10,6 +10,10 @@ import {
   initDocumentUpload,
   uploadDocumentPart,
   completeDocumentUpload,
+  listDocumentGrants,
+  replaceDocumentGrants,
+  listUsers,
+  listRoles,
 } from '../api/p0Client.js';
 import { sha256File } from '../utils/sha256.js';
 
@@ -63,6 +67,7 @@ export default function Knowledge() {
   const [saving, setSaving] = useState(false);
   const [uploads, setUploads] = useState([]);
   const [dragOver, setDragOver] = useState(false);
+  const [grantDoc, setGrantDoc] = useState(null);
   const fileRef = useRef(null);
 
   const selected = kbs.find((item) => item.id === selectedId) || null;
@@ -427,7 +432,11 @@ export default function Knowledge() {
                             </div>
                           </td>
                           <td>{doc.createdAt ? new Date(doc.createdAt).toLocaleString('zh-CN') : '-'}</td>
-                          <td><button className="kb-link kb-danger" onClick={() => removeDoc(doc)}>删除</button></td>
+                          <td>
+                            <button className="kb-link" onClick={() => setGrantDoc(doc)}>权限</button>
+                            <span style={{ margin: '0 8px', color: 'var(--border)' }}>|</span>
+                            <button className="kb-link kb-danger" onClick={() => removeDoc(doc)}>删除</button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -494,6 +503,18 @@ export default function Knowledge() {
             </div>
           </form>
         </div>
+      )}
+
+      {grantDoc && (
+        <DocumentGrantModal
+          doc={grantDoc}
+          onClose={() => setGrantDoc(null)}
+          onSaved={() => {
+            setGrantDoc(null);
+            setNotice('文档权限已更新');
+            setTimeout(() => setNotice(''), 2600);
+          }}
+        />
       )}
 
       <style>{`
@@ -570,6 +591,150 @@ export default function Knowledge() {
           .kb-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
       `}</style>
+    </div>
+  );
+}
+
+/** 文档级 ACL：按用户/角色授予 READ 或 WRITE；留空表示沿用知识库级授权。 */
+function DocumentGrantModal({ doc, onClose, onSaved }) {
+  const [rows, setRows] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      listDocumentGrants(doc.id),
+      listUsers({ page: 1, pageSize: 100 }),
+      listRoles({ page: 1, pageSize: 100 }),
+    ])
+      .then(([grantData, userData, roleData]) => {
+        if (cancelled) return;
+        setRows((grantData.items || []).map((item) => ({
+          subjectType: item.subjectType,
+          subjectId: item.subjectId,
+          permission: item.permission,
+        })));
+        setUsers(userData.items || []);
+        setRoles(roleData.items || []);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(describe(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [doc.id]);
+
+  const update = (index, patch) =>
+    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+
+  const addRow = () => {
+    const firstUser = users[0];
+    setRows((prev) => [...prev, {
+      subjectType: 'USER',
+      subjectId: firstUser ? firstUser.id : '',
+      permission: 'READ',
+    }]);
+  };
+
+  const save = async (event) => {
+    event.preventDefault();
+    if (saving) return;
+    const invalid = rows.find((row) => !row.subjectId);
+    if (invalid) {
+      setError('请为每条授权选择用户或角色');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await replaceDocumentGrants(doc.id, rows.map((row) => ({
+        subjectType: row.subjectType,
+        subjectId: row.subjectId,
+        permission: row.permission,
+      })));
+      onSaved();
+    } catch (err) {
+      setError(describe(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="kb-mask" onClick={() => !saving && onClose()}>
+      <form className="kb-modal" onClick={(event) => event.stopPropagation()} onSubmit={save}>
+        <h3>文档权限 · {doc.fileName}</h3>
+        <div className="kb-muted">
+          未配置任何授权时，沿用知识库级授权；一旦配置，仅列表中的用户/角色（及文档上传者、平台管理员）可访问。
+        </div>
+
+        {rows.length === 0 && !loading && (
+          <div className="kb-empty">当前未配置文档级授权</div>
+        )}
+
+        {rows.map((row, index) => {
+          const options = row.subjectType === 'USER' ? users : roles;
+          return (
+            <div key={index} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                className="input"
+                value={row.subjectType}
+                onChange={(event) => {
+                  const type = event.target.value;
+                  const list = type === 'USER' ? users : roles;
+                  update(index, { subjectType: type, subjectId: list[0] ? list[0].id : '' });
+                }}
+              >
+                <option value="USER">用户</option>
+                <option value="ROLE">角色</option>
+              </select>
+              <select
+                className="input"
+                value={row.subjectId}
+                onChange={(event) => update(index, { subjectId: event.target.value })}
+              >
+                <option value="">请选择</option>
+                {options.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {row.subjectType === 'USER'
+                      ? `${item.displayName || item.username}（${item.username}）`
+                      : `${item.name}（${item.code}）`}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="input"
+                value={row.permission}
+                onChange={(event) => update(index, { permission: event.target.value })}
+              >
+                <option value="READ">只读</option>
+                <option value="WRITE">读写</option>
+              </select>
+              <button type="button" className="btn kb-danger" onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}>
+                移除
+              </button>
+            </div>
+          );
+        })}
+
+        {loading && <div className="kb-muted">加载中…</div>}
+        {error && <div className="kb-banner kb-banner-error" style={{ marginBottom: 0 }}>{error}</div>}
+
+        <div className="kb-modal-actions">
+          <button type="button" className="btn" onClick={addRow} disabled={saving}>添加授权</button>
+          <span style={{ flex: 1 }} />
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>取消</button>
+          <button type="submit" className="btn btn-primary" disabled={saving || loading}>
+            {saving ? '保存中…' : '保存'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

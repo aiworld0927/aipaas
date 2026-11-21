@@ -2,7 +2,7 @@
 
 AIPaaS 的 Python AI 服务工程，采用 **uv workspace monorepo** 管理：多个可独立部署的业务应用与分层共享包共用同一份锁文件、同一个虚拟环境 `pymodules/.venv`。
 
-> 当前 P0 已新增 `packages/pipeline`、`packages/retrieval` 的金融标准检索能力和 `packages/generation`；`apps/rag-ai-api` 为独立契约骨架。下文迁移记录保留历史状态，模块成员以 `pyproject.toml` 为准，跨语言集成边界以[总架构说明](../docs/03_架构说明.md)为准。
+> 当前 P0 已新增 `packages/pipeline`、`packages/retrieval` 的金融标准检索能力和 `packages/generation`；`apps` 下可部署模块为 `ingest-worker`（svc-ingest）、`query-worker`（svc-query）与 `model-*-worker`。下文迁移记录保留历史状态，模块成员以 `pyproject.toml` 为准，跨语言集成边界以[总架构说明](../docs/03_架构说明.md)为准。
 
 本文档是**总文档**，负责说明工程总体情况与公共包；每个可独立部署的模块拆分为独立文档，详见下方导航。
 
@@ -22,7 +22,6 @@ AIPaaS 的 Python AI 服务工程，采用 **uv workspace monorepo** 管理：�
 
 | 服务 | 目录 | workspace 成员 | 端口 | 职责 |
 | --- | --- | --- | --- | --- |
-| P0 契约骨架 | `apps/rag-ai-api` | 否（独立轻量服务） | 8100 | 健康检查、指标和系统信息；其他 P0 业务路由返回 501 |
 | 文档导入 | `apps/ingest-worker` | 是（`svc-ingest`） | 8001 | 文件上传、解析、切分、商品名识别、向量化、入库（LangGraph 编排） |
 | 知识库查询 | `apps/query-worker` | 是（`svc-query`） | 8002 | 商品名确认、检索、RRF、重排、答案生成、SSE 流式输出 |
 | 嵌入模型 | `apps/model-embedding-worker` | 是 | 8003 | BGE-M3 / 在线 Embedding 独立推理服务（dense + sparse） |

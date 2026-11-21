@@ -29,14 +29,13 @@
 | `pymodules/apps/query-worker` | Python 3.12 / FastAPI | 向量检索、权限过滤、生成、引用、拒答和 SSE；默认 8002 |
 | `pymodules/apps/model-embedding-worker` | Python 3.12 / torch | BGE-M3（或在线 Embedding）独立推理，dense + sparse；默认 8003 |
 | `pymodules/apps/model-reranker-worker` | Python 3.12 / torch | bge-reranker-large（或 DashScope TextReRank）独立推理；默认 8004 |
-| `pymodules/apps/rag-ai-api` | FastAPI | P0 容器契约骨架；健康检查与系统信息，业务路由返回 501 |
 | `pymodules/packages` | uv workspace | `pipeline`、`retrieval`、`generation` 等可复用 AI 业务包 |
-| `web` | React 18 / Vite / Nginx | 对话、导入、知识库、导出和个人中心；登录页当前仍为演示模式 |
+| `web` | React 18 / Vite / Nginx | 对话、导入、知识库、导出和个人中心；登录接入平台统一认证 |
 | `aipaas-contracts` | OpenAPI 3.1 | P0 契约唯一权威来源，附零依赖 Mock 和校验脚本 |
 | `deploy/docker` | Docker Compose | P0 交付骨架与开发全量两套编排，含 Prometheus/Grafana/Alertmanager |
 | `docs` | Markdown | 架构、部署、解析、质量、安全、验收和上线材料 |
 
-> 状态说明：P0 已有可复现验收材料，但 P0 Compose 中的 `rag-ai-api` 仍是骨架，真实 AI 能力位于 `ingest-worker`、`query-worker` 和共享包。不要把“契约冻结”“容器健康”或“离线 Stub 验收”理解为真实模型生产链路已经全部接通，详见[架构说明的集成边界](docs/02_架构设计/01_系统架构说明.md#81-p0-compose契约与平台交付骨架)。
+> 状态说明：P0 已有可复现验收材料，真实 AI 能力位于 `ingest-worker`（导入/解析/入库）、`query-worker`（检索/生成/SSE）及共享包，经 `platform-gateway` 统一对外暴露，Web 前端经 `nginx /api/` 代理到网关调用。不要把“契约冻结”或“容器健康”单独理解为真实模型生产链路已接通，详见[架构说明的集成边界](docs/02_架构设计/01_系统架构说明.md#81-p0-compose契约与平台交付骨架)。
 
 ## 快速开始
 
@@ -97,7 +96,7 @@ aipaas/
 ├── aipaas-contracts/          # OpenAPI、Mock、契约校验与版本策略
 ├── javaplat/                  # Java 21 Maven 多模块：platform-gateway + platform-management + common
 ├── pymodules/                 # Python uv workspace：apps + packages + tests
-│   ├── apps/                  # ingest/query/model/rag-ai-api
+│   ├── apps/                  # ingest/query/model
 │   ├── packages/              # pipeline/retrieval/generation/common 等
 │   └── scripts/acceptance/    # 可复现 P0 验收脚本
 ├── web/                       # React + Vite 前端与 Nginx 镜像

@@ -101,7 +101,7 @@ def upload(token, kb_id, filename, content, standard_no=None):
 
 def wait_ready():
     required = ["p0-platform-management", "p0-platform-gateway", "p0-web", "p0-postgres",
-                "p0-minio", "p0-rag-ai-api"]
+                "p0-minio"]
     for _ in range(90):
         states = []
         for name in required:
@@ -284,7 +284,7 @@ def main():
     check("集中密钥环权限为 0600", key_mode == "600")
     check("Java/Python 业务端口不暴露宿主机",
           all(subprocess.check_output(["docker", "port", name], text=True).strip() == ""
-              for name in ("p0-platform-management", "p0-platform-gateway", "p0-rag-ai-api")))
+              for name in ("p0-platform-management", "p0-platform-gateway")))
 
     expect(api("POST", "/api/v1/auth/logout", uploader), 200)
     expect(api("GET", "/api/v1/auth/me", uploader), 401)

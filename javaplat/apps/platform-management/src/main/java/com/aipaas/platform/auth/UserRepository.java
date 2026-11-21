@@ -105,6 +105,18 @@ public class UserRepository {
                 account.passwordHash(), account.status(), account.authVersion(), account.createdAt(), account.updatedAt());
     }
 
+    public boolean tenantEnabled(String tenantId) {
+        List<String> statuses = jdbc.queryForList("select status from tenants where id=?", String.class, tenantId);
+        // 迁移前或未登记租户按启用处理，避免影响既有账号。
+        return statuses.isEmpty() || "ACTIVE".equals(statuses.get(0));
+    }
+
+    public boolean roleExists(String tenantId, String roleCode) {
+        Integer count = jdbc.queryForObject("select count(*) from sec_roles where tenant_id=? and code=?",
+                Integer.class, tenantId, roleCode);
+        return count != null && count > 0;
+    }
+
     public void assignRole(String tenantId, String userId, String roleCode) {
         List<String> ids = jdbc.query("select id from sec_roles where tenant_id=? and code=?",
                 (rs, n) -> rs.getString(1), tenantId, roleCode);
@@ -147,6 +159,16 @@ public class UserRepository {
         if (!"LOCKED".equals(status)) {
             jdbc.update("update sec_users set failed_attempts=0 where id=?", userId);
         }
+    }
+
+    public void updateProfileFields(String userId, String displayName, String emailCiphertext) {
+        jdbc.update("update sec_users set display_name=?, email_ciphertext=?, updated_at=? where id=?",
+                displayName, emailCiphertext, now(), userId);
+    }
+
+    public void updatePasswordHash(String userId, String passwordHash) {
+        jdbc.update("update sec_users set password_hash=?, auth_version=auth_version+1, updated_at=? where id=?",
+                passwordHash, now(), userId);
     }
 
     public void replaceRoles(String tenantId, String userId, List<String> roleCodes) {

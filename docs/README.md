@@ -60,6 +60,7 @@ docs/
 | [08_P0_API契约评审.md](02_架构设计/08_P0_API契约评审.md) | P0 OpenAPI 契约评审记录 |
 | [09_P0骨架运行手册.md](02_架构设计/09_P0骨架运行手册.md) | Step 0 历史骨架状态（当前端口与集成边界以系统架构说明为准） |
 | [10_架构图解.pptx](02_架构设计/10_架构图解.pptx) | 17 页架构图解演示：四层分层、应用清单与依赖、六类存储与数据流、五级编排与拓扑、技术栈与选型、四条调用链路、八条硬约束 |
+| [11_多租户会话与权限体系.md](02_架构设计/11_多租户会话与权限体系.md) | 2026-11 增量：对话管理、个人中心、注册登录、多租户、角色授权与文档 ACL 的前后端 + V10 数据库完整实现与验证 |
 
 ## 03_运维验收
 
@@ -118,7 +119,7 @@ docs/
 | Java 已拆分为 platform-gateway + platform-management | `javaplat/pom.xml` |
 | gateway multipart.enabled=false 流式转发 | `javaplat/apps/platform-gateway/src/main/resources/application.yml` |
 | query 链路直达 svc-query（不经过 management） | `javaplat/apps/platform-gateway/.../ChatController.java` |
-| PostgreSQL Flyway V1~V9 迁移 | `javaplat/apps/platform-management/src/main/resources/db/migration/` |
+| PostgreSQL Flyway V1~V10 迁移 | `javaplat/apps/platform-management/src/main/resources/db/migration/` |
 | SSE 流式问答（event: delta/citation/done） | `pymodules/apps/query-worker/query_worker/api/routers/stream.py` |
 | Milvus HNSW + BGE-M3 | `pymodules/packages/pipeline/vector_index.py` |
 | MinIO 对象存储 + AES-GCM 加密 | `deploy/docker/docker-compose-java.yaml` |
@@ -128,13 +129,13 @@ docs/
 | 统一响应信封 {code, message, data, traceId} | `aipaas-contracts/README.md` |
 | 幂等键（Idempotency-Key，24h） | `aipaas-contracts/README.md` |
 | 契约校验 + 可运行 mock | `aipaas-contracts/mock/server.py` |
-| SSO MFA / 多租户（tenant_id 字段在表结构内但无管理界面） | V1__security_baseline.sql |
+| 多租户管理（台账 + tenant_id 隔离 + 停用管控）、会话持久化、文档级 ACL | V10__tenants_conversations_document_grants.sql + [11_多租户会话与权限体系](02_架构设计/11_多租户会话与权限体系.md) |
+| 开放注册、个人中心（资料/改密/对话偏好） | `auth/AuthService.java` + `web/src/pages/Register.jsx`、`UserCenter.jsx` |
 
 ### 规划中、骨架中
 
 | 项 | 说明 |
 | --- | --- |
-| rag-ai-api 的 501 契约占位路由 | `pymodules/apps/rag-ai-api/rag_ai_api/main.py` — 除 /healthz、/readyz、/api/v1/system/info 外统一返回 501 + SYS.NOT_IMPLEMENTED |
 | svc-model-reranker 的开发全量链路 | 仅在 docker-compose-models.yaml 中启动，P0 chat 链路未直接调用 |
 | BM25 关键词召回 | P1 规划 |
 | Cross-Encoder 重排 | P1 规划 |
@@ -143,7 +144,6 @@ docs/
 | RocketMQ | profile: rocketmq，默认不启动 |
 | Nacos 注册中心 | profile: nacos，默认不启动 |
 | vLLM 本地推理 | profile: vllm，需 GPU |
-| 多租户管理界面 | 表结构已包含 tenant_id 但无管理端点 |
 | 分布式追踪系统 | TraceId 贯通链路，但依赖 Prometheus/本地 Span，未接 OpenTelemetry Collector |
 | 完整 SSO / MFA | 表结构预留 sec_refresh_tokens，但 OAuth/OIDC 未接入 |
 
@@ -160,7 +160,7 @@ docs/
 | `pymodules/packages/*/pyproject.toml` | 各 Python 共享库 |
 | `javaplat/pom.xml` | Java Maven 多模块根（libs/common、apps/gateway、apps/management） |
 | `javaplat/apps/*/src/main/resources/application.yml` | Java 服务运行时配置 |
-| `javaplat/apps/platform-management/src/main/resources/db/migration/` | Flyway V1~V9 迁移（PostgreSQL schema 权威） |
+| `javaplat/apps/platform-management/src/main/resources/db/migration/` | Flyway V1~V10 迁移（PostgreSQL schema 权威） |
 | `deploy/docker/docker-compose.yaml` | 五级编排顶层（frontend 第 5 级） |
 | `deploy/docker/docker-compose-java.yaml` | Java 编排（第 4 级） |
 | `deploy/docker/docker-compose-python.yaml` | Python 编排（第 3 级） |

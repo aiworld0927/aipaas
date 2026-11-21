@@ -1,7 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { getUser, logout } from '../utils/auth.js';
-import { listSessions, createSession, deleteSession, touchSession } from '../utils/sessions.js';
+import { getUser, logout, hasAdminAccess } from '../utils/auth.js';
+import { listSessions, createSession, deleteSession } from '../utils/sessions.js';
+import {
+  listConversations,
+  createConversation,
+  renameConversation,
+  deleteConversation,
+} from '../api/p0Client.js';
 
 /**
  * 统一业务布局：顶部导航栏 + 左侧对话历史侧边栏 + 内容区
@@ -12,9 +18,11 @@ export const SessionContext = { current: null };
 export default function AppLayout() {
   const navigate = useNavigate();
   const user = getUser() || {};
-  const [sessions, setSessions] = useState(() => listSessions());
+  const [sessions, setSessions] = useState([]);
+  const [search, setSearch] = useState('');
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [renaming, setRenaming] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
-  const sessionApiRef = useRef(null);
 
   // 窗口过窄时自动收起侧边栏
   useEffect(() => {
@@ -24,30 +32,81 @@ export default function AppLayout() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const refreshSessions = () => setSessions(listSessions());
+  /** 服务端会话列表；接口不可用时回退到本地缓存，保证离线可用。 */
+  const loadSessions = useCallback(async (keyword) => {
+    try {
+      const data = await listConversations({ keyword: keyword || undefined });
+      setSessions(data.items || []);
+    } catch {
+      setSessions(listSessions());
+    } finally {
+      setSessionLoading(false);
+    }
+  }, []);
 
-  const handleNewChat = () => {
-    const s = createSession();
-    refreshSessions();
-    navigate(`/chat/${s.id}`);
+  useEffect(() => {
+    const timer = setTimeout(() => loadSessions(search), 220);
+    return () => clearTimeout(timer);
+  }, [search, loadSessions]);
+
+  const refreshSessions = () => loadSessions(search);
+
+  const handleNewChat = async () => {
+    try {
+      const created = await createConversation({ title: '新对话' });
+      setSessions((prev) => [created, ...prev]);
+      navigate(`/chat/${created.id}`);
+    } catch {
+      const local = createSession();
+      setSessions(listSessions());
+      navigate(`/chat/${local.id}`);
+    }
   };
 
-  const handleDelete = (e, id) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const startRename = (event, session) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setRenaming({ id: session.id, title: session.title || '' });
+  };
+
+  const commitRename = async () => {
+    const draft = renaming;
+    setRenaming(null);
+    const title = draft?.title?.trim();
+    if (!draft || !title) return;
+    const original = sessions.find((item) => item.id === draft.id)?.title;
+    if (title === original) return;
+    try {
+      const updated = await renameConversation(draft.id, title);
+      setSessions((prev) => prev.map((item) => (item.id === draft.id ? { ...item, ...updated } : item)));
+    } catch {
+      /* 本地会话或网络异常时保持原标题 */
+    }
+  };
+
+  const handleDelete = async (event, id) => {
+    event.preventDefault();
+    event.stopPropagation();
     if (!window.confirm('确定删除该对话吗？将同时清空服务端历史记录。')) return;
+    try {
+      await deleteConversation(id);
+    } catch {
+      /* 本地会话删除走下方缓存清理 */
+    }
     deleteSession(id);
-    // 后端接口就绪后此处应调用 clearHistory(id)
-    refreshSessions();
+    setSessions((prev) => prev.filter((item) => item.id !== id));
     if (location.pathname === `/chat/${id}`) navigate('/chat');
   };
 
   const sessionApi = {
     sessions,
+    search,
+    setSearch,
+    sessionLoading,
     refreshSessions,
-    touchSession,
     handleNewChat,
-    registerChat: (fn) => { sessionApiRef.current = fn; },
+    createConversation,
+    renameConversation,
   };
   SessionContext.current = sessionApi;
 
@@ -68,26 +127,70 @@ export default function AppLayout() {
             <span className="icon-plus">＋</span> 新建对话
           </button>
 
+          <div className="sidebar-search">
+            <input
+              className="input"
+              placeholder="搜索历史对话…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
           <div className="sidebar-label">对话历史</div>
           <nav className="sidebar-list">
-            {sessions.length === 0 && <div className="sidebar-empty">暂无历史对话</div>}
-            {sessions.map((s) => (
-              <NavLink
-                key={s.id}
-                to={`/chat/${s.id}`}
-                className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
-                title={s.title}
-              >
-                <span className="sidebar-item-title">{s.title}</span>
-                <button className="sidebar-item-del" title="删除对话" onClick={(e) => handleDelete(e, s.id)}>
-                  ✕
-                </button>
-              </NavLink>
-            ))}
+            {sessionLoading && sessions.length === 0 && <div className="sidebar-empty">加载中…</div>}
+            {!sessionLoading && sessions.length === 0 && (
+              <div className="sidebar-empty">{search ? '未找到匹配的对话' : '暂无历史对话'}</div>
+            )}
+            {sessions.map((s) =>
+              renaming?.id === s.id ? (
+                <div key={s.id} className="sidebar-item editing">
+                  <input
+                    className="sidebar-item-input"
+                    autoFocus
+                    maxLength={200}
+                    value={renaming.title}
+                    onChange={(event) => setRenaming({ ...renaming, title: event.target.value })}
+                    onBlur={commitRename}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        commitRename();
+                      }
+                      if (event.key === 'Escape') setRenaming(null);
+                    }}
+                  />
+                </div>
+              ) : (
+                <NavLink
+                  key={s.id}
+                  to={`/chat/${s.id}`}
+                  className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+                  title={s.title}
+                >
+                  <span className="sidebar-item-title">{s.title}</span>
+                  <button className="sidebar-item-ren" title="重命名" onClick={(e) => startRename(e, s)}>
+                    ✎
+                  </button>
+                  <button className="sidebar-item-del" title="删除对话" onClick={(e) => handleDelete(e, s.id)}>
+                    ✕
+                  </button>
+                </NavLink>
+              ),
+            )}
           </nav>
 
-          {/* ===== 底部：文件导入入口 ===== */}
+          {/* ===== 底部：功能入口 ===== */}
           <div className="sidebar-footer">
+            {hasAdminAccess(user) && (
+              <NavLink to="/admin" className="sidebar-foot-link" title="系统管理">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 3.5 14.4 6l3.3-.4.6 3.3 3 1.6-1.5 3 1.5 3-3 1.6-.6 3.3-3.3-.4L12 20.5 9.6 18l-3.3.4-.6-3.3-3-1.6 1.5-3-1.5-3 3-1.6.6-3.3L9.6 6 12 3.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                  <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.6"/>
+                </svg>
+                系统管理
+              </NavLink>
+            )}
             <NavLink to="/knowledge" className="sidebar-foot-link" title="知识库管理">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16.5A1.5 1.5 0 0 0 18.5 21H6.5A2.5 2.5 0 0 1 4 18.5V5.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
@@ -186,6 +289,8 @@ export default function AppLayout() {
           transition: all .2s;
         }
         .sidebar-new:hover { background: rgba(61,123,255,.06); box-shadow: 0 6px 16px rgba(61,123,255,.14); }
+        .sidebar-search { padding: 0 14px 4px; }
+        .sidebar-search .input { width: 100%; padding: 9px 12px; font-size: 13px; }
         .icon-plus { font-size: 16px; line-height: 1; }
         .sidebar-label {
           padding: 10px 20px 6px; font-size: 12px; color: var(--muted); font-weight: 600;
@@ -200,17 +305,24 @@ export default function AppLayout() {
         }
         .sidebar-item:hover { background: rgba(61,123,255,.08); }
         .sidebar-item.active { background: rgba(61,123,255,.12); color: var(--brand); font-weight: 600; }
+        .sidebar-item.editing { padding: 4px 8px; }
+        .sidebar-item-input {
+          width: 100%; border: 1px solid var(--brand); border-radius: 9px;
+          padding: 7px 10px; font-size: 13px; outline: none;
+          box-shadow: 0 0 0 3px rgba(61,123,255,.12);
+        }
         .sidebar-item-title {
           flex: 1; min-width: 0;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .sidebar-item-del {
+        .sidebar-item-del, .sidebar-item-ren {
           flex: 0 0 auto; width: 20px; height: 20px;
           border: none; background: transparent; color: var(--muted);
-          border-radius: 6px; font-size: 10px; cursor: pointer;
+          border-radius: 6px; font-size: 11px; cursor: pointer;
           opacity: 0; transition: all .15s;
         }
-        .sidebar-item:hover .sidebar-item-del { opacity: 1; }
+        .sidebar-item:hover .sidebar-item-del, .sidebar-item:hover .sidebar-item-ren { opacity: 1; }
+        .sidebar-item-ren:hover { color: var(--brand); background: rgba(61,123,255,.1); }
         .sidebar-item-del:hover { color: var(--danger); background: rgba(220,38,38,.1); }
 
         .sidebar-footer {

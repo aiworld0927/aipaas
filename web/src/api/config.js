@@ -1,10 +1,8 @@
 /**
  * API 地址配置
- * 开发环境走 Vite 代理（见 vite.config.js），生产环境通过 .env 配置
+ * 前端统一经 platform-gateway 调用：开发走 Vite 代理 /api，生产走 nginx /api/ 反代。
+ * 不再直连 svc-query / svc-ingest（旧的 /query-api、/import-api 旁路已下线）。
  */
-export const QUERY_API_BASE = import.meta.env.VITE_QUERY_API_BASE || '/query-api';
-export const IMPORT_API_BASE = import.meta.env.VITE_IMPORT_API_BASE || '/import-api';
-
 /**
  * P0 契约网关入口（BasePath /api/v1 已包含在 p0Client 的路径拼装里）
  * - 开发：Vite 代理 /api → 127.0.0.1:8081（platform-gateway 统一网关）

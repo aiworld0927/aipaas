@@ -93,8 +93,8 @@ class ManagementProxyControllerTest {
         request.addHeader("Connection", "keep-alive");
         request.setAttribute(GatewayJwtAuthenticationFilter.KB_IDS_ATTRIBUTE, List.of("kb-1", "kb-2"));
 
-        ResponseEntity<StreamingResponseBody> response = controller.proxy(request);
-        String body = drain(response.getBody());
+        ResponseEntity<?> response = controller.proxy(request);
+        String body = new String((byte[]) response.getBody(), java.nio.charset.StandardCharsets.UTF_8);
 
         assertEquals(200, response.getStatusCode().value());
         assertTrue(body.contains("\"OK\""));
@@ -116,8 +116,8 @@ class ManagementProxyControllerTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/traces/stream");
         request.setRequestURI("/api/v1/traces/stream");
 
-        ResponseEntity<StreamingResponseBody> response = controller.proxy(request);
-        String body = drain(response.getBody());
+        ResponseEntity<?> response = controller.proxy(request);
+        String body = drain((StreamingResponseBody) response.getBody());
 
         assertEquals(200, response.getStatusCode().value());
         assertTrue(body.contains("data:"));

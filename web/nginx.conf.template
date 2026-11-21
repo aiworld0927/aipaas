@@ -47,28 +47,6 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    location /query-api/ {
-        set $query_upstream ${QUERY_API_UPSTREAM};
-        rewrite ^/query-api/(.*)$ /$1 break;
-        proxy_pass $query_upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Host $proxy_host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-
-    location /import-api/ {
-        set $import_upstream ${IMPORT_API_UPSTREAM};
-        rewrite ^/import-api/(.*)$ /$1 break;
-        proxy_pass $import_upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Host $proxy_host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-
     location /api/ {
         set $platform_upstream ${PLATFORM_API_UPSTREAM};
         proxy_pass $platform_upstream;

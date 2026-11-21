@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
-import { chat, chatStream, newIdempotencyKey } from '../api/p0Client.js';
-import { createSession, touchSession } from '../utils/sessions.js';
+import {
+  chat,
+  chatStream,
+  newIdempotencyKey,
+  listConversationMessages,
+  clearConversationMessages,
+  appendConversationMessage,
+} from '../api/p0Client.js';
+import { createSession } from '../utils/sessions.js';
+import { getStreamPref, setStreamPref } from '../utils/prefs.js';
 import MarkdownView from '../components/MarkdownView.jsx';
 import CitationCard, { CitationDrawer } from '../components/CitationCard.jsx';
 import CapabilityBar, { defaultCapability } from '../components/CapabilityBar.jsx';
@@ -46,20 +54,23 @@ export default function Chat() {
   const { sessionId: routeSessionId } = useParams();
   const navigate = useNavigate();
   const outlet = useOutletContext() || {};
-  const { refreshSessions } = outlet;
+  const { sessions = [], refreshSessions, createConversation, renameConversation } = outlet;
 
   const [sessionId, setSessionId] = useState(routeSessionId || '');
   const [messages, setMessages] = useState([WELCOME]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [streamMode, setStreamMode] = useState(true);
+  const [streamMode, setStreamMode] = useState(getStreamPref);
   const [capability, setCapability] = useState(defaultCapability());
   const [selectedCitation, setSelectedCitation] = useState(null);
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
 
   const chatRef = useRef(null);
   const sessionIdRef = useRef(sessionId);
   const abortRef = useRef(null);
   const pendingResolveRef = useRef(null);
+  const loadedSessionRef = useRef('');
   sessionIdRef.current = sessionId;
 
   const scrollToBottom = useCallback(() => {
@@ -72,6 +83,41 @@ export default function Chat() {
 
   useEffect(() => {
     setSessionId(routeSessionId || '');
+  }, [routeSessionId]);
+
+  // 打开历史对话时从服务端加载消息；接口异常（本地兜底会话）保持初始欢迎语。
+  useEffect(() => {
+    let cancelled = false;
+    if (!routeSessionId) {
+      loadedSessionRef.current = '';
+      setMessages([WELCOME]);
+      return () => { cancelled = true; };
+    }
+    // 新会话发送时已由本地写入气泡，避免跳转路由后重新拉取空历史覆盖当前对话。
+    if (loadedSessionRef.current === routeSessionId) {
+      return () => { cancelled = true; };
+    }
+    loadedSessionRef.current = routeSessionId;
+    listConversationMessages(routeSessionId)
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        if (!items.length) {
+          setMessages([WELCOME]);
+          return;
+        }
+        const restored = items.map((item) => {
+          const base = makeMessage(item.role === 'user' ? 'user' : 'bot', item.content);
+          if (item.createdAt) base.ts = new Date(item.createdAt).getTime();
+          base.citations = Array.isArray(item.citations) ? item.citations : [];
+          return base;
+        });
+        setMessages([WELCOME, ...restored]);
+      })
+      .catch(() => {
+        if (!cancelled) setMessages([WELCOME]);
+      });
+    return () => { cancelled = true; };
   }, [routeSessionId]);
 
   const patchMessage = useCallback((id, patch) => {
@@ -89,6 +135,7 @@ export default function Chat() {
       let answerId = '';
       let attempt = 0;
       let settled = false;
+      let collected = '';
       const started = performance.now();
       pendingResolveRef.current = resolve;
 
@@ -102,7 +149,7 @@ export default function Chat() {
           ...patch,
         });
         setSending(false);
-        resolve();
+        resolve(patch);
       };
 
       const connect = () => {
@@ -115,6 +162,7 @@ export default function Chat() {
               const incoming = data.answerId || '';
               if (incoming && answerId && incoming !== answerId) {
                 // 服务端缓冲已过期，重新生成：重置本气泡，避免内容拼接错乱。
+                collected = '';
                 patchMessage(botId, { text: '', citations: [] });
               }
               if (incoming) answerId = incoming;
@@ -127,6 +175,7 @@ export default function Chat() {
               return;
             }
             if (event === 'delta' && typeof data.delta === 'string') {
+              collected += data.delta;
               const firstTokenMs =
                 data.timings?.firstTokenMs ?? Math.round(performance.now() - started);
               patchById(botId, (item) => ({
@@ -151,7 +200,7 @@ export default function Chat() {
                 error: '',
               };
               // done.content 为服务端后处理后的最终正文，覆盖流式预览以保证二者一致。
-              if (finalText !== undefined) patch.text = finalText;
+              patch.text = finalText !== undefined ? finalText : collected;
               finish(patch);
               return;
             }
@@ -183,7 +232,6 @@ export default function Chat() {
             setTimeout(connect, 400 * attempt);
           },
         });
-        return startedAt;
       };
 
       connect();
@@ -193,8 +241,7 @@ export default function Chat() {
     const started = performance.now();
     try {
       const data = await chat(body, idempotencyKey);
-      patchMessage(botId, {
-        streaming: false,
+      const result = {
         text: data.content ?? data.answer ?? '',
         citations: data.citations || [],
         refused: Boolean(data.refused),
@@ -206,9 +253,12 @@ export default function Chat() {
         traceId: data.traceId || '',
         answerId: data.answerId || '',
         elapsedMs: Math.round(performance.now() - started),
-      });
+      };
+      patchMessage(botId, { streaming: false, ...result });
+      return result;
     } catch (err) {
       patchMessage(botId, { streaming: false, error: err?.message || '问答失败' });
+      return null;
     } finally {
       setSending(false);
     }
@@ -220,9 +270,14 @@ export default function Chat() {
 
     let sid = sessionIdRef.current;
     if (!sid) {
-      const created = createSession();
-      sid = created.id;
+      try {
+        const created = await createConversation({ title: text.slice(0, 30) });
+        sid = created.id;
+      } catch {
+        sid = createSession().id;
+      }
       setSessionId(sid);
+      loadedSessionRef.current = sid;
       if (refreshSessions) refreshSessions();
       navigate(`/chat/${sid}`, { replace: true });
     }
@@ -232,7 +287,14 @@ export default function Chat() {
     const userMessage = makeMessage('user', text);
     const botMessage = { ...makeMessage('bot', ''), streaming: true };
     setMessages((prev) => [...prev, userMessage, botMessage]);
-    if (refreshSessions && touchSession(sid, text)) refreshSessions();
+
+    // 首条消息作为对话标题，便于历史检索。
+    if (messages.length <= 1 && renameConversation) {
+      renameConversation(sid, text.slice(0, 30))
+        .then(() => refreshSessions && refreshSessions())
+        .catch(() => {});
+    }
+    appendConversationMessage(sid, { role: 'user', content: text }).catch(() => {});
 
     const body = {
       query: text,
@@ -245,12 +307,21 @@ export default function Chat() {
     const idempotencyKey = newIdempotencyKey();
     const started = performance.now();
 
+    let result;
     if (streamMode) {
       patchMessage(botMessage.id, { startedAt: started });
-      await streamAnswer(botMessage.id, body, idempotencyKey);
+      result = await streamAnswer(botMessage.id, body, idempotencyKey);
     } else {
-      await sendNonStream(botMessage.id, body, idempotencyKey);
+      result = await sendNonStream(botMessage.id, body, idempotencyKey);
     }
+    if (result && result.text) {
+      appendConversationMessage(sid, {
+        role: 'assistant',
+        content: result.text,
+        citations: result.citations || [],
+      }).catch(() => {});
+    }
+    if (refreshSessions) refreshSessions();
   };
 
   const onStop = () => {
@@ -269,9 +340,35 @@ export default function Chat() {
     );
   };
 
-  const onClear = () => {
+  const onClear = async () => {
     if (sending) return;
+    if (!window.confirm('清空当前对话的全部消息？')) return;
+    const sid = sessionIdRef.current;
+    if (sid) {
+      await clearConversationMessages(sid).catch(() => {});
+      if (refreshSessions) refreshSessions();
+    }
     setMessages([WELCOME]);
+  };
+
+  const currentTitle = sessions.find((item) => item.id === sessionId)?.title || '新对话';
+
+  const beginTitleEdit = () => {
+    if (!sessionId) return;
+    setTitleDraft(currentTitle);
+    setTitleEditing(true);
+  };
+
+  const commitTitle = async () => {
+    const title = titleDraft.trim();
+    setTitleEditing(false);
+    if (!sessionId || !title || title === currentTitle) return;
+    try {
+      await renameConversation(sessionId, title);
+      if (refreshSessions) refreshSessions();
+    } catch {
+      /* 本地兜底会话不支持改名 */
+    }
   };
 
   const onInputKey = (event) => {
@@ -289,9 +386,44 @@ export default function Chat() {
   return (
     <div className="chat-page">
       <div className="chat-toolbar">
-        <span className="chat-session-tag">{sessionId ? `会话：${sessionId.slice(0, 12)}…` : '新会话'}</span>
-        <label className="stream-switch" title="输出模式（P1 #403 偏好持久化）">
-          <input type="checkbox" checked={streamMode} onChange={(event) => setStreamMode(event.target.checked)} />
+        <div className="chat-title-wrap">
+          {titleEditing ? (
+            <input
+              className="input chat-title-input"
+              autoFocus
+              value={titleDraft}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitTitle();
+                }
+                if (event.key === 'Escape') setTitleEditing(false);
+              }}
+            />
+          ) : (
+            <>
+              <span className="chat-session-tag" title={currentTitle}>
+                {sessionId ? currentTitle : '新会话'}
+              </span>
+              {sessionId && (
+                <button type="button" className="chat-title-edit" title="重命名对话" onClick={beginTitleEdit}>
+                  ✎
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        <label className="stream-switch" title="输出模式偏好会保存到本地">
+          <input
+            type="checkbox"
+            checked={streamMode}
+            onChange={(event) => {
+              setStreamMode(event.target.checked);
+              setStreamPref(event.target.checked);
+            }}
+          />
           <span className="track"><span className="thumb" /></span>
           {streamMode ? '流式输出' : '完整返回'}
         </label>
@@ -351,6 +483,13 @@ export default function Chat() {
           max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .chat-toolbar .btn-ghost { padding: 7px 12px; font-size: 12px; margin-left: auto; }
+        .chat-title-wrap { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+        .chat-title-edit {
+          border: none; background: transparent; color: var(--muted); cursor: pointer;
+          font-size: 12px; border-radius: 6px; padding: 2px 6px;
+        }
+        .chat-title-edit:hover { color: var(--brand); background: rgba(61,123,255,.1); }
+        .chat-title-input { width: 220px; padding: 6px 10px; font-size: 12px; }
         .stream-switch {
           display: inline-flex; align-items: center; gap: 8px;
           font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;

@@ -10,7 +10,7 @@ groups:
   - name: aipaas-p0-availability
     rules:
       - alert: AipaasServiceDown
-        expr: up{job=~"platform-gateway|platform-management|rag-ai-api"} == 0
+        expr: up{job=~"platform-gateway|platform-management"} == 0
         for: 1m
         labels:
           severity: critical

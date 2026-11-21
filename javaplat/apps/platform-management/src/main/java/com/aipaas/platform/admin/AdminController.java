@@ -38,9 +38,11 @@ public class AdminController {
     public ApiEnvelope<?> listUsers(@RequestParam(defaultValue = "1") int page,
                                     @RequestParam(defaultValue = "20") int pageSize,
                                     @RequestParam(required = false) String keyword,
-                                    @RequestParam(required = false) String status) {
+                                    @RequestParam(required = false) String status,
+                                    @RequestParam(required = false) String tenantId) {
         validatePage(page, pageSize);
-        return ApiEnvelope.ok(admin.listUsers(SecurityPrincipal.current().tenantId(), page, pageSize, keyword, status),
+        SecurityPrincipal principal = SecurityPrincipal.current();
+        return ApiEnvelope.ok(admin.listUsers(resolveTenant(principal, tenantId), page, pageSize, keyword, status),
                 TraceContext.current());
     }
 
@@ -48,8 +50,20 @@ public class AdminController {
     @ResponseStatus(HttpStatus.CREATED)
     @RequirePermission("user:write")
     public ApiEnvelope<?> createUser(@Valid @RequestBody CreateUserRequest request) {
-        return ApiEnvelope.ok(auth.createUser(SecurityPrincipal.current().tenantId(), request.username(),
+        SecurityPrincipal principal = SecurityPrincipal.current();
+        return ApiEnvelope.ok(auth.createUser(resolveTenant(principal, request.tenantId()), request.username(),
                 request.displayName(), request.password(), request.email(), request.roleCodes()), TraceContext.current());
+    }
+
+    /** 跨租户操作需要 tenant:read；未显式指定时使用当前租户。 */
+    private static String resolveTenant(SecurityPrincipal principal, String requested) {
+        if (requested == null || requested.isBlank() || requested.equals(principal.tenantId())) {
+            return principal.tenantId();
+        }
+        if (principal.permissions().contains("*") || principal.permissions().contains("tenant:read")) {
+            return requested;
+        }
+        throw new ApiException(ErrorCodes.PERM_FORBIDDEN, HttpStatus.FORBIDDEN, "无权访问其他租户数据");
     }
 
     @PatchMapping("/users/{userId}")
@@ -90,7 +104,8 @@ public class AdminController {
     public record CreateUserRequest(@Size(min = 3, max = 64) @NotBlank String username,
                                     @NotBlank @Size(max = 64) String displayName,
                                     @NotBlank @Size(min = 8, max = 128) String password,
-                                    @Email String email, @NotNull List<String> roleCodes) {
+                                    @Email String email, @NotNull List<String> roleCodes,
+                                    @Size(max = 64) String tenantId) {
     }
 
     public record UserUpdateRequest(@Size(min = 1, max = 64) String displayName,

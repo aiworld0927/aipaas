@@ -48,16 +48,18 @@ public class DocumentService {
     private final EncryptedObjectStore storage;
     private final IndexCleanupService cleanup;
     private final ApplicationEventPublisher events;
+    private final DocumentGrantService grants;
     private final Path tempDirectory;
 
     public DocumentService(DocumentRepository repository, EncryptionService encryption, EncryptedObjectStore storage,
-                           IndexCleanupService cleanup, ApplicationEventPublisher events,
+                           IndexCleanupService cleanup, ApplicationEventPublisher events, DocumentGrantService grants,
                            @Value("${aipaas.storage.temp-path:/tmp/aipaas-p0/uploads}") String tempDirectory) {
         this.repository = repository;
         this.encryption = encryption;
         this.storage = storage;
         this.cleanup = cleanup;
         this.events = events;
+        this.grants = grants;
         this.tempDirectory = Path.of(tempDirectory).toAbsolutePath().normalize();
     }
 
@@ -304,13 +306,15 @@ public class DocumentService {
 
     /* ------------------------------ 文档管理 ------------------------------ */
 
-    public Map<String, Object> list(String tenantId, String kbId, String status, String keyword, int page, int pageSize) {
+    public Map<String, Object> list(SecurityPrincipal principal, String kbId, String status, String keyword,
+                                    int page, int pageSize) {
         if (page < 1 || pageSize < 1 || pageSize > 100) {
             throw new ApiException(ErrorCodes.PARAM_INVALID, HttpStatus.BAD_REQUEST, "分页参数不合法");
         }
         String normalizedKeyword = keyword == null ? null : keyword.trim().toLowerCase(Locale.ROOT);
-        List<Map<String, Object>> matched = repository.listActive(tenantId, kbId, status).stream()
+        List<Map<String, Object>> matched = repository.listActive(principal.tenantId(), kbId, status).stream()
                 .filter(row -> matches(row, normalizedKeyword))
+                .filter(row -> grants.canAccess(row, principal, "READ"))
                 .map(this::documentResponse)
                 .toList();
         int from = (int) Math.min((long) (page - 1) * pageSize, matched.size());
@@ -318,16 +322,19 @@ public class DocumentService {
         return Map.of("items", matched.subList(from, to), "total", matched.size(), "page", page, "pageSize", pageSize);
     }
 
-    public Map<String, Object> get(String tenantId, String documentId) {
-        return documentResponse(requireDocument(tenantId, documentId));
+    public Map<String, Object> get(SecurityPrincipal principal, String documentId) {
+        DocumentRepository.DocumentRow document = requireDocument(principal.tenantId(), documentId);
+        grants.requireAccess(document, principal, "READ");
+        return documentResponse(document);
     }
 
     @Transactional
-    public Map<String, Object> delete(String tenantId, String documentId) {
-        DocumentRepository.DocumentRow document = requireDocument(tenantId, documentId);
+    public Map<String, Object> delete(SecurityPrincipal principal, String documentId) {
+        DocumentRepository.DocumentRow document = requireDocument(principal.tenantId(), documentId);
+        grants.requireAccess(document, principal, "WRITE");
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        repository.softDelete(tenantId, documentId, now);
-        cleanup.enqueue(tenantId, documentId, document.kbId(), document.objectKey());
+        repository.softDelete(principal.tenantId(), documentId, now);
+        cleanup.enqueue(principal.tenantId(), documentId, document.kbId(), document.objectKey());
         return Map.of("documentId", documentId, "deleted", true, "indexStatus", "DELETED");
     }
 

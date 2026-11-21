@@ -20,31 +20,30 @@ npm run preview  # 本地预览构建产物
 # 构建（在仓库根目录执行）
 cd web && docker build -t aipaas-frontend:v1.0 .
 
-# 运行（本机开发机快速验证，upstream 指向后端服务）
+# 运行（本机开发机快速验证，upstream 指向统一网关）
 docker run -d --name aipaas-frontend \
     -p 80:80 \
-    -e QUERY_API_UPSTREAM="http://aipaas.aiworld.com:8001" \
-    -e IMPORT_API_UPSTREAM="http://aipaas.aiworld.com:8000" \
+    -e PLATFORM_API_UPSTREAM="http://aipaas.aiworld.com:8081" \
     aipaas-frontend:v1.0
 ```
 
-- `QUERY_API_UPSTREAM` / `IMPORT_API_UPSTREAM` 是容器启动时由 `envsubst` 注入 nginx 的反代目标，**必须用双引号包裹**；反引号会被 shell 优先执行，直接报命令找不到。
-- 访问 `http://<宿主机IP>/`，探活接口 `http://<宿主机IP>/health` 应返回 `ok`。
+- `PLATFORM_API_UPSTREAM` 是容器启动时由 `envsubst` 注入 nginx 的反代目标（指向 platform-gateway），**必须用双引号包裹**；反引号会被 shell 优先执行，直接报命令找不到。
+- 前端统一经 `/api/v1/**` → nginx `/api/` → platform-gateway → 后端模块，不再直连 svc-query / svc-ingest。
+- 访问 `http://<宿主机IP>/`，探活接口 `http://<宿主机IP>/healthz` 应返回 `{"status":"ok"}`。
 
 ### 关键设计
 
 - **多阶段构建**：build 阶段 `node:20-alpine` 执行 `npm ci` + `vite build`，runtime 阶段 `nginx:alpine` 只拷贝 `dist/` → 最终镜像约 20MB（build 阶段约 500MB）
 - **缓存友好**：先 COPY `package.json + package-lock.json` 执行 `npm ci`，再 COPY 源码 → 修改 `src/**` 不会触发依赖重装
-- **反代与 dev 对齐**：nginx 的 `/query-api`、`/import-api` 与 `vite.config.js` 的 dev proxy 完全一致，切换到生产无需改前端代码
-- **运行时注入后端地址**：`nginx.conf.template` 用 `${QUERY_API_UPSTREAM}` / `${IMPORT_API_UPSTREAM}` 占位，容器启动时 `envsubst` 替换 → 构建期不需要知道后端地址，运行期通过 `-e` 或 docker-compose 传入
+- **反代与 dev 对齐**：nginx 的 `/api/` 与 `vite.config.js` 的 dev proxy（`/api` → gateway）完全一致，切换到生产无需改前端代码
+- **运行时注入网关地址**：`nginx.conf.template` 用 `${PLATFORM_API_UPSTREAM}` 占位，容器启动时 `envsubst` 替换 → 构建期不需要知道后端地址，运行期通过 `-e` 或 docker-compose 传入
 - **请求时解析 DNS**：upstream 采用「变量 + resolver」写法，域名在请求时解析，DNS 暂时不可用也不会导致容器启动失败
 
 ### 与后端的对应关系
 
 | 前端路径 | 开发代理（Vite） | 生产反代变量 | 说明 |
 | --- | --- | --- | --- |
-| `/query-api/` | `http://127.0.0.1:8001` | `QUERY_API_UPSTREAM` | 查询服务 |
-| `/import-api/` | `http://127.0.0.1:8000` | `IMPORT_API_UPSTREAM` | 导入服务（pymodules 的 ingest） |
+| `/api/v1/**` | `http://127.0.0.1:8081` | `PLATFORM_API_UPSTREAM` | 统一经 platform-gateway 调用后端（问答→svc-query，导入/管理→platform-management→svc-ingest） |
 
 ### docker-compose 中配置
 
@@ -52,12 +51,11 @@ docker run -d --name aipaas-frontend \
 frontend:
   image: aipaas-frontend:v1.0
   environment:
-    QUERY_API_UPSTREAM: http://python-query:8001
-    IMPORT_API_UPSTREAM: http://python-ingest:8000
+    PLATFORM_API_UPSTREAM: http://platform-gateway:8080
   ports: ["80:80"]
 ```
 
-注意：两个后端服务名和端口需按实际部署调整。本项目 pymodules 中查询服务监听 `8001`、导入服务监听 `8000`，请确认 `QUERY_API_UPSTREAM` / `IMPORT_API_UPSTREAM` 分别指向正确服务。
+前端所有业务请求统一走 `/api/v1/**`，由 platform-gateway 鉴权、审计并路由到对应后端模块；不再存在直连 svc-query / svc-ingest 的旁路。
 
 ## 工程目录结构
 
@@ -65,7 +63,7 @@ frontend:
 web/                              # 前端工程根目录
 ├── index.html                  # SPA 入口
 ├── package.json
-├── vite.config.js              # Vite 配置（含 /query-api、/import-api 开发代理）
+├── vite.config.js              # Vite 配置（/api 开发代理 → platform-gateway）
 ├── Dockerfile                  # 多阶段构建（node 构建 → nginx 运行）
 ├── nginx.conf.template         # nginx 模板，运行时 envsubst 注入反代目标
 ├── .env.example                # 环境变量示例（API 地址）
@@ -74,10 +72,9 @@ web/                              # 前端工程根目录
     ├── App.jsx                 # 路由定义（登录页独立，业务页统一布局）
     ├── styles/
     │   └── global.css          # 全局样式 / 通用按钮 / 输入框
-    ├── api/                    # API 层（与后端接口一一对应）
-    │   ├── config.js           # API 地址环境配置
-    │   ├── chat.js             # 查询服务（8001）：/query /stream /history /health
-    │   └── importer.js         # 导入服务（8000）：/upload /status
+    ├── api/                    # API 层（统一走 platform-gateway 契约）
+    │   ├── config.js           # API 地址环境配置（PLATFORM_API_BASE=/api/v1）
+    │   └── p0Client.js         # P0 契约客户端：登录/知识库/文档/导入任务/问答 SSE 等
     ├── utils/
     │   ├── auth.js             # 登录态管理（当前 Mock，后端就绪后替换）
     │   ├── sessions.js         # 会话列表管理（当前 localStorage，后端就绪后替换）
@@ -106,10 +103,11 @@ web/                              # 前端工程根目录
 
 ## 与后端的对接
 
-- 开发环境通过 Vite 代理转发，避免跨域：
-  - `/query-api/**` → `http://127.0.0.1:8001/**`
-  - `/import-api/**` → `http://127.0.0.1:8000/**`
-- 生产环境通过 `.env` 配置 `VITE_QUERY_API_BASE` / `VITE_IMPORT_API_BASE`。
+- 前端统一经 platform-gateway 调用后端：
+  - 开发：Vite 代理 `/api/**` → `http://127.0.0.1:8081/**`（platform-gateway）
+  - 生产：nginx `/api/` → `${PLATFORM_API_UPSTREAM}`（platform-gateway）
+- 网关再路由：问答 → svc-query；导入/文档/知识库等 → platform-management → svc-ingest。
+- 不再使用 `VITE_QUERY_API_BASE` / `VITE_IMPORT_API_BASE`；直连旁路已下线。
 
 ## 已知限制（详见 docs/05_待办事项.md）
 

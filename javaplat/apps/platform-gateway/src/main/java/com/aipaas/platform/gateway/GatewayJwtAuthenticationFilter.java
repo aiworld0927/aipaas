@@ -58,7 +58,8 @@ public class GatewayJwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.endsWith("/auth/login") || path.endsWith("/auth/refresh") || !path.startsWith("/api/v1");
+        return path.endsWith("/auth/login") || path.endsWith("/auth/refresh")
+                || path.endsWith("/auth/register") || !path.startsWith("/api/v1");
     }
 
     @Override

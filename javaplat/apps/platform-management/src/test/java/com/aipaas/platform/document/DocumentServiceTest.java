@@ -67,8 +67,13 @@ class DocumentServiceTest {
         encryption = new EncryptionService(keyring);
         storage = new LocalEncryptedObjectStore(temp.resolve("objects").toString());
         cleanup = new IndexCleanupService(jdbc, storage, mock(VectorIndexGateway.class));
-        service = new DocumentService(new DocumentRepository(jdbc), encryption, storage, cleanup,
-                mock(ApplicationEventPublisher.class), temp.resolve("upload-temp").toString());
+        jdbc.update("create table if not exists document_grants(id varchar(64) primary key, tenant_id varchar(64), "
+                + "document_id varchar(64), subject_type varchar(16), subject_id varchar(64), permission varchar(16), "
+                + "granted_by varchar(64), created_at timestamp with time zone)");
+        DocumentRepository repository = new DocumentRepository(jdbc);
+        DocumentGrantService grants = new DocumentGrantService(new DocumentGrantRepository(jdbc), repository);
+        service = new DocumentService(repository, encryption, storage, cleanup,
+                mock(ApplicationEventPublisher.class), grants, temp.resolve("upload-temp").toString());
     }
 
     @Test
@@ -177,10 +182,10 @@ class DocumentServiceTest {
         Path stored = temp.resolve("objects").resolve(objectKey);
         assertTrue(Files.exists(stored));
 
-        Map<String, Object> deleted = service.delete("default", documentId);
+        Map<String, Object> deleted = service.delete(principal, documentId);
 
         assertEquals(true, deleted.get("deleted"));
-        assertEquals(0, service.list("default", "kb_default", null, null, 1, 20).get("total"));
+        assertEquals(0, service.list(principal, "kb_default", null, null, 1, 20).get("total"));
         assertEquals("DELETED", jdbc.queryForObject("select index_status from documents where id=?",
                 String.class, documentId));
         assertNotNull(jdbc.queryForObject("select deleted_at from documents where id=?", OffsetDateTime.class,

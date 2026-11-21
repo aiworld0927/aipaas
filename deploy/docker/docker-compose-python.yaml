@@ -2,15 +2,15 @@
 # AIPaaS 五级编排 · 第 3 级：Python 业务编排服务
 # -----------------------------------------------------------------------------
 # 依赖：第 2 级 docker-compose-models.yaml（含第 1 级技术组件）
-# 新增：svc-ingest / svc-query / rag-ai-api
+# 新增：svc-ingest / svc-query
 #
 # 在本文件所在目录执行：
 #   docker compose -f docker-compose-python.yaml up -d --build
 #   docker compose -f docker-compose-python.yaml ps
 #   docker compose -f docker-compose-python.yaml down
 #
-# 说明：rag-ai-api 当前为统一契约骨架；真实文档导入与问答流程分别由
-#       svc-ingest、svc-query 执行。
+# 说明：文档导入由 svc-ingest 执行，检索与生成由 svc-query 执行；
+#       前端经 platform-gateway 统一调用：问答直连 svc-query，导入经 management 转 svc-ingest。
 # =============================================================================
 
 include:
@@ -141,47 +141,4 @@ services:
         reservations:
           cpus: '0.1'
           memory: 256M
-    <<: [*default-restart, *default-logging]
-
-  rag-ai-api:
-    build:
-      context: ../../pymodules/apps/rag-ai-api
-      dockerfile: Dockerfile
-    image: aipaas/rag-ai-api:${IMAGE_TAG:-latest}
-    container_name: aipaas-rag-ai-api
-    environment:
-      AIPAAS_ENV: ${APP_ENV:-devcompany}
-      AIPAAS_API_VERSION: v1
-      AIPAAS_CONTRACT_VERSION: 1.1.0-p0
-      MILVUS_URI: http://milvus:19530
-      MINIO_ENDPOINT: minio:9000
-      REDIS_URL: redis://redis:6379/0
-      TZ: Asia/Shanghai
-    ports:
-      - "${RAG_AI_API_PORT:-8100}:8100"
-    depends_on:
-      svc-model-embedding:
-        condition: service_healthy
-      svc-model-reranker:
-        condition: service_healthy
-      milvus:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/healthz')"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-        reservations:
-          cpus: '0.1'
-          memory: 128M
     <<: [*default-restart, *default-logging]

@@ -70,6 +70,9 @@ public class AuthService {
         if (found == null || !matches || !"ACTIVE".equals(found.status())) {
             return failedLogin(found, tenant, username, ip, userAgent, traceId);
         }
+        if (!users.tenantEnabled(found.tenantId())) {
+            throw new ApiException(ErrorCodes.PERM_FORBIDDEN, HttpStatus.FORBIDDEN, "租户已停用，请联系平台管理员");
+        }
         users.recordSuccess(found.id());
         UserAccount active = users.findById(found.id()).orElseThrow();
         Map<String, Object> response = issueSession(active, null, null);
@@ -163,6 +166,9 @@ public class AuthService {
     @Transactional
     public Map<String, Object> createUser(String tenantId, String username, String displayName, String password,
                                           String email, java.util.List<String> roleCodes) {
+        if (!users.tenantEnabled(tenantId)) {
+            throw new ApiException(ErrorCodes.PERM_FORBIDDEN, HttpStatus.FORBIDDEN, "租户已停用，无法创建用户");
+        }
         try {
             passwordPolicy.validate(password, username);
         } catch (IllegalArgumentException ex) {
@@ -184,6 +190,80 @@ public class AuthService {
         roleCodes.stream().distinct().forEach(code -> users.assignRole(tenantId, id, code));
         gatewayState.publishUserAfterCommit(id);
         return userResponse(account, roleCodes);
+    }
+
+    @Transactional
+    public Map<String, Object> register(String tenantId, String username, String password, String displayName,
+                                        String email, String ip, String userAgent, String traceId) {
+        String tenant = tenantId == null || tenantId.isBlank() ? "default" : tenantId.trim();
+        if (!tenant.matches("[A-Za-z0-9_.-]{2,64}")) {
+            throw new ApiException(ErrorCodes.PARAM_INVALID, HttpStatus.BAD_REQUEST, "租户标识不合法");
+        }
+        if (!users.roleExists(tenant, "KB_UPLOADER")) {
+            throw new ApiException(ErrorCodes.BIZ_NOT_FOUND, HttpStatus.BAD_REQUEST, "租户不存在或未初始化");
+        }
+        if (!users.tenantEnabled(tenant)) {
+            throw new ApiException(ErrorCodes.PERM_FORBIDDEN, HttpStatus.FORBIDDEN, "租户已停用，暂停注册");
+        }
+        String display = displayName == null || displayName.isBlank() ? username : displayName.trim();
+        createUser(tenant, username, display, password, email, java.util.List.of("KB_UPLOADER"));
+        UserAccount account = users.findByUsername(tenant, username)
+                .orElseThrow(() -> new IllegalStateException("注册用户创建失败"));
+        Map<String, Object> response = issueSession(account, null, null);
+        audit.record(principal(account), "auth.register", "user", account.id(), "SUCCESS",
+                Map.of("tenantId", tenant), ip, userAgent, traceId);
+        return response;
+    }
+
+    public Map<String, Object> currentUser(SecurityPrincipal principal) {
+        Map<String, Object> data = new LinkedHashMap<>(principal.toCurrentUser());
+        users.findById(principal.userId()).ifPresent(user -> {
+            if (user.emailCiphertext() != null) {
+                data.put("email", encryption.decrypt(user.emailCiphertext(), user.id() + ":email"));
+            }
+            data.put("createdAt", user.createdAt());
+            data.put("lastLoginAt", user.lastLoginAt());
+        });
+        return data;
+    }
+
+    public Map<String, Object> updateProfile(SecurityPrincipal principal, String displayName, String email) {
+        UserAccount current = users.findById(principal.userId())
+                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+        String finalDisplayName = displayName == null ? current.displayName() : displayName.trim();
+        if (finalDisplayName.isEmpty() || finalDisplayName.length() > 64) {
+            throw new ApiException(ErrorCodes.PARAM_INVALID, HttpStatus.BAD_REQUEST, "显示名称长度需为 1..64");
+        }
+        String emailCiphertext = current.emailCiphertext();
+        if (email != null) {
+            String trimmed = email.trim();
+            if (!trimmed.isEmpty() && (!trimmed.contains("@") || trimmed.length() > 128)) {
+                throw new ApiException(ErrorCodes.PARAM_INVALID, HttpStatus.BAD_REQUEST, "邮箱格式不合法");
+            }
+            emailCiphertext = trimmed.isEmpty() ? null : encryption.encrypt(trimmed, current.id() + ":email");
+        }
+        users.updateProfileFields(current.id(), finalDisplayName, emailCiphertext);
+        UserAccount updated = users.findById(current.id())
+                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+        return currentUser(principal(updated, principal.sessionId()));
+    }
+
+    public void changePassword(SecurityPrincipal principal, String oldPassword, String newPassword) {
+        UserAccount current = users.findById(principal.userId())
+                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+        if (!encoder.matches(oldPassword, current.passwordHash())) {
+            throw new ApiException(ErrorCodes.PARAM_INVALID, HttpStatus.BAD_REQUEST, "原密码不正确");
+        }
+        if (encoder.matches(newPassword, current.passwordHash())) {
+            throw new ApiException(ErrorCodes.PARAM_INVALID, HttpStatus.BAD_REQUEST, "新密码不能与原密码相同");
+        }
+        try {
+            passwordPolicy.validate(newPassword, current.username());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(ErrorCodes.PARAM_INVALID, HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+        users.updatePasswordHash(current.id(), encoder.encode(newPassword));
+        gatewayState.publishUserAfterCommit(current.id());
     }
 
     public SecurityPrincipal principal(UserAccount user, String sessionId) {

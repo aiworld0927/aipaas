@@ -44,13 +44,3 @@ scrape_configs:
         labels:
           service: platform-management
           language: java
-
-  # Python AI 服务：/metrics 暴露请求 QPS/延迟与业务指标
-  - job_name: rag-ai-api
-    metrics_path: /metrics/
-    scrape_interval: 10s
-    static_configs:
-      - targets: ["rag-ai-api:8100"]
-        labels:
-          service: rag-ai-api
-          language: python

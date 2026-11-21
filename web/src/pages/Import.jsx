@@ -1,41 +1,96 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { uploadFile, fetchTaskStatus } from '../api/importer.js';
+import {
+  listKnowledgeBases,
+  uploadDocumentWithProgress,
+  getIngestTask,
+  newIdempotencyKey,
+} from '../api/p0Client.js';
 
-/** 文件导入页：拖拽上传 + 任务状态轮询（逻辑与旧版 import.html 一致，进度改为真实上传进度） */
-const normalizeDoneLog = (t) => (typeof t !== 'string' ? String(t) : t.endsWith('已完成') ? t : `${t}已完成`);
-const normalizeRunningLog = (t) =>
-  typeof t !== 'string' ? String(t) : t.startsWith('正在进行') ? (t.endsWith('...') ? t : `${t}...`) : `正在进行${t}...`;
+/**
+ * 文件导入页：拖拽上传 + 任务状态轮询。
+ * 调用链路：web → nginx /api/ → platform-gateway → platform-management → svc-ingest。
+ * 上传进度由 XHR 提供；任务进度/状态经网关拉取 management 的 ingest task 视图。
+ */
+const TERMINAL_OK = new Set(['COMPLETED', 'SUCCEEDED', 'DONE']);
+const TERMINAL_FAIL = new Set(['FAILED', 'ERROR', 'CANCELLED']);
+
+/** 向日志追加一条阶段信息（去重相邻重复） */
+function appendStageLog(logs, stage, suffix = '') {
+  const line = `正在进行 ${stage}${suffix}`;
+  if (!stage) return logs;
+  if (logs.length && logs[logs.length - 1] === line) return logs;
+  return [...logs, line];
+}
 
 export default function Import() {
-  const [tasks, setTasks] = useState([]); // { taskId, name, size, phase, percent, logs, logOpen }
+  const [tasks, setTasks] = useState([]); // { taskId, backendTaskId, name, size, phase, percent, logs, logOpen }
   const [dragOver, setDragOver] = useState(false);
+  const [kbs, setKbs] = useState([]);
+  const [selectedKbId, setSelectedKbId] = useState('');
   const fileInputRef = useRef(null);
+
+  // 加载知识库列表，默认选中 kb_default 或第一个；上传必须指定 kbId
+  useEffect(() => {
+    listKnowledgeBases()
+      .then((data) => {
+        const list = Array.isArray(data)
+          ? data
+          : (data && (data.list || data.items || data.records)) || [];
+        setKbs(list);
+        if (list.length) {
+          const def = list.find((k) => k.id === 'kb_default') || list[0];
+          setSelectedKbId(def.id);
+        }
+      })
+      .catch((e) => console.error('加载知识库列表失败', e));
+  }, []);
 
   const updateTask = (taskId, patch) => {
     setTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, ...patch } : t)));
   };
 
-  /** 轮询任务状态（与旧版 pollStatus 逻辑一致，2s 间隔） */
-  const pollStatus = (taskId) => {
+  /** 轮询导入任务状态（经网关拉取 management ingest task 视图，2s 间隔） */
+  const pollStatus = (backendTaskId) => {
     const interval = setInterval(async () => {
       try {
-        const data = await fetchTaskStatus(taskId);
-        const done = Array.isArray(data.done_list) ? data.done_list : [];
-        const running = Array.isArray(data.running_list) ? data.running_list : [];
-        const logs = [...done.map(normalizeDoneLog), ...running.map(normalizeRunningLog)];
+        const t = await getIngestTask(backendTaskId);
+        const status = String(t.status || '').toUpperCase();
+        const stage = t.stage ? String(t.stage) : '';
+        let progress = Number(t.progress);
+        if (!Number.isFinite(progress)) progress = 0;
+        if (progress > 0 && progress <= 1) progress = Math.round(progress * 100); // 兼容 0~1 小数
+        progress = Math.max(0, Math.min(100, Math.round(progress)));
+        const errMsg = t.errorMessage || t.message || t.failureMessage || '';
 
-        if (data.status === 'completed') {
-          updateTask(taskId, { phase: 'completed', percent: 100, logs });
-          clearInterval(interval);
-        } else if (data.status === 'processing') {
-          updateTask(taskId, { phase: 'processing', logs });
-        } else if (data.status === 'failed') {
-          updateTask(taskId, { phase: 'error', logs });
-          clearInterval(interval);
-        } else {
-          updateTask(taskId, { logs });
-        }
+        setTasks((prev) =>
+          prev.map((x) => {
+            if (x.backendTaskId !== backendTaskId) return x;
+            if (TERMINAL_OK.has(status)) {
+              clearInterval(interval);
+              return {
+                ...x,
+                phase: 'completed',
+                percent: 100,
+                logs: [...x.logs, `${stage || '处理'}已完成`],
+              };
+            }
+            if (TERMINAL_FAIL.has(status)) {
+              clearInterval(interval);
+              return {
+                ...x,
+                phase: 'error',
+                logs: [...x.logs, `${stage || '处理'}失败${errMsg ? `：${errMsg}` : ''}`],
+              };
+            }
+            return {
+              ...x,
+              phase: 'processing',
+              percent: Math.max(x.percent, progress),
+              logs: appendStageLog(x.logs, stage, progress ? `（${progress}%）` : ''),
+            };
+          }),
+        );
       } catch (e) {
         console.error('Polling error', e);
       }
@@ -47,10 +102,15 @@ export default function Import() {
   };
 
   const uploadOne = async (file) => {
+    if (!selectedKbId) {
+      alert('请先选择目标知识库');
+      return;
+    }
     const taskId = 'file-' + Math.random().toString(36).slice(2, 11);
     setTasks((prev) => [
       {
         taskId,
+        backendTaskId: '',
         name: file.name,
         size: (file.size / 1024).toFixed(2),
         phase: 'uploading',
@@ -62,15 +122,33 @@ export default function Import() {
     ]);
 
     try {
-      // 真实上传进度（XHR onprogress），完成后进入"处理中"并开始轮询
-      const result = await uploadFile(file, (p) => updateTask(taskId, { percent: p }));
-      const backendTaskId = result.task_ids && result.task_ids[0];
-      // 用后端任务 ID 关联轮询（更新本地 key）
-      setTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, taskId: backendTaskId || taskId, phase: 'processing', percent: 30 } : t)));
-      pollStatus(backendTaskId || taskId);
+      // 经 platform-gateway 上传；XHR 提供真实上传进度
+      const data = await uploadDocumentWithProgress(
+        selectedKbId,
+        file,
+        { idempotencyKey: newIdempotencyKey(), autoParse: true },
+        (p) => updateTask(taskId, { percent: p }),
+      );
+      const ingestTask = data && data.ingestTask;
+      const backendTaskId = ingestTask && ingestTask.id;
+      // 关联后端任务 ID 并进入"处理中"，开始经网关轮询任务状态
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.taskId === taskId
+            ? {
+                ...t,
+                backendTaskId: backendTaskId || taskId,
+                phase: 'processing',
+                percent: Math.max(t.percent, 5),
+              }
+            : t,
+        ),
+      );
+      if (backendTaskId) pollStatus(backendTaskId);
     } catch (err) {
       console.error(err);
-      updateTask(taskId, { phase: 'error' });
+      const msg = err && err.message ? err.message : '上传失败';
+      updateTask(taskId, { phase: 'error', logs: [`上传失败：${msg}`] });
     }
   };
 
@@ -95,6 +173,24 @@ export default function Import() {
           <p>将文档导入金融标准化知识库，系统将自动解析、切分并建立检索索引</p>
           <Link to="/chat" className="back-chat">← 返回对话</Link>
         </div>
+
+        {/* 知识库选择器（上传必须指定 kbId） */}
+        {kbs.length > 0 && (
+          <div className="kb-selector">
+            <label htmlFor="import-kb">导入到知识库：</label>
+            <select
+              id="import-kb"
+              value={selectedKbId}
+              onChange={(e) => setSelectedKbId(e.target.value)}
+            >
+              {kbs.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.name || k.id}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* 拖拽上传区 */}
         <div
@@ -146,6 +242,17 @@ export default function Import() {
           padding: clamp(20px,4vh,44px) clamp(14px,4vw,32px) 48px;
           display: flex; flex-direction: column;
         }
+
+        .kb-selector {
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          margin-bottom: 18px; font-size: 13px; color: var(--muted);
+        }
+        .kb-selector select {
+          padding: 6px 12px; border-radius: 10px; border: 1px solid var(--border);
+          background: #fff; font-size: 13px; font-weight: 600; color: var(--brand);
+          cursor: pointer; outline: none;
+        }
+        .kb-selector select:focus { border-color: rgba(61,123,255,.6); }
 
         .import-header { text-align: center; margin-bottom: 26px; position: relative; }
         .head-icon {
