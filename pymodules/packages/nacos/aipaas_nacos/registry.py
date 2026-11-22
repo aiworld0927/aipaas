@@ -200,10 +200,11 @@ async def register_current_service(
     instance_metadata = {"protocol": "http", "health_path": "/health"}
     if app is not None:
         instance_metadata.update(collect_interface_metadata(app))
-
+    print("-------i will register 1")
     naming: NacosNamingService | None = None
     try:
         naming = await create_naming_service()
+        print("-------i will register 2")
         await naming.register_instance(
             RegisterInstanceParam(
                 service_name=service_name,
@@ -218,6 +219,7 @@ async def register_current_service(
                 ephemeral=True,
             )
         )
+        print("-------i will register 3")
     except asyncio.CancelledError:
         # 退出时注册尚未完成：关闭已创建的客户端，实例本身未注册无需注销
         if naming is not None:
@@ -312,9 +314,7 @@ async def _collect_registration(
         return None
 
 
-def nacos_lifespan(
-    service_name: str,
-) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+def nacos_lifespan(service_name: str,) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     """FastAPI lifespan 工厂：启动注册、退出注销。
 
     注册放到后台任务执行：注册中心不可达时 SDK 会长时间重试，不能因此阻塞
@@ -327,9 +327,7 @@ def nacos_lifespan(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        registration_task = asyncio.create_task(
-            register_current_service(service_name, app)
-        )
+        registration_task = asyncio.create_task(register_current_service(service_name, app))
         try:
             yield
         finally:
@@ -337,3 +335,6 @@ def nacos_lifespan(
             await deregister_current_service(registration)
 
     return lifespan
+
+if __name__ == '__main__':
+    nacos_lifespan("svc-ingest")

@@ -6,12 +6,6 @@
 from __future__ import annotations
 
 import uvicorn
-
-from aipaas_common.conf.settings import load_settings
-
-# 配置引导：必须先于业务模块导入
-settings = load_settings("model_embedding_worker")
-
 from fastapi import FastAPI
 
 from aipaas_common.core.lifespan import AppLifespan
@@ -19,6 +13,11 @@ from aipaas_common.core.log import logger
 from model_embedding_worker import service as embedding_service
 from model_embedding_worker.api.routers import health, inference
 
+
+from aipaas_common.conf.settings import load_settings
+
+# 配置引导：必须先于业务模块导入
+settings = load_settings("model_embedding_worker")
 
 def build_lifespan() -> AppLifespan:
     """启动时完成模型加载或在线配置校验。

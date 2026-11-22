@@ -1,33 +1,33 @@
 # =============================================================================
-# devhome 环境差异覆盖（家中开发环境，中间件主机 192.168.5.18）
+# devhome 环境差异覆盖（家中开发环境，中间件主机 127.0.0.1）
 # 只写偏离 base 的字段；未出现的键继承 aipaas_config.base.yaml
 # 注意：模型路径/集合名按 devcompany 同构生成，首次在该环境启动时需人工验证
 # =============================================================================
 
 common:
   milvus:
-    url: http://192.168.5.18:19530
+    url: http://127.0.0.1:19530
     chunks_collection: kb_chunks        # 待验证：devhome Milvus 实际集合名
   minio:
-    endpoint: 192.168.5.18:9000
+    endpoint: 127.0.0.1:9000
     bucket_name: knowledge-base-files   # 待验证：devhome MinIO 实际桶名
   mongo:
     db_name: kb002                      # 待验证：devhome Mongo 实际库名
   nacos:
-    server_address: 192.168.5.18:8848   # 注册中心（与中间件同主机）
+    server_address: 127.0.0.1:8848   # 注册中心（与中间件同主机）
   embedding_service:
-    url: http://192.168.5.18:8003
+    url: http://127.0.0.1:8003
   rerank_service:
-    url: http://192.168.5.18:8004
+    url: http://127.0.0.1:8004
 
 model_embedding_worker:
   offline:
-    model_path: D:/aigc/modelscope_cache/models/BAAI/bge-m3   # 待验证：devhome 模型目录
+    model_path: D:/aigc/modelscope_cache/models/BAAI/bge-m3
     device: cpu
     use_fp16: false
 
 model_reranker_worker:
   offline:
-    model_path: /aigc/modelscope_cache/models/BAAI/bge-reranker-large   # 待验证
+    model_path: D:/aigc/modelscope_cache/models/BAAI/bge-reranker-large
     device: cpu
     use_fp16: false

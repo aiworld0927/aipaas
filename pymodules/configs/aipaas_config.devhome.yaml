@@ -7,11 +7,11 @@
 model_embedding_worker:
   offline:
     model_path: /home/aipaas/models/BAAI/bge-m3   # 待验证：devhome 模型目录
-    device: cpu
-    use_fp16: false
+    device: gpu
+    use_fp16: true
 
 model_reranker_worker:
   offline:
     model_path: /home/aipaas/models/BAAI/bge-reranker-large   # 待验证
-    device: cpu
-    use_fp16: false
+    device: gpu
+    use_fp16: true
