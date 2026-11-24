@@ -1,0 +1,67 @@
+# ===========================================================================
+# AIPaaS 基础层 Prometheus 抓取配置（docker-compose-base.yaml 使用）
+# ---------------------------------------------------------------------------
+# 覆盖：基础层自监控 + APISIX 网关（第 4 级）+ Java 平台 + Python 业务服务。
+# 被依赖服务尚未启动时，该 target 显示 down，不影响其它服务采集。
+# 目标地址使用各服务容器内默认端口；调整 .env 端口变量时需同步本文件。
+# P0 骨架的独立采集配置见 prometheus-p0.yml。
+# ===========================================================================
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+  external_labels:
+    platform: aipaas
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # APISIX 网关：插件 prometheus 在容器内固定监听 9091（第 4 级）
+  - job_name: apisix
+    scrape_interval: 10s
+    metrics_path: /apisix/prometheus/metrics
+    static_configs:
+      - targets: ["apisix:9091"]
+        labels:
+          service: apisix
+          language: lua
+
+  # Java 统一网关：Spring Boot Actuator + Micrometer（第 4 级）
+  - job_name: platform-gateway
+    metrics_path: /actuator/prometheus
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["platform-gateway:8080"]
+        labels:
+          service: platform-gateway
+          language: java
+
+  # Java 管理服务（第 4 级，仅容器网络内可达）
+  - job_name: platform-management
+    metrics_path: /actuator/prometheus
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["platform-management:8080"]
+        labels:
+          service: platform-management
+          language: java
+
+  # Python 业务服务：自带 /metrics（第 3 级）
+  - job_name: app-ingest-worker
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["app-ingest-worker:8001"]
+        labels:
+          service: app-ingest-worker
+          language: python
+
+  - job_name: app-query-worker
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["app-query-worker:8002"]
+        labels:
+          service: app-query-worker
+          language: python

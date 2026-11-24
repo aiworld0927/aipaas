@@ -3,6 +3,7 @@
 # -----------------------------------------------------------------------------
 # 本层可独立启动，并被 docker-compose-models.yaml 通过 include 引用。
 #   核心组件（默认启动）      ：etcd / minio / milvus / mongodb / postgres / redis
+#                               prometheus / grafana（可观测）
 #   可选组件（按 profile 启动，默认不启动）：
 #     attu      —— Milvus 可视化管理 UI
 #     nacos     —— Nacos 配置中心（复用核心 postgres）
@@ -18,6 +19,7 @@
 #
 # 数据目录: ${DOCKER_VOLUME_DIRECTORY}/volumes/xxx 本地目录挂载
 # 依赖关系: milvus -> etcd + minio, nacos -> postgres, rocketmq-broker -> rocketmq-namesrv
+# etcd 由 Milvus 与 APISIX（第 4 级）共用：APISIX 使用 /apisix 前缀独立存放路由配置。
 # =============================================================================
 
 # ---------- 共享配置锚点 ----------
@@ -345,6 +347,75 @@ services:
     <<: [*default-restart, *default-logging]
 
   # =========================================================================
+  # 层 1：核心组件 —— 可观测（Prometheus + Grafana）
+  # -------------------------------------------------------------------------
+  # 采集目标见 prometheus/prometheus-base.yml（含 APISIX / Java 平台 / Python 服务）；
+  # Grafana 复用 grafana/provisioning 预置数据源与 grafana/dashboards 看板目录。
+  # =========================================================================
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    container_name: aipaas-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-7d}
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus-base.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # Prometheus：指标采集与短期存储，7 天保留
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    <<: [*default-restart, *default-logging]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: aipaas-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      TZ: Asia/Shanghai
+    ports:
+      # 默认 3001，避开 attu 占用的 3000
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # Grafana：可视化看板，预置数据源指向 prometheus:9090
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.05'
+          memory: 128M
+    <<: [*default-restart, *default-logging]
+
+  # =========================================================================
   # 层 2：可选组件 —— 消息队列（profile: rocketmq）
   # =========================================================================
   rocketmq-namesrv:
@@ -451,7 +522,7 @@ services:
     <<: [*default-restart, *default-logging]
 
 # =============================================================================
-# 命名卷（postgres / redis / nacos / rocketmq 数据，均为可选 profile 组件使用）
+# 命名卷（postgres / redis / nacos / rocketmq / prometheus / grafana 数据）
 # =============================================================================
 volumes:
   pg-data:
@@ -459,6 +530,8 @@ volumes:
   nacos-data:
   rocketmq-namesrv-data:
   rocketmq-broker-data:
+  prometheus-data:
+  grafana-data:
 
 networks:
   default:

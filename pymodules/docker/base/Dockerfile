@@ -5,8 +5,8 @@
 #      与 model-reranker-worker 共享，避免两个工程各自重复下载/解包 torch（约 12GB）。
 #
 # 构建（在 pymodules/ 目录下执行，必须先于 worker 镜像）：
-#   docker build --network host --build-arg TORCH_VARIANT=gpu \
-#     -f docker/base/Dockerfile -t aipaas/aipaas-torch-gpu-base:local .
+#   docker build --network host --build-arg TORCH_VARIANT=gpu -f docker/base/Dockerfile -t aipaas/aipaas-torch-gpu-base:local .
+#    
 #   docker build --network host --build-arg TORCH_VARIANT=cpu \
 #     -f docker/base/Dockerfile -t aipaas/aipaas-torch-cpu-base:local .
 #

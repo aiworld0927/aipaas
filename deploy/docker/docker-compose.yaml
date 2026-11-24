@@ -2,10 +2,10 @@
 # AIPaaS 五级编排 · 第 5 级：Web 前端（默认全量入口）
 # -----------------------------------------------------------------------------
 # 层级与文件：
-#   1. docker-compose-base.yaml    技术组件
+#   1. docker-compose-base.yaml    技术组件 + 可观测（prometheus / grafana）
 #   2. docker-compose-models.yaml  模型接入服务（include 第 1 级）
 #   3. docker-compose-python.yaml  Python 业务编排（include 第 2 级）
-#   4. docker-compose-java.yaml    Java 网关与管理平台（include 第 3 级）
+#   4. docker-compose-java.yaml    Java 网关与管理平台 + APISIX（include 第 3 级）
 #   5. docker-compose.yaml         Web 前端（include 第 4 级，本文件）
 #
 # 每一级都可独立作为启动入口，并自动拉起其下所有层级。例如：

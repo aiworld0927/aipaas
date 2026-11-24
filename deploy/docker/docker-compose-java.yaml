@@ -2,12 +2,14 @@
 # AIPaaS 五级编排 · 第 4 级：Java 网关与管理平台
 # -----------------------------------------------------------------------------
 # 依赖：第 3 级 docker-compose-python.yaml（含第 1、2 级）
-# 新增：platform-db-init（一次性）/ platform-management / platform-gateway
+# 新增：platform-db-init（一次性）/ platform-management / platform-gateway / apisix
 #
 # platform-management：登录、用户与 RBAC、知识库、文档、审计落库、内容策略、
 #   系统配置、导入任务，持有数据库/Flyway/MinIO/完整密钥；只在容器网络内 expose。
 # platform-gateway：唯一 Java 对外入口，负责 JWT 验签、撤销与用户状态校验、
 #   身份头治理、管理请求代理、问答安全编排与审计事件发布。
+# apisix：OpenResty 网关，路由配置存放在第 1 级 etcd 的 /apisix 前缀下，
+#   配置文件见 deploy/docker/apisix/apisix_conf/config.yaml。
 #
 # 数据库使用核心 PostgreSQL 实例中的独立 PLATFORM_DB，不与 Nacos 表混用。
 # 首次启动前在 .env 设置 PLATFORM_BOOTSTRAP_ADMIN_PASSWORD，然后执行：
@@ -168,6 +170,33 @@ services:
       resources:
         limits:
           cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    <<: [*default-restart, *default-logging]
+
+  # API 网关：路由与上游存储在第 1 级 etcd（/apisix 前缀），配置只读挂载。
+  # 管理 API（9180）用于维护路由；业务流量走 9080，TLS 走 9443。
+  apisix:
+    image: apache/apisix:${APISIX_IMAGE_TAG:-3.21.0-debian}
+    container_name: aipaas-apisix
+    volumes:
+      - ./apisix/apisix_conf/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+    ports:
+      - "${APISIX_HTTP_PORT:-9080}:9080"
+      - "${APISIX_HTTPS_PORT:-9443}:9443"
+      # Admin API 只绑定本机回环，禁止公网直接操作路由与上游
+      - "127.0.0.1:${APISIX_ADMIN_PORT:-9180}:9180"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      etcd:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
           memory: 512M
         reservations:
           cpus: '0.1'
