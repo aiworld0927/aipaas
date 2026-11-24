@@ -14,7 +14,7 @@ assignees: ""
 
 ## 影响模块
 
-<!-- 例如：contracts / platform-api / ingest-worker / query-worker / pipeline / retrieval / generation / web / deploy / docs -->
+<!-- 例如：contracts / platform-api / app-ingest-worker / app-query-worker / pipeline / retrieval / generation / web / deploy / docs -->
 
 - 模块：
 - 文件、接口或页面：

@@ -628,12 +628,12 @@ class GenerationService:
             mark_generation(
                 True,
                 timings["totalMs"] / 1000,
-                service="svc-query",
+                service="app-query-worker",
                 reason=decision.reason_code or "UNKNOWN",
             )
         else:
             self.stats.record_answer()
-            mark_generation(False, timings["totalMs"] / 1000, service="svc-query")
+            mark_generation(False, timings["totalMs"] / 1000, service="app-query-worker")
         answer = Answer(
             answer_id=answer_id,
             tenant_id=tenant_id,

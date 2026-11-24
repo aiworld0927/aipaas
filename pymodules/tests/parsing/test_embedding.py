@@ -154,8 +154,8 @@ def _client(parse_service, embedding_service):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from ingest_worker.api.dependencies import get_embedding_service, get_parse_service
-    from ingest_worker.api.routers import embedding, parse
+    from app_ingest_worker.api.dependencies import get_embedding_service, get_parse_service
+    from app_ingest_worker.api.routers import embedding, parse
 
     app = FastAPI()
     app.include_router(parse.router)

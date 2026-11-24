@@ -9,7 +9,7 @@
 - ``ip``：默认取本机默认出口网卡地址（容器 / 裸机通用），可用
   ``common.nacos.register_ip`` 覆盖；
 - ``port``：取 ``settings.module.port``，与 uvicorn 实际监听端口同源；
-- ``service_name``：由调用方传入部署单元名（如 ``svc-ingest`` / ``svc-query``）；
+- ``service_name``：由调用方传入部署单元名（如 ``app-ingest-worker`` / ``app-query-worker``）；
 - ``metadata``：自动收集 FastAPI 路由写入实例元数据（见 ``collect_interface_metadata``），
   调用方可从 Nacos 直接发现服务暴露的接口清单。
 """
@@ -322,7 +322,7 @@ def nacos_lifespan(service_name: str,) -> Callable[[FastAPI], AbstractAsyncConte
 
     用法::
 
-        app = FastAPI(lifespan=nacos_lifespan("svc-ingest"))
+        app = FastAPI(lifespan=nacos_lifespan("app-ingest-worker"))
     """
 
     @asynccontextmanager
@@ -337,4 +337,4 @@ def nacos_lifespan(service_name: str,) -> Callable[[FastAPI], AbstractAsyncConte
     return lifespan
 
 if __name__ == '__main__':
-    nacos_lifespan("svc-ingest")
+    nacos_lifespan("app-ingest-worker")

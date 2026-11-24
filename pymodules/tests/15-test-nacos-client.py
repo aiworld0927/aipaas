@@ -11,10 +11,10 @@
     # 查看 Nacos 中注册的服务、实例与接口清单
     uv run python tests/15-test-nacos-client.py list
 
-    # 取 svc-ingest 的接口清单 → 调用 POST /upload → 轮询 GET /status/{task_id}
+    # 取 app-ingest-worker 的接口清单 → 调用 POST /upload → 轮询 GET /status/{task_id}
     uv run python tests/15-test-nacos-client.py ingest --file ./doc/demo.md --wait 30
 
-    # 取 svc-query 的接口清单 → 调用 POST /query（非流式，直接拿答案）
+    # 取 app-query-worker 的接口清单 → 调用 POST /query（非流式，直接拿答案）
     uv run python tests/15-test-nacos-client.py query --query "金融标准知识库支持哪些业务？"
 
     # 流式：POST /query 拿 session_id，再订阅 GET /stream/{session_id}
@@ -179,7 +179,7 @@ def ensure_demo_file(path: str | None) -> Path:
 
 
 async def cmd_ingest(naming: NacosNamingService, args: argparse.Namespace) -> int:
-    """获取 svc-ingest 注册的接口清单，调用 /upload 并轮询 /status/{task_id}。"""
+    """获取 app-ingest-worker 注册的接口清单，调用 /upload 并轮询 /status/{task_id}。"""
     instance = await pick_instance(naming, args.service, args.group)
     interfaces = interface_map(instance)
     print_interfaces(args.service, interfaces)
@@ -256,7 +256,7 @@ async def read_sse(base_url: str, stream_path: str, session_id: str, wait: int) 
 
 
 async def cmd_query(naming: NacosNamingService, args: argparse.Namespace) -> int:
-    """获取 svc-query 注册的接口清单，调用 /query（可切换流式）。"""
+    """获取 app-query-worker 注册的接口清单，调用 /query（可切换流式）。"""
     instance = await pick_instance(naming, args.service, args.group)
     interfaces = interface_map(instance)
     print_interfaces(args.service, interfaces)
@@ -300,14 +300,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("list", help="列出服务、实例与接口清单")
 
-    ingest = sub.add_parser("ingest", help="调用 svc-ingest 的 /upload")
-    ingest.add_argument("--service", default="svc-ingest", help="Nacos 服务名")
+    ingest = sub.add_parser("ingest", help="调用 app-ingest-worker 的 /upload")
+    ingest.add_argument("--service", default="app-ingest-worker", help="Nacos 服务名")
     ingest.add_argument("--file", help="上传文件，缺省自动生成示例 md")
     ingest.add_argument("--wait", type=int, default=30, help="状态轮询最长秒数")
     ingest.add_argument("--interval", type=float, default=2.0, help="轮询间隔秒数")
 
-    query = sub.add_parser("query", help="调用 svc-query 的 /query")
-    query.add_argument("--service", default="svc-query", help="Nacos 服务名")
+    query = sub.add_parser("query", help="调用 app-query-worker 的 /query")
+    query.add_argument("--service", default="app-query-worker", help="Nacos 服务名")
     query.add_argument("--query", default="金融标准知识库支持哪些业务？", help="查询内容")
     query.add_argument("--stream", action="store_true", help="流式：再订阅 /stream/{session_id}")
     query.add_argument("--timeout", type=float, default=180.0, help="HTTP 超时秒数")
@@ -345,12 +345,12 @@ cd pymodules
 # 1) 查看注册信息（服务 / 实例 / 接口清单 / metadata）
 uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 list
 
-# 2) svc-ingest：调 POST /upload，再轮询 GET /status/{task_id}
+# 2) app-ingest-worker：调 POST /upload，再轮询 GET /status/{task_id}
 uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 ingest --file ./doc/xxx.pdf --wait 30
 
-# 3) svc-query：调 POST /query（非流式拿 answer）
+# 3) app-query-worker：调 POST /query（非流式拿 answer）
 uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 query --query "金融标准知识库支持哪些业务？"
 
-# 4) svc-query：流式，再订阅 /stream/{session_id}
+# 4) app-query-worker：流式，再订阅 /stream/{session_id}
 uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 query --query "..." --stream
 """

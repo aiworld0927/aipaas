@@ -2,15 +2,15 @@
 # AIPaaS 五级编排 · 第 3 级：Python 业务编排服务
 # -----------------------------------------------------------------------------
 # 依赖：第 2 级 docker-compose-models.yaml（含第 1 级技术组件）
-# 新增：svc-ingest / svc-query
+# 新增：app-ingest-worker / app-query-worker
 #
 # 在本文件所在目录执行：
 #   docker compose -f docker-compose-python.yaml up -d --build
 #   docker compose -f docker-compose-python.yaml ps
 #   docker compose -f docker-compose-python.yaml down
 #
-# 说明：文档导入由 svc-ingest 执行，检索与生成由 svc-query 执行；
-#       前端经 platform-gateway 统一调用：问答直连 svc-query，导入经 management 转 svc-ingest。
+# 说明：文档导入由 app-ingest-worker 执行，检索与生成由 app-query-worker 执行；
+#       前端经 platform-gateway 统一调用：问答直连 app-query-worker，导入经 management 转 app-ingest-worker。
 # =============================================================================
 
 include:
@@ -28,12 +28,12 @@ x-restart: &default-restart
   restart: unless-stopped
 
 services:
-  svc-ingest:
+  app-ingest-worker:
     build:
       context: ../../pymodules
-      dockerfile: apps/ingest-worker/Dockerfile
-    image: aipaas/svc-ingest:${IMAGE_TAG:-latest}
-    container_name: aipaas-svc-ingest
+      dockerfile: apps/app-ingest-worker/Dockerfile
+    image: aipaas/app-ingest-worker:${IMAGE_TAG:-latest}
+    container_name: aipaas-app-ingest-worker
     env_file: .env
     environment:
       APP_ENV: ${APP_ENV:-devcompany}
@@ -48,15 +48,15 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
       NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
-      INGEST_WORKER_PORT: ${INGEST_WORKER_PORT:-8001}
+      APP_INGEST_WORKER_PORT: ${APP_INGEST_WORKER_PORT:-8001}
       TZ: Asia/Shanghai
     ports:
-      - "${INGEST_WORKER_PORT:-8001}:${INGEST_WORKER_PORT:-8001}"
+      - "${APP_INGEST_WORKER_PORT:-8001}:${APP_INGEST_WORKER_PORT:-8001}"
     volumes:
-      - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-ingest:/app/logs
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs/app-ingest-worker:/app/logs
       - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${INGEST_WORKER_PORT:-8001}/health')"]
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${APP_INGEST_WORKER_PORT:-8001}/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -87,12 +87,12 @@ services:
           memory: 256M
     <<: [*default-restart, *default-logging]
 
-  svc-query:
+  app-query-worker:
     build:
       context: ../../pymodules
-      dockerfile: apps/query-worker/Dockerfile
-    image: aipaas/svc-query:${IMAGE_TAG:-latest}
-    container_name: aipaas-svc-query
+      dockerfile: apps/app-query-worker/Dockerfile
+    image: aipaas/app-query-worker:${IMAGE_TAG:-latest}
+    container_name: aipaas-app-query-worker
     env_file: .env
     environment:
       APP_ENV: ${APP_ENV:-devcompany}
@@ -106,15 +106,15 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
       NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
-      QUERY_WORKER_PORT: ${QUERY_WORKER_PORT:-8002}
+      APP_QUERY_WORKER_PORT: ${APP_QUERY_WORKER_PORT:-8002}
       TZ: Asia/Shanghai
     ports:
-      - "${QUERY_WORKER_PORT:-8002}:${QUERY_WORKER_PORT:-8002}"
+      - "${APP_QUERY_WORKER_PORT:-8002}:${APP_QUERY_WORKER_PORT:-8002}"
     volumes:
-      - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-query:/app/logs
+      - ${DOCKER_LOG_DIRECTORY:-.}/logs/app-query-worker:/app/logs
       - ${CONFIG_PACKAGE_DIR:-../../pymodules/configs}:/app/configs:ro
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${QUERY_WORKER_PORT:-8002}/health')"]
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${APP_QUERY_WORKER_PORT:-8002}/health')"]
       interval: 30s
       timeout: 5s
       retries: 3

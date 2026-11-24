@@ -79,7 +79,7 @@ services:
       AIPAAS_REQUEST_LOG_RETENTION_DAYS: ${AIPAAS_REQUEST_LOG_RETENTION_DAYS:-30}
       AIPAAS_REQUEST_LOG_PATH: /var/log/aipaas
       AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
-      AIPAAS_PARSE_SERVICE_URL: http://svc-ingest:${INGEST_WORKER_PORT:-8001}
+      AIPAAS_PARSE_SERVICE_URL: http://app-ingest-worker:${APP_INGEST_WORKER_PORT:-8001}
       AIPAAS_TLS_CERTIFICATE_PATH: /etc/aipaas/tls/tls.crt
       # 完整密钥只在管理服务内；只向网关导出 JWT 验证密钥。
       AIPAAS_KEYRING_PATH: /var/lib/aipaas/security/keyring.json
@@ -105,7 +105,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      svc-ingest:
+      app-ingest-worker:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
@@ -137,7 +137,7 @@ services:
       PLATFORM_MANAGEMENT_URL: http://platform-management:8080
       PLATFORM_MANAGEMENT_CONNECT_TIMEOUT: ${PLATFORM_MANAGEMENT_CONNECT_TIMEOUT:-PT5S}
       PLATFORM_MANAGEMENT_READ_TIMEOUT: ${PLATFORM_MANAGEMENT_READ_TIMEOUT:-PT180S}
-      AIPAAS_CHAT_SERVICE_URL: http://svc-query:${QUERY_WORKER_PORT:-8002}
+      AIPAAS_CHAT_SERVICE_URL: http://app-query-worker:${APP_QUERY_WORKER_PORT:-8002}
       AIPAAS_CHAT_CONNECT_TIMEOUT: ${AIPAAS_CHAT_CONNECT_TIMEOUT:-PT5S}
       AIPAAS_CHAT_READ_TIMEOUT: ${AIPAAS_CHAT_READ_TIMEOUT:-PT120S}
       AIPAAS_JWT_VERIFY_SECRET_FILE: /var/lib/aipaas/jwt-verify/jwt-secret
@@ -156,7 +156,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      svc-query:
+      app-query-worker:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]

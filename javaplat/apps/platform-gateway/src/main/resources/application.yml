@@ -53,7 +53,7 @@ aipaas:
     connect-timeout: ${PLATFORM_MANAGEMENT_CONNECT_TIMEOUT:PT5S}
     read-timeout: ${PLATFORM_MANAGEMENT_READ_TIMEOUT:PT180S}
   chat:
-    service-url: ${AIPAAS_CHAT_SERVICE_URL:http://svc-query:8002}
+    service-url: ${AIPAAS_CHAT_SERVICE_URL:http://app-query-worker:8002}
     connect-timeout: ${AIPAAS_CHAT_CONNECT_TIMEOUT:PT5S}
     read-timeout: ${AIPAAS_CHAT_READ_TIMEOUT:PT120S}
   security:

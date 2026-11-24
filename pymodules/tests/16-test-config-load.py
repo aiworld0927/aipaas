@@ -1,9 +1,9 @@
 """配置加载流程演示 / 自测脚本。
 
-对应 ingest-worker 入口第 29 行的 ``settings = get_ingest_settings()``，
+对应 app-ingest-worker 入口第 29 行的 ``settings = get_ingest_settings()``，
 底层调用链是：
 
-    app.py -> get_ingest_settings() -> load_settings("ingest_worker")
+    app.py -> get_ingest_settings() -> load_settings("app_ingest_worker")
 
 本脚本逐项打印 load_settings 的 10 个步骤，便于理解配置是怎么"合起来"的：
 
@@ -13,7 +13,7 @@
   4. 合并 base.yaml -> {APP_ENV}.yaml（后者覆盖前者）
   5. 裁切：只保留 common + 本模块命名空间
   6. 解析 ${oc.env:VAR,默认值} 环境变量插值
-  7. 环境变量覆盖 host/port（如 INGEST_WORKER_PORT）
+  7. 环境变量覆盖 host/port（如 APP_INGEST_WORKER_PORT）
   8. Pydantic 校验（extra="forbid"，配错字段直接报错）
   9. 进程内缓存（同一进程重复调用返回同一对象）
  10. 按配置重建日志 sink
@@ -81,15 +81,15 @@ def main() -> None:
     expect_error("load_settings('not_exists')", lambda: load_settings("not_exists"))
 
     # ---------------------------------------------------------------- 3
-    title("3", "正常加载：环境变量覆盖 host/port 后加载 ingest_worker")
-    os.environ["INGEST_WORKER_HOST"] = "127.0.0.1"
-    os.environ["INGEST_WORKER_PORT"] = "9101"
+    title("3", "正常加载：环境变量覆盖 host/port 后加载 app_ingest_worker")
+    os.environ["APP_INGEST_WORKER_HOST"] = "127.0.0.1"
+    os.environ["APP_INGEST_WORKER_PORT"] = "9101"
 
     base_file = Path(os.environ["CONFIG_DIR"]) / "aipaas_config.base.yaml"
     env_file = Path(os.environ["CONFIG_DIR"]) / f"aipaas_config.{os.environ['APP_ENV']}.yaml"
     print(f"  合并顺序: {base_file.name} -> {env_file.name}（后者覆盖前者）")
 
-    settings = load_settings("ingest_worker")
+    settings = load_settings("app_ingest_worker")
     ok("返回类型", type(settings).__name__)
     ok("顶层键（裁切结果）", sorted(settings.model_dump().keys()))
 
@@ -117,25 +117,25 @@ def main() -> None:
         masked("common.nacos.password", settings.common.nacos.password_str)
 
     # ---------------------------------------------------------------- 4
-    title("4", "限定了生效范围：只能看到 common + ingest_worker")
-    ok("含 query_worker 命名空间", "query_worker" in settings.model_dump())
+    title("4", "限定了生效范围：只能看到 common + app_ingest_worker")
+    ok("含 app_query_worker 命名空间", "app_query_worker" in settings.model_dump())
     ok("module 含 query_high_threshold", hasattr(settings.module, "query_high_threshold"))
 
     # ---------------------------------------------------------------- 5
     title("5", "进程内缓存：重复 load_settings 返回同一对象")
-    again = load_settings("ingest_worker")
+    again = load_settings("app_ingest_worker")
     ok("settings is again", settings is again)
 
     # ---------------------------------------------------------------- 6
     title("6", "同进程换模块：必须报错（配置按进程单例）")
-    expect_error("load_settings('query_worker')", lambda: load_settings("query_worker"))
+    expect_error("load_settings('app_query_worker')", lambda: load_settings("app_query_worker"))
 
     # ---------------------------------------------------------------- 7
     title("7", "非法 APP_ENV：必须报错")
     _reset_for_test()
     try:
         os.environ["APP_ENV"] = "prod"
-        expect_error("APP_ENV=prod", lambda: load_settings("ingest_worker"))
+        expect_error("APP_ENV=prod", lambda: load_settings("app_ingest_worker"))
     finally:
         os.environ["APP_ENV"] = "devhome"
 
@@ -143,10 +143,10 @@ def main() -> None:
     title("8", "端口环境变量不是整数：必须报错")
     _reset_for_test()
     try:
-        os.environ["INGEST_WORKER_PORT"] = "abc"
-        expect_error("INGEST_WORKER_PORT=abc", lambda: load_settings("ingest_worker"))
+        os.environ["APP_INGEST_WORKER_PORT"] = "abc"
+        expect_error("APP_INGEST_WORKER_PORT=abc", lambda: load_settings("app_ingest_worker"))
     finally:
-        os.environ["INGEST_WORKER_PORT"] = "9101"
+        os.environ["APP_INGEST_WORKER_PORT"] = "9101"
 
     # ---------------------------------------------------------------- 9
     title("9", "配置目录不存在：必须报错")
@@ -154,7 +154,7 @@ def main() -> None:
     try:
         os.environ["CONFIG_DIR"] = "/tmp/aipaas-config-not-exists"
         expect_error("CONFIG_DIR=/tmp/aipaas-config-not-exists",
-                     lambda: load_settings("ingest_worker"))
+                     lambda: load_settings("app_ingest_worker"))
     finally:
         os.environ["CONFIG_DIR"] = "configs"
 

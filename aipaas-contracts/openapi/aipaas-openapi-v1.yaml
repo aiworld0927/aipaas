@@ -4001,7 +4001,7 @@ components:
         parentSpanId: {type: string, nullable: true}
         name: {type: string, examples: [retrieve, generate]}
         stage: {type: string, enum: [AUTH, RETRIEVE, RERANK, PROMPT, LLM, SECURITY, INDEX, OTHER]}
-        service: {type: string, examples: [platform-api, svc-query]}
+        service: {type: string, examples: [platform-api, app-query-worker]}
         kind: {type: string, examples: [SERVER]}
         startTime: {type: string, format: date-time}
         endTime: {type: string, format: date-time}

@@ -33,20 +33,20 @@ uv lock --check
 启动服务（在 `pymodules/` 下执行）：
 
 ```bash
-uv run uvicorn ingest_worker.api.service:app --reload
-uv run uvicorn query_worker.api.service:app --reload
+uv run uvicorn app_ingest_worker.api.service:app --reload
+uv run uvicorn app_query_worker.api.service:app --reload
 uv run uvicorn model_embedding_worker.api.service:app --reload
 uv run uvicorn model_reranker_worker.api.service:app --reload
-# 或：uv run python -m query_worker.api.service
+# 或：uv run python -m app_query_worker.api.service
 ```
 
-当前默认端口：导入 **8001**、查询 **8002**、嵌入 **8003**、重排 **8004**。部分文档/README 仍写 8000/8001，以 YAML、Dockerfile、Compose 为准。改端口时优先设置 `INGEST_WORKER_PORT` / `QUERY_WORKER_PORT` / `MODEL_EMBEDDING_WORKER_PORT` / `MODEL_RERANKER_WORKER_PORT`，不要只传 `--port`：Nacos 注册读取的是 `settings.module.port`，两者必须一致。
+当前默认端口：导入 **8001**、查询 **8002**、嵌入 **8003**、重排 **8004**。部分文档/README 仍写 8000/8001，以 YAML、Dockerfile、Compose 为准。改端口时优先设置 `APP_INGEST_WORKER_PORT` / `APP_QUERY_WORKER_PORT` / `MODEL_EMBEDDING_WORKER_PORT` / `MODEL_RERANKER_WORKER_PORT`，不要只传 `--port`：Nacos 注册读取的是 `settings.module.port`，两者必须一致。
 
 检查与测试（仓库没有 pytest 测试套件）：
 
 ```bash
 cd pymodules
-uv run python -m compileall -q apps/ingest-worker/ingest_worker apps/query-worker/query_worker packages
+uv run python -m compileall -q apps/app-ingest-worker/app_ingest_worker apps/app-query-worker/app_query_worker packages
 uv run python tests/01-llm-test.py          # tests/ 下是手工冒烟脚本，需要真实中间件
 uv run python tests/08-sse-test.py
 uv run python -m unittest packages/common/tests/test_settings.py   # 唯一的 unittest 文件；fixture 已过时，当前存在失败
@@ -57,8 +57,8 @@ uv run python -m unittest packages/common/tests/test_settings.py   # 唯一的 u
 Docker 构建（构建上下文为 `pymodules/`）：
 
 ```bash
-docker build -f apps/query-worker/Dockerfile -t aipaas/svc-query .
-docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest .
+docker build -f apps/app-query-worker/Dockerfile -t aipaas/app-query-worker .
+docker build -f apps/app-ingest-worker/Dockerfile -t aipaas/app-ingest-worker .
 ```
 
 构建两个模型 worker 镜像前，必须先用 `docker/base/Dockerfile` 构建共享依赖基座（`TORCH_VARIANT=cpu|gpu`）。基座中记录了 `uv.lock` 的哈希；若 lock 已变更但基座未重建，应用镜像构建会直接失败。
@@ -91,11 +91,11 @@ docker compose up -d --build                     # 第 5 级：默认全量入�
 docker compose logs -f platform-gateway platform-management
 ```
 
-五级 `include` 链依次为 base（核心 etcd / MinIO / Milvus / MongoDB / PostgreSQL / Redis，可选 attu / Nacos / RocketMQ / vLLM）→ models（init-app-dirs、嵌入、重排）→ python（svc-ingest、svc-query）→ java（幂等 platform-db-init、platform-management、platform-gateway）→ 主文件（frontend）。每一级都可独立作为启动入口并自动包含下层；base 无需 `--build`，可选组件仍由 `COMPOSE_PROFILES` 或 `--profile` 控制。
+五级 `include` 链依次为 base（核心 etcd / MinIO / Milvus / MongoDB / PostgreSQL / Redis，可选 attu / Nacos / RocketMQ / vLLM）→ models（init-app-dirs、嵌入、重排）→ python（app-ingest-worker、app-query-worker）→ java（幂等 platform-db-init、platform-management、platform-gateway）→ 主文件（frontend）。每一级都可独立作为启动入口并自动包含下层；base 无需 `--build`，可选组件仍由 `COMPOSE_PROFILES` 或 `--profile` 控制。
 
 Java 侧已拆分为两个可部署应用，共享 `libs/common`：`platform-management` 是管理服务（登录/刷新/注销、用户与 RBAC、知识库、文档、审计落库、内容策略、系统配置、导入任务，并持有完整密钥与数据库/Flyway/MinIO 依赖），`platform-gateway` 是统一入口（本地 HS256 验签 + Redis 用户安全快照与 JTI 撤销校验、外部身份头清理与可信身份头重建、`/api/v1/**` 流式代理、问答安全编排、审计事件发布、Trace/幂等/SSE）。原 `platform-api` 聚合单体已删除，不再存在该可部署应用。
 
-管理链路为 `frontend → platform-gateway → platform-management`，问答链路为 `frontend → platform-gateway → svc-query`（`/api/v1/chat`、`/api/v1/chat/stream` 由网关直接调用），导入链路为 `frontend → platform-gateway → platform-management → svc-ingest`。frontend 仅将 `/api/` 反代到 `PLATFORM_API_UPSTREAM=http://platform-gateway:8080`，不再保留直连 Python 的 `/query-api`、`/import-api` 旁路；HTTP / HTTPS 默认端口为 80 / 443，HTTPS 由 `FRONTEND_HTTPS_PORT` 配置，证书通过共享 `platform-tls` 卷提供。`docker-compose-p0.yaml` 保持独立 P0 编排，不并入五级链。
+管理链路为 `frontend → platform-gateway → platform-management`，问答链路为 `frontend → platform-gateway → app-query-worker`（`/api/v1/chat`、`/api/v1/chat/stream` 由网关直接调用），导入链路为 `frontend → platform-gateway → platform-management → app-ingest-worker`。frontend 仅将 `/api/` 反代到 `PLATFORM_API_UPSTREAM=http://platform-gateway:8080`，不再保留直连 Python 的 `/query-api`、`/import-api` 旁路；HTTP / HTTPS 默认端口为 80 / 443，HTTPS 由 `FRONTEND_HTTPS_PORT` 配置，证书通过共享 `platform-tls` 卷提供。`docker-compose-p0.yaml` 保持独立 P0 编排，不并入五级链。
 
 认证与状态同步：管理服务启动时以 0600 权限原子导出 Base64 JWT 验证密钥到 `/var/lib/aipaas/jwt-verify/jwt-secret`，网关只读挂载卷 `platform-jwt-verify`，不挂载 AES/审计密钥或业务数据卷。Redis 键为用户快照 `aipaas:gateway:auth:{userId}`、JTI 撤销 `aipaas:gateway:revoked:{jti}`、内容策略快照 `aipaas:gateway:content-policies`、审计 Stream `aipaas:gateway:audit`。用户/角色/内容策略变更采用 fail-closed（先失效旧快照，再改库，提交后重新发布），快照缺失或 Redis 故障时网关返回 401/503；网关把审计事件同步 `XADD` 到 Stream，管理服务消费并在成功落库/告警后才 ACK，失败保持 pending 重试（至少一次）。
 
@@ -112,14 +112,14 @@ Java 侧已拆分为两个可部署应用，共享 `libs/common`：`platform-man
 - `packages/retrieval` → `aipaas_retrieval`：Milvus 混合检索、RRF 输入、集合工具。
 - `packages/storage` → `aipaas_storage`：MongoDB 对话历史、MinIO、MySQL/SQLAlchemy、Kubernetes。
 - `packages/nacos` → `aipaas_nacos`：Nacos 注册生命周期 + 接口元数据。
-- `packages/mcp-agents1.0` → `aipaas_mcp_agents`：query-worker 使用的 MCP 联网搜索客户端。
+- `packages/mcp-agents1.0` → `aipaas_mcp_agents`：app-query-worker 使用的 MCP 联网搜索客户端。
 - `packages/mcp-agents2.0` **不在** workspace 中，当前无人使用。
 
 非 workspace 成员：`apps/apis`（管理端/平台侧，暂不处理）、`apps/eval-runner`（未适配）、`packages/mcp-agents2.0`。不要指望 `uv sync` 会安装它们。
 
 新增代码时：
 
-- 应用内部一律使用命名空间包：import 必须写 `ingest_worker.*` / `query_worker.*`，禁止顶层 `graph.*` / `api.*`——两个应用共用一个 venv，会互相遮蔽。
+- 应用内部一律使用命名空间包：import 必须写 `app_ingest_worker.*` / `app_query_worker.*`，禁止顶层 `graph.*` / `api.*`——两个应用共用一个 venv，会互相遮蔽。
 - 第三方依赖声明在**对应成员**的 `pyproject.toml` 中；包间依赖使用 `{ workspace = true }`，并通过 `uv add --package <dist-name>` 添加。
 - 业务编排先留在 `apps/`，稳定后再上移到新的/现有 `packages/*` 成员（新成员必须有独立的 `pyproject.toml` 并加入根 workspace 的 `members`）。
 
@@ -140,20 +140,20 @@ Java 侧已拆分为两个可部署应用，共享 `libs/common`：`platform-man
 
 每个 HTTP 请求由中间件生成带前缀的 request_id 并写入上下文（`ingest_<uuid>` / `query_<uuid>`）。
 
-### 导入流程（`apps/ingest-worker`）
+### 导入流程（`apps/app-ingest-worker`）
 
 `POST /upload` 将每个文件保存到 `pymodules/output_files/YYYYMMDD/<task_id>/`，尽力上传到 MinIO，随后用后台 asyncio 任务启动 `KBImportWorkflow`。客户端轮询 `GET /status/{task_id}`。
 
-LangGraph 节点顺序（`ingest_worker/graph/main.py`）：
+LangGraph 节点顺序（`app_ingest_worker/graph/main.py`）：
 `node_entry` →（PDF 走 `node_pdf_to_md` → `node_md_img`，MD 直接走 `node_md_img`）→ `node_document_split` → `node_item_name_recognition` → `node_bge_embedding` → `node_import_milvus`。
 
 链路涉及的外部依赖：MinerU API（PDF→MD）、多模态 LLM（图片理解）、Mongo/Milvus（主体名存储）、嵌入 worker、MinIO、Milvus。
 
-### 查询流程（`apps/query-worker`）
+### 查询流程（`apps/app-query-worker`）
 
 `POST /query` 在非流式模式下直接 await 图执行；流式模式下创建 asyncio 任务并立即返回 `session_id`，客户端再订阅 `GET /stream/{session_id}`。节点把 SSE `DELTA`/`FINAL` 事件推入**进程内**队列。API 实际使用的是 `main_v2.KBQueryWorkflowV2`（`main_v1.py` 为遗留代码，未使用）。
 
-LangGraph 节点顺序（`query_worker/graph/main_v2.py`）：
+LangGraph 节点顺序（`app_query_worker/graph/main_v2.py`）：
 `node_item_name_confirm` → 并行分发到 `node_search_embedding`、`node_search_embedding_hyde`、`node_web_search_mcp` → `node_rrf` → `node_rerank` → `node_answer_output`。
 
 若主体名确认阶段已直接产出答案，则路由直接进入答案输出节点。流程使用 Milvus 混合检索（BGE-M3 dense+sparse）、HyDE、MCP 联网搜索、RRF 融合、HTTP 重排，最后由 LLM 流式生成；对话历史存入 MongoDB（`chat_message`，按 `session_id` 组织）。
@@ -184,5 +184,5 @@ Compose 项目网络为 `aipaas-network`（bridge）。容器之间通过服务�
 - `load_settings` 必须先于那些在 import 阶段调用 `get_settings()` 的模块执行；沿用 `api/service.py` 中已有的入口顺序。
 - 不要手工编辑 `uv.lock`；使用 `uv add` / `uv lock`。lock 变更后必须重建模型共享基座镜像。
 - `pymodules/tests/` 不是 CI 测试套件，不要当可靠的回归覆盖。
-- `javaplat/` 当前有两个可部署入口：`platform-management`（管理服务）与 `platform-gateway`（统一入口网关），共享 `libs/common`；原 `platform-api` 聚合单体已拆分删除。它们使用核心 PostgreSQL 中独立的 `PLATFORM_DB`（默认 `aipaas`），管理链路为 gateway → management，问答由 gateway 直连 svc-query，导入为 gateway → management → svc-ingest；第 4 级及以上启动前必须配置 `PLATFORM_BOOTSTRAP_ADMIN_PASSWORD`。
+- `javaplat/` 当前有两个可部署入口：`platform-management`（管理服务）与 `platform-gateway`（统一入口网关），共享 `libs/common`；原 `platform-api` 聚合单体已拆分删除。它们使用核心 PostgreSQL 中独立的 `PLATFORM_DB`（默认 `aipaas`），管理链路为 gateway → management，问答由 gateway 直连 app-query-worker，导入为 gateway → management → app-ingest-worker；第 4 级及以上启动前必须配置 `PLATFORM_BOOTSTRAP_ADMIN_PASSWORD`。
 - 未解决的安全问题记录在 `docs/07_风险问题.md`（无认证、CORS 全放开、上传文件名路径穿越、MinIO 桶可匿名读取）。不要基于这些问题已修复的假设开发新行为。

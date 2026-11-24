@@ -158,4 +158,4 @@ apps/apis（独立于 workspace）
 - `routers/deploysvc.py` 会执行 `docker build/push`、SSH 远程命令、写状态文件等有副作用的操作，误调用可能影响真实环境。
 - `svc/` 下文件体积大、历史分支多，且存在 `_bak` 备份，阅读时优先从 `routers` 入口定位调用链。
 - `lifespan.py` 与 `aipaas_lifespan.py` 内容重叠，修改生命周期逻辑前先确认入口实际引用的是哪一个。
-- 如需把平台接口迁入新体系，建议按 `apps/query-worker` 的模式重建包结构（配置引导、依赖注入、独立 pyproject/Dockerfile），而不是直接在现有文件上打补丁。
+- 如需把平台接口迁入新体系，建议按 `apps/app-query-worker` 的模式重建包结构（配置引导、依赖注入、独立 pyproject/Dockerfile），而不是直接在现有文件上打补丁。

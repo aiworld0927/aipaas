@@ -98,7 +98,7 @@ def _apply_env_overrides(data: dict, module_name: str) -> None:
     """统一用环境变量覆盖监听地址，优先级：环境变量 > {APP_ENV}.yaml > base.yaml。
 
     变量名固定为 `{MODULE_NAME大写}_{字段大写}`：
-      INGEST_WORKER_PORT / QUERY_WORKER_PORT /
+      APP_INGEST_WORKER_PORT / APP_QUERY_WORKER_PORT /
       MODEL_EMBEDDING_WORKER_PORT / MODEL_RERANKER_WORKER_PORT（另有对应 _HOST）
     这样容器、裸机、K8s 都只需改环境变量即可换端口，无需改 YAML 或镜像。
     """

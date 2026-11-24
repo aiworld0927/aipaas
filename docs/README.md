@@ -118,9 +118,9 @@ docs/
 | 五级 Compose 编排（base → models → python → java → frontend） | `deploy/docker/docker-compose.yaml` / `.env.example` |
 | Java 已拆分为 platform-gateway + platform-management | `javaplat/pom.xml` |
 | gateway multipart.enabled=false 流式转发 | `javaplat/apps/platform-gateway/src/main/resources/application.yml` |
-| query 链路直达 svc-query（不经过 management） | `javaplat/apps/platform-gateway/.../ChatController.java` |
+| query 链路直达 app-query-worker（不经过 management） | `javaplat/apps/platform-gateway/.../ChatController.java` |
 | PostgreSQL Flyway V1~V10 迁移 | `javaplat/apps/platform-management/src/main/resources/db/migration/` |
-| SSE 流式问答（event: delta/citation/done） | `pymodules/apps/query-worker/query_worker/api/routers/stream.py` |
+| SSE 流式问答（event: delta/citation/done） | `pymodules/apps/app-query-worker/app_query_worker/api/routers/stream.py` |
 | Milvus HNSW + BGE-M3 | `pymodules/packages/pipeline/vector_index.py` |
 | MinIO 对象存储 + AES-GCM 加密 | `deploy/docker/docker-compose-java.yaml` |
 | Redis 会话与 JTI 撤销 | `javaplat/apps/platform-management/.../application.yml` |
@@ -169,7 +169,7 @@ docs/
 | `deploy/docker/docker-compose-p0.yaml` | P0 独立编排（避开宿主机冲突端口） |
 | `deploy/docker/.env.example` | 部署环境变量模板（COMPOSE_PROFILES、端口、密钥） |
 | `aipaas-contracts/openapi/aipaas-openapi-v1.yaml` | OpenAPI 3.1 契约（冻结版 1.1.0-p0） |
-| `web/nginx.conf.template` | 前端反代规则（/api/** → gateway、/query-api/ → svc-query、/import-api/ → svc-ingest） |
+| `web/nginx.conf.template` | 前端反代规则（/api/** → gateway、/query-api/ → app-query-worker、/import-api/ → app-ingest-worker） |
 | `pymodules/configs/aipaas_config.*.yaml` | Python 业务侧模型阈值、连接地址（配置包） |
 
 ---

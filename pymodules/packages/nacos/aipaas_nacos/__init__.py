@@ -1,4 +1,4 @@
-"""Nacos 公共对接层：供 ingest-worker / query-worker 共用的服务注册能力。"""
+"""Nacos 公共对接层：供 app-ingest-worker / app-query-worker 共用的服务注册能力。"""
 from aipaas_nacos.registry import (
     NacosRegistration,
     collect_interface_metadata,

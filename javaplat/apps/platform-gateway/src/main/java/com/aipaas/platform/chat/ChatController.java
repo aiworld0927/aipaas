@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** 网关问答安全编排入口，直接调用 svc-query，不同步经过管理服务。 */
+/** 网关问答安全编排入口，直接调用 app-query-worker，不同步经过管理服务。 */
 @RestController
 @RequestMapping("/api/v1")
 public class ChatController {
@@ -58,7 +58,7 @@ public class ChatController {
 
     public ChatController(GatewayContentSecurityService security, OutputComplianceGuard compliance, TracingService tracing,
                           ObjectMapper objectMapper, GatewayAuditService audit,
-                          @Value("${aipaas.chat.service-url:http://svc-query:8002}") String serviceUrl,
+                          @Value("${aipaas.chat.service-url:http://app-query-worker:8002}") String serviceUrl,
                           @Value("${aipaas.chat.connect-timeout:PT5S}") Duration connectTimeout,
                           @Value("${aipaas.chat.read-timeout:PT120S}") Duration readTimeout) {
         this.security = security;

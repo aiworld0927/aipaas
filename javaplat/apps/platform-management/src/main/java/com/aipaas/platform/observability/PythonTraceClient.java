@@ -25,8 +25,8 @@ public class PythonTraceClient {
     private final ObjectMapper mapper;
 
     public PythonTraceClient(ObjectMapper mapper,
-                             @Value("${aipaas.chat.service-url:http://svc-query:8002}") String queryUrl,
-                             @Value("${aipaas.parse.service-url:http://ingest-worker:8000}") String ingestUrl,
+                             @Value("${aipaas.chat.service-url:http://app-query-worker:8002}") String queryUrl,
+                             @Value("${aipaas.parse.service-url:http://app-ingest-worker:8000}") String ingestUrl,
                              @Value("${aipaas.observability.trace-source-timeout:PT2S}") Duration timeout) {
         this.mapper = mapper;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();

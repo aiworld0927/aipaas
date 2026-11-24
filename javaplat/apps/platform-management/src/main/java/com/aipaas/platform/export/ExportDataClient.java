@@ -2,7 +2,7 @@ package com.aipaas.platform.export;
 
 import java.util.List;
 
-/** 从 ingest-worker 拉取条目化条款与标准简介（内部调用，已由 Java 完成权限校验）。 */
+/** 从 app-ingest-worker 拉取条目化条款与标准简介（内部调用，已由 Java 完成权限校验）。 */
 public interface ExportDataClient {
 
     ClauseData clauses(String documentId, String tenantId);

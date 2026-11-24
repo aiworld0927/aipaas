@@ -16,7 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** 通过内部 HTTP 读取 ingest-worker 的条款与简介；分页拉全，避免条款遗漏。 */
+/** 通过内部 HTTP 读取 app-ingest-worker 的条款与简介；分页拉全，避免条款遗漏。 */
 @Service
 public class IngestExportDataClient implements ExportDataClient {
 
@@ -26,7 +26,7 @@ public class IngestExportDataClient implements ExportDataClient {
     private final ObjectMapper mapper;
 
     public IngestExportDataClient(ObjectMapper mapper,
-                                  @Value("${aipaas.parse.service-url:http://ingest-worker:8000}") String serviceUrl,
+                                  @Value("${aipaas.parse.service-url:http://app-ingest-worker:8000}") String serviceUrl,
                                   @Value("${aipaas.parse.connect-timeout:PT5S}") Duration connectTimeout,
                                   @Value("${aipaas.parse.read-timeout:PT60S}") Duration readTimeout) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();

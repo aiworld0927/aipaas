@@ -1,7 +1,7 @@
 [project]
 name = "aipaas-common"
 version = "0.1.0"
-description = "AIPaaS 共享库（clients/core/utils/config），被 svc-import 和 svc-query 通过 workspace 引用"
+description = "AIPaaS 共享库（clients/core/utils/config），被 svc-import 和 app-query-worker 通过 workspace 引用"
 requires-python = ">=3.12"
 dependencies = [
     # Web 框架（sse_utils / task_utils 依赖）

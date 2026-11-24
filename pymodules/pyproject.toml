@@ -10,8 +10,8 @@ requires-python = ">=3.12,<3.14"
 # ---------------------------------------------------------------------------
 [tool.uv.workspace]
 members = [
-    "apps/ingest-worker",
-    "apps/query-worker",
+    "apps/app-ingest-worker",
+    "apps/app-query-worker",
     "apps/model-embedding-worker",
     "apps/model-reranker-worker",
     "packages/common",
@@ -24,7 +24,7 @@ members = [
     "packages/mcp-agents1.0",
 ]
 # 说明：packages/mcp-agents2.0 不在 workspace 中
-#   mcp-agents1.0: mcp>=1.19.0,<2 + openai-agents<0.20.0（query-worker 使用）
+#   mcp-agents1.0: mcp>=1.19.0,<2 + openai-agents<0.20.0（app-query-worker 使用）
 #   mcp-agents2.0: mcp>=2,<3 + openai-agents==0.23.1（暂未被任何成员依赖，独立管理）
 #   aipaas-model-clients 提供 LLM / 嵌入 / 重排的 HTTP 客户端，MCP 客户端由 mcp-agents 包提供
 

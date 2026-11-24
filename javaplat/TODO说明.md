@@ -13,9 +13,9 @@
 | --- | --- | --- | --- |
 | gateway | 8080 | 统一入口网关 | nacos、redis |
 | svc-auth | 8081 | 认证与权限 | nacos、postgres、redis |
-| svc-document | 8082 | 文档管理调度 | nacos、postgres、redis、minio、rocketmq、svc-ingest |
-| svc-search | 8083 | 检索编排 | nacos、postgres、redis、svc-query |
-| svc-agent | 8084 | 智能体编排 | nacos、postgres、redis、svc-query |
+| svc-document | 8082 | 文档管理调度 | nacos、postgres、redis、minio、rocketmq、app-ingest-worker |
+| svc-search | 8083 | 检索编排 | nacos、postgres、redis、app-query-worker |
+| svc-agent | 8084 | 智能体编排 | nacos、postgres、redis、app-query-worker |
 
 技术栈约定：JDK 21、Spring Boot 3.x、Spring Cloud Gateway、Nacos（注册+配置中心）、PostgreSQL、Redis、RocketMQ、MinIO。
 
@@ -44,15 +44,15 @@
 ### 2.3 svc-document（文档服务）
 
 - [ ] 文档元数据管理：上传记录、状态（解析中/完成/失败）、版本
-- [ ] 文件上传调度：接收文件 → 存 MinIO → 发 RocketMQ 消息 → 调用 Python svc-ingest 解析
-- [ ] 解析状态跟踪：消费 svc-ingest 回调/消息，更新状态并通知前端
+- [ ] 文件上传调度：接收文件 → 存 MinIO → 发 RocketMQ 消息 → 调用 Python app-ingest-worker 解析
+- [ ] 解析状态跟踪：消费 app-ingest-worker 回调/消息，更新状态并通知前端
 - [ ] 知识库管理：知识库（集合）维度组织文档，关联 Milvus Collection
 - [ ] 文档删除：同步清理 MinIO 对象与 Milvus 向量数据
 - [ ] 对外端口：宿主机 9082 → 容器 8082
 
 ### 2.4 svc-search（检索服务）
 
-- [ ] 检索编排：接收查询 → 调用 Python svc-query → 结果聚合返回
+- [ ] 检索编排：接收查询 → 调用 Python app-query-worker → 结果聚合返回
 - [ ] 检索历史：记录会话与问答历史（MongoDB/PostgreSQL）
 - [ ] 结果后处理：引用溯源、高亮标注
 - [ ] 检索统计：查询量、响应耗时、命中率指标上报
@@ -78,6 +78,6 @@
 ## 4. 评审确认点
 
 - [ ] 各模块端口分配是否合理（8080–8084，网关对外 8085）
-- [ ] svc-document 是否直调 svc-ingest，还是全部走 RocketMQ 异步
+- [ ] svc-document 是否直调 app-ingest-worker，还是全部走 RocketMQ 异步
 - [ ] 检索历史存储选型：PostgreSQL 还是 MongoDB
 - [ ] 是否需要独立的用户中心前端，还是复用 web 模块

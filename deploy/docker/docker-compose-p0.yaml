@@ -324,8 +324,8 @@ services:
       AIPAAS_API_VERSION: v1
       AIPAAS_CONTRACT_VERSION: 1.1.0-p0
       PLATFORM_MANAGEMENT_URL: http://platform-management:8080
-      # 问答编排下游：指向真正执行检索与生成的 Python 服务（svc-query）
-      AIPAAS_CHAT_SERVICE_URL: ${AIPAAS_CHAT_SERVICE_URL:-http://svc-query:8002}
+      # 问答编排下游：指向真正执行检索与生成的 Python 服务（app-query-worker）
+      AIPAAS_CHAT_SERVICE_URL: ${AIPAAS_CHAT_SERVICE_URL:-http://app-query-worker:8002}
       AIPAAS_JWT_VERIFY_SECRET_FILE: /var/lib/aipaas/jwt-verify/jwt-secret
       AIPAAS_TRACE_MAX_SPANS: ${AIPAAS_TRACE_MAX_SPANS:-20000}
       REDIS_HOST: redis

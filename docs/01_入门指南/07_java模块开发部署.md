@@ -30,7 +30,7 @@
 
 ```
 gateway ─────────────┬──► svc-auth
-                     ├──► svc-document ──► minio / rocketmq-namesrv / svc-ingest(Python)
+                     ├──► svc-document ──► minio / rocketmq-namesrv / app-ingest-worker(Python)
                      ├──► svc-search
                      └──► svc-agent
 
@@ -159,7 +159,7 @@ docker run -d --name svc-document --network aipaas-network \
   -e REDIS_HOST=redis \
   -e MINIO_ENDPOINT=http://minio:9000 \
   -e ROCKETMQ_HOST=rocketmq-namesrv \
-  -e PYTHON_SERVICE_URL=http://svc-ingest:8000 \
+  -e PYTHON_SERVICE_URL=http://app-ingest-worker:8000 \
   -v /tmp/logs/svc-document:/app/logs \
   aipaas/svc-document:latest
 ```
@@ -220,9 +220,9 @@ init-volumes
   └─► mongodb                 [Python 依赖]
 
 中间件就绪后：
-  svc-ingest(Python) ──► svc-document(Java)
+  app-ingest-worker(Python) ──► svc-document(Java)
   nacos + postgres + redis ──► gateway / svc-auth / svc-search / svc-agent
-  svc-document 还额外等 minio + rocketmq-namesrv + svc-ingest
+  svc-document 还额外等 minio + rocketmq-namesrv + app-ingest-worker
 ```
 
 ### 常用命令（Java 服务落地后适用）
@@ -250,7 +250,7 @@ docker compose down
 | svc-auth | nacos, postgres, redis | `service_healthy` |
 | svc-search | nacos, postgres, redis | `service_healthy` |
 | svc-agent | nacos, postgres, redis | `service_healthy` |
-| svc-document | nacos, postgres, redis, minio, rocketmq-namesrv, svc-ingest | `service_healthy` |
+| svc-document | nacos, postgres, redis, minio, rocketmq-namesrv, app-ingest-worker | `service_healthy` |
 
 > **关键**：所有依赖都使用 `service_healthy`，而不是 `service_started`。这能避免 Java 服务在 Nacos/Postgres 还没完全就绪时就启动导致连接失败。
 
@@ -366,7 +366,7 @@ volumes:
   # ...
 ```
 
-> 注意：主编排当前的 `init-app-dirs` 只预创建 `logs/svc-ingest`、`logs/svc-query`；Java 服务落地时需把各自日志子目录追加进 `init-app-dirs` 的 `mkdir -p` 列表（见第 8.5 节）。
+> 注意：主编排当前的 `init-app-dirs` 只预创建 `logs/app-ingest-worker`、`logs/app-query-worker`；Java 服务落地时需把各自日志子目录追加进 `init-app-dirs` 的 `mkdir -p` 列表（见第 8.5 节）。
 
 最终宿主机目录结构：
 
@@ -589,7 +589,7 @@ XXX_PORT=8087
 
 ```yaml
 command: >
-  sh -c "mkdir -p /logs/svc-ingest /logs/svc-query ... /logs/svc-xxx
+  sh -c "mkdir -p /logs/app-ingest-worker /logs/app-query-worker ... /logs/svc-xxx
     && chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} /logs"
 ```
 

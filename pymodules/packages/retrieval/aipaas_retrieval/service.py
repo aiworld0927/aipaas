@@ -83,7 +83,7 @@ def _observed_retrieve(method):
                 mark_retrieval(
                     bool(result and result.hits),
                     time.perf_counter() - started,
-                    service="svc-query",
+                    service="app-query-worker",
                 )
 
     return wrapper

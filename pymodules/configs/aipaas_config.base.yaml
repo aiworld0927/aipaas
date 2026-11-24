@@ -77,8 +77,8 @@ common:
 # 模块命名空间：字段只允许本模块使用，schema 校验 extra=forbid
 # =============================================================================
 
-ingest_worker:
-  # 监听地址（可被 INGEST_WORKER_HOST / INGEST_WORKER_PORT 覆盖）
+app_ingest_worker:
+  # 监听地址（可被 APP_INGEST_WORKER_HOST / APP_INGEST_WORKER_PORT 覆盖）
   host: 0.0.0.0
   port: 8001
   # 文档切片
@@ -90,8 +90,8 @@ ingest_worker:
   # 图片处理
   image_extensions: [.jpg, .jpeg, .png, .gif, .bmp, .webp]
 
-query_worker:
-  # 监听地址（可被 QUERY_WORKER_HOST / QUERY_WORKER_PORT 覆盖）
+app_query_worker:
+  # 监听地址（可被 APP_QUERY_WORKER_HOST / APP_QUERY_WORKER_PORT 覆盖）
   host: 0.0.0.0
   port: 8002
   # 商品名确认阈值

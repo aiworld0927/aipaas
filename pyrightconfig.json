@@ -18,8 +18,8 @@
     "pymodules/packages/pipeline",
     "pymodules/packages/retrieval",
     "pymodules/packages/storage",
-    "pymodules/apps/ingest-worker",
-    "pymodules/apps/query-worker",
+    "pymodules/apps/app-ingest-worker",
+    "pymodules/apps/app-query-worker",
     "pymodules/apps/model-embedding-worker",
     "pymodules/apps/model-reranker-worker"
   ],

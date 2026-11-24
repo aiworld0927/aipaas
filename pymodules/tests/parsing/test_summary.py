@@ -100,8 +100,8 @@ def test_clause_list_matches_parsed_clauses(parse_service: ParseService):
 
 
 def test_summary_api_returns_contract_payload(summary_service: SummaryService):
-    from ingest_worker.api.dependencies import get_summary_service
-    from ingest_worker.api.routers import summary
+    from app_ingest_worker.api.dependencies import get_summary_service
+    from app_ingest_worker.api.routers import summary
 
     app = FastAPI()
     app.include_router(summary.router)

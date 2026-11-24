@@ -17,7 +17,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** 标准简介网关：Java 侧完成文档归属与 KB 权限校验后，代理 ingest-worker 的 #405 接口。 */
+/** 标准简介网关：Java 侧完成文档归属与 KB 权限校验后，代理 app-ingest-worker 的 #405 接口。 */
 @Service
 public class SummaryProxyService {
 
@@ -25,7 +25,7 @@ public class SummaryProxyService {
     private final ObjectMapper mapper;
 
     public SummaryProxyService(ObjectMapper mapper,
-                               @Value("${aipaas.parse.service-url:http://ingest-worker:8000}") String serviceUrl,
+                               @Value("${aipaas.parse.service-url:http://app-ingest-worker:8000}") String serviceUrl,
                                @Value("${aipaas.parse.connect-timeout:PT5S}") Duration connectTimeout,
                                @Value("${aipaas.parse.read-timeout:PT60S}") Duration readTimeout) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();

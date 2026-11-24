@@ -27,8 +27,8 @@ members = [
     "aipaas-storage",
     "model-embedding-worker",
     "model-reranker-worker",
-    "svc-ingest",
-    "svc-query",
+    "app-ingest-worker",
+    "app-query-worker",
 ]
 
 [[package]]
@@ -3480,9 +3480,9 @@ wheels = [
 ]
 
 [[package]]
-name = "svc-ingest"
+name = "app-ingest-worker"
 version = "0.1.0"
-source = { editable = "apps/ingest-worker" }
+source = { editable = "apps/app-ingest-worker" }
 dependencies = [
     { name = "aipaas-common" },
     { name = "aipaas-model-clients" },
@@ -3521,9 +3521,9 @@ requires-dist = [
 ]
 
 [[package]]
-name = "svc-query"
+name = "app-query-worker"
 version = "0.1.0"
-source = { editable = "apps/query-worker" }
+source = { editable = "apps/app-query-worker" }
 dependencies = [
     { name = "aipaas-common" },
     { name = "aipaas-generation" },

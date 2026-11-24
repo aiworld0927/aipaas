@@ -28,7 +28,7 @@ docker run -d --name aipaas-frontend \
 ```
 
 - `PLATFORM_API_UPSTREAM` 是容器启动时由 `envsubst` 注入 nginx 的反代目标（指向 platform-gateway），**必须用双引号包裹**；反引号会被 shell 优先执行，直接报命令找不到。
-- 前端统一经 `/api/v1/**` → nginx `/api/` → platform-gateway → 后端模块，不再直连 svc-query / svc-ingest。
+- 前端统一经 `/api/v1/**` → nginx `/api/` → platform-gateway → 后端模块，不再直连 app-query-worker / app-ingest-worker。
 - 访问 `http://<宿主机IP>/`，探活接口 `http://<宿主机IP>/healthz` 应返回 `{"status":"ok"}`。
 
 ### 关键设计
@@ -43,7 +43,7 @@ docker run -d --name aipaas-frontend \
 
 | 前端路径 | 开发代理（Vite） | 生产反代变量 | 说明 |
 | --- | --- | --- | --- |
-| `/api/v1/**` | `http://127.0.0.1:8081` | `PLATFORM_API_UPSTREAM` | 统一经 platform-gateway 调用后端（问答→svc-query，导入/管理→platform-management→svc-ingest） |
+| `/api/v1/**` | `http://127.0.0.1:8081` | `PLATFORM_API_UPSTREAM` | 统一经 platform-gateway 调用后端（问答→app-query-worker，导入/管理→platform-management→app-ingest-worker） |
 
 ### docker-compose 中配置
 
@@ -55,7 +55,7 @@ frontend:
   ports: ["80:80"]
 ```
 
-前端所有业务请求统一走 `/api/v1/**`，由 platform-gateway 鉴权、审计并路由到对应后端模块；不再存在直连 svc-query / svc-ingest 的旁路。
+前端所有业务请求统一走 `/api/v1/**`，由 platform-gateway 鉴权、审计并路由到对应后端模块；不再存在直连 app-query-worker / app-ingest-worker 的旁路。
 
 ## 工程目录结构
 
@@ -106,7 +106,7 @@ web/                              # 前端工程根目录
 - 前端统一经 platform-gateway 调用后端：
   - 开发：Vite 代理 `/api/**` → `http://127.0.0.1:8081/**`（platform-gateway）
   - 生产：nginx `/api/` → `${PLATFORM_API_UPSTREAM}`（platform-gateway）
-- 网关再路由：问答 → svc-query；导入/文档/知识库等 → platform-management → svc-ingest。
+- 网关再路由：问答 → app-query-worker；导入/文档/知识库等 → platform-management → app-ingest-worker。
 - 不再使用 `VITE_QUERY_API_BASE` / `VITE_IMPORT_API_BASE`；直连旁路已下线。
 
 ## 已知限制（详见 docs/05_待办事项.md）

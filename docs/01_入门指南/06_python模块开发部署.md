@@ -25,8 +25,8 @@ pymodules/
 ├── .dockerignore           # 排除 .venv / logs / tests / __pycache__
 ├── .venv/                  # 所有成员共用的虚拟环境
 ├── apps/                   # 可独立运行的应用（每个 app = 一个部署单元）
-│   ├── ingest-worker/          # 文档导入服务（端口 8001）
-│   ├── query-worker/           # 用户查询服务（端口 8002）
+│   ├── app-ingest-worker/          # 文档导入服务（端口 8001）
+│   ├── app-query-worker/           # 用户查询服务（端口 8002）
 │   ├── model-embedding-worker/ # 嵌入模型推理服务（端口 8003）
 │   ├── model-reranker-worker/  # 重排序模型推理服务（端口 8004）
 │   ├── apis/                   # 管理端业务逻辑（不在 workspace）
@@ -50,8 +50,8 @@ pymodules/
 
 | App | 端口 | 职责 | 入口模块 | 配置命名空间 |
 |-----|------|------|----------|--------------|
-| `svc-ingest`（`apps/ingest-worker`） | 8001 | 接收文档上传 → LangGraph 流程编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus） | `ingest_worker.api.app:app` | `ingest_worker` |
-| `svc-query`（`apps/query-worker`） | 8002 | 接收用户查询 → LangGraph 流程编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出） | `query_worker.api.app:app` | `query_worker` |
+| `app-ingest-worker`（`apps/app-ingest-worker`） | 8001 | 接收文档上传 → LangGraph 流程编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus） | `app_ingest_worker.api.app:app` | `app_ingest_worker` |
+| `app-query-worker`（`apps/app-query-worker`） | 8002 | 接收用户查询 → LangGraph 流程编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出） | `app_query_worker.api.app:app` | `app_query_worker` |
 | `svc-model-embedding`（`apps/model-embedding-worker`） | 8003 | 嵌入模型独立推理服务：离线 BGE-M3（dense + sparse）/ 在线 DashScope 兼容接口（仅 dense） | `model_embedding_worker.api.app:app` | `model_embedding_worker` |
 | `svc-model-reranker`（`apps/model-reranker-worker`） | 8004 | 重排序模型独立推理服务：离线 bge-reranker-large / 在线 DashScope TextReRank | `model_reranker_worker.api.app:app` | `model_reranker_worker` |
 
@@ -70,7 +70,7 @@ pymodules/
 ### 1.4 依赖方向（严格遵守，禁止反向）
 
 ```
-apps（svc-ingest / svc-query）
+apps（app-ingest-worker / app-query-worker）
   └─► packages
         ├─► aipaas-retrieval
         │     └─► aipaas-llm
@@ -133,7 +133,7 @@ uv sync --all-packages --group cpu    # CPU 机器
 uv lock --check
 
 # 冒烟测试：import 全部 workspace 成员
-uv run python -c "import aipaas_common, aipaas_llm, aipaas_retrieval, aipaas_storage, aipaas_pipeline, aipaas_mcp_agents, ingest_worker, query_worker; print('ok')"
+uv run python -c "import aipaas_common, aipaas_llm, aipaas_retrieval, aipaas_storage, aipaas_pipeline, aipaas_mcp_agents, app_ingest_worker, app_query_worker; print('ok')"
 ```
 
 ### 2.3 IDE 解释器配置
@@ -169,8 +169,8 @@ uv lock && uv sync --all-packages --group cpu
 |------|------|------|
 | 嵌入模型 | 8003 | `uv run uvicorn model_embedding_worker.api.app:app --host 0.0.0.0 --port 8003 --reload` |
 | 重排序模型 | 8004 | `uv run uvicorn model_reranker_worker.api.app:app --host 0.0.0.0 --port 8004 --reload` |
-| 导入服务 | 8001 | `uv run uvicorn ingest_worker.api.app:app --host 0.0.0.0 --port 8001 --reload` |
-| 查询服务 | 8002 | `uv run uvicorn query_worker.api.app:app --host 0.0.0.0 --port 8002 --reload` |
+| 导入服务 | 8001 | `uv run uvicorn app_ingest_worker.api.app:app --host 0.0.0.0 --port 8001 --reload` |
+| 查询服务 | 8002 | `uv run uvicorn app_query_worker.api.app:app --host 0.0.0.0 --port 8002 --reload` |
 
 ```bash
 # 终端 1：嵌入模型
@@ -180,10 +180,10 @@ cd pymodules && uv run uvicorn model_embedding_worker.api.app:app --port 8003 --
 cd pymodules && uv run uvicorn model_reranker_worker.api.app:app --port 8004 --reload
 
 # 终端 3：导入服务
-cd pymodules && uv run uvicorn ingest_worker.api.app:app --port 8001 --reload
+cd pymodules && uv run uvicorn app_ingest_worker.api.app:app --port 8001 --reload
 
 # 终端 4：查询服务
-cd pymodules && uv run uvicorn query_worker.api.app:app --port 8002 --reload
+cd pymodules && uv run uvicorn app_query_worker.api.app:app --port 8002 --reload
 ```
 
 `--reload` 会监听源码变更并自动重启，开发时务必加上。各模块的接口与配置细节见 [第六章](#六四个模块独立说明)。
@@ -191,11 +191,11 @@ cd pymodules && uv run uvicorn query_worker.api.app:app --port 8002 --reload
 ### 3.2 限定 workspace 成员执行
 
 ```bash
-# 只加载 svc-ingest 及其依赖，避免 query-worker 的重依赖拖慢启动
-uv run --package svc-ingest python -m ingest_worker.graph.main
+# 只加载 app-ingest-worker 及其依赖，避免 app-query-worker 的重依赖拖慢启动
+uv run --package app-ingest-worker python -m app_ingest_worker.graph.main
 
-# 或执行 svc-query
-uv run --package svc-query python -c "from query_worker.api.app import app; print(app.title)"
+# 或执行 app-query-worker
+uv run --package app-query-worker python -c "from app_query_worker.api.app import app; print(app.title)"
 ```
 
 ### 3.3 配置加载与环境变量
@@ -239,8 +239,8 @@ configs/
 ```bash
 curl -s http://localhost:8003/ready    # 嵌入模型：模型加载完成才返回 200
 curl -s http://localhost:8004/ready    # 重排序模型
-curl -s http://localhost:8001/health   # ingest-worker
-curl -s http://localhost:8002/health   # query-worker
+curl -s http://localhost:8001/health   # app-ingest-worker
+curl -s http://localhost:8002/health   # app-query-worker
 ```
 
 ### 3.5 Nacos 服务与接口注册
@@ -275,10 +275,10 @@ curl -s http://localhost:8002/health   # query-worker
 └── routers/        # APIRouter：健康检查与业务接口按领域合并
 ```
 
-lifespan 统一由 `AppLifespan` 编排（后续 MySQL / ES 等组件继续 `add`），以 `svc-ingest` 为例：
+lifespan 统一由 `AppLifespan` 编排（后续 MySQL / ES 等组件继续 `add`），以 `app-ingest-worker` 为例：
 
 ```python
-# apps/ingest-worker/ingest_worker/api/app.py
+# apps/app-ingest-worker/app_ingest_worker/api/app.py
 def build_lifespan() -> AppLifespan:
     settings = get_ingest_settings()
     lifespan = AppLifespan()
@@ -286,7 +286,7 @@ def build_lifespan() -> AppLifespan:
         # 开关关闭时不 import aipaas_nacos，Nacos SDK 完全不加载
         from aipaas_nacos import nacos_lifespan
 
-        lifespan.add(nacos_lifespan("svc-ingest"))
+        lifespan.add(nacos_lifespan("app-ingest-worker"))
     lifespan.add_hooks(shutdown=background_tasks.aclose)
     return lifespan
 ```
@@ -316,7 +316,7 @@ async def get_task_progress(...): ...
 
 并在 `api/app.py` 的 `create_app()` 中 `app.include_router(...)`。
 
-`svc-ingest` 注册后的实例 metadata：
+`app-ingest-worker` 注册后的实例 metadata：
 
 ```
 interface_count = 4
@@ -327,7 +327,7 @@ interface.get_task_progress = GET /status/{task_id} | 任务状态查询
 interface.upload_files = POST /upload | 文件上传接口
 ```
 
-`svc-query` 注册后的实例 metadata：
+`app-query-worker` 注册后的实例 metadata：
 
 ```
 interface_count = 5
@@ -353,10 +353,10 @@ interface.stream = GET /stream/{session_id}
 启动日志应出现：
 
 ```
-Nacos 服务注册成功 | service=svc-ingest ip=... port=8001 group=DEFAULT_GROUP namespace=public ... interfaces=4
+Nacos 服务注册成功 | service=app-ingest-worker ip=... port=8001 group=DEFAULT_GROUP namespace=public ... interfaces=4
 ```
 
-Nacos 控制台：服务管理 → 服务列表 → `svc-ingest` → 详情 → 元数据。
+Nacos 控制台：服务管理 → 服务列表 → `app-ingest-worker` → 详情 → 元数据。
 
 #### 客户端调用示例（`tests/15-test-nacos-client.py`）
 
@@ -368,13 +368,13 @@ cd pymodules
 # 1) 查看注册信息：服务列表 + 实例 + 接口清单
 uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 list
 
-# 2) svc-ingest：按注册清单调用 POST /upload，并轮询 GET /status/{task_id}
+# 2) app-ingest-worker：按注册清单调用 POST /upload，并轮询 GET /status/{task_id}
 uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 ingest --file ./doc/xxx.pdf --wait 30
 
-# 3) svc-query：按注册清单调用 POST /query（非流式，直接返回 answer）
+# 3) app-query-worker：按注册清单调用 POST /query（非流式，直接返回 answer）
 uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 query --query "金融标准知识库支持哪些业务？"
 
-# 4) svc-query：流式调用 POST /query，再订阅 GET /stream/{session_id} 打印 SSE 事件
+# 4) app-query-worker：流式调用 POST /query，再订阅 GET /stream/{session_id} 打印 SSE 事件
 uv run python tests/15-test-nacos-client.py --nacos-address 127.0.0.1:8848 query --query "..." --stream
 ```
 
@@ -466,10 +466,10 @@ RUN uv sync --frozen --no-dev --all-packages --no-install-workspace --group "${T
 cd pymodules
 
 # 导入服务
-docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest:latest .
+docker build -f apps/app-ingest-worker/Dockerfile -t aipaas/app-ingest-worker:latest .
 
 # 查询服务
-docker build -f apps/query-worker/Dockerfile -t aipaas/svc-query:latest .
+docker build -f apps/app-query-worker/Dockerfile -t aipaas/app-query-worker:latest .
 ```
 
 两个模型服务依赖**基座镜像**，构建顺序必须是「先基座、后业务」：
@@ -505,9 +505,9 @@ docker run --rm aipaas/svc-model-embedding:latest \
 # gpu: 2.11.0+cu128 12.8      cpu: 2.11.0+cpu None
 ```
 
-构建细节（以 ingest-worker 为例）：
-- **builder 阶段**：`python:3.12-slim` + `uv`，执行 `uv sync --package svc-ingest --no-dev`（仅装生产依赖）
-- **runtime 阶段**：新的 `python:3.12-slim`，只拷贝 `.venv` + `packages/` + `apps/ingest-worker/` + `configs/` + `pyproject.toml` + `uv.lock`
+构建细节（以 app-ingest-worker 为例）：
+- **builder 阶段**：`python:3.12-slim` + `uv`，执行 `uv sync --package app-ingest-worker --no-dev`（仅装生产依赖）
+- **runtime 阶段**：新的 `python:3.12-slim`，只拷贝 `.venv` + `packages/` + `apps/app-ingest-worker/` + `configs/` + `pyproject.toml` + `uv.lock`
 - 环境变量内置了生产默认值：`PROJECT_ROOT=/app`、`MODELSCOPE_CACHE=/app/models/modelscope_cache` 等
 - 声明了两个卷：`/app/logs`（日志）、`/app/models`（模型缓存）
 
@@ -538,14 +538,14 @@ IMAGE_TAG=0.1.0 docker-compose up -d
 IMAGE_TAG=0.0.9 docker-compose up -d
 
 # 彻底重建（跳过所有层缓存，依赖也会重装，耗时最长）
-docker-compose build --no-cache svc-query
+docker-compose build --no-cache app-query-worker
 ```
 
 排查“改了代码没生效”时，先比对镜像与源码时间：
 
 ```bash
-docker image inspect aipaas/svc-query:latest --format '{{.Created}}'
-find apps/query-worker -name "*.py" -newer /dev/null -printf '%TY-%Tm-%Td %TH:%TM %p\n' | sort -r | head -3
+docker image inspect aipaas/app-query-worker:latest --format '{{.Created}}'
+find apps/app-query-worker -name "*.py" -newer /dev/null -printf '%TY-%Tm-%Td %TH:%TM %p\n' | sort -r | head -3
 ```
 
 镜像时间早于源码时间 → 需要重建。注意模型服务的 `TORCH_VARIANT`（cpu/gpu）变化也会触发重建，见 5.3。
@@ -614,7 +614,7 @@ BASE_IMAGE: aipaas/aipaas-torch-${TORCH_VARIANT:-gpu}-base:${PY_BASE_TAG:-local}
 | 改业务代码重建 | 30~40 分钟 | 20~40 秒，且不联网 |
 | 依赖升级 | 两个工程各重建 | 只重建基座一次 |
 
-注意：`ingest-worker` / `query-worker` 不需要 torch，**不要**改用该基座，否则镜像会从 ~1GB 涨到 12GB。
+注意：`app-ingest-worker` / `app-query-worker` 不需要 torch，**不要**改用该基座，否则镜像会从 ~1GB 涨到 12GB。
 
 ### 5.2 单独运行（需要中间件已就绪）
 
@@ -623,8 +623,8 @@ BASE_IMAGE: aipaas/aipaas-torch-${TORCH_VARIANT:-gpu}-base:${PY_BASE_TAG:-local}
 #### 5.2.1 业务服务
 
 ```bash
-# 运行 svc-ingest（端口 8001）
-docker run -d --name svc-ingest -p 8001:8001 \
+# 运行 app-ingest-worker（端口 8001）
+docker run -d --name app-ingest-worker -p 8001:8001 \
   --network host \
   -e APP_ENV=devhome -e CONFIG_DIR=/app/configs \
   -e OPENAI_API_KEY=sk-xxx \
@@ -632,19 +632,19 @@ docker run -d --name svc-ingest -p 8001:8001 \
   -e MONGO_URL='mongodb://admin:123456@127.0.0.1:27017/?authSource=admin' \
   -e MINERU_API_TOKEN=xxx \
   -v $(pwd)/configs:/app/configs:ro \
-  -v /tmp/logs/svc-ingest:/app/logs \
-  aipaas/svc-ingest:latest
+  -v /tmp/logs/app-ingest-worker:/app/logs \
+  aipaas/app-ingest-worker:latest
 
-# 运行 svc-query（端口 8002）
-docker run -d --name svc-query -p 8002:8002 \
+# 运行 app-query-worker（端口 8002）
+docker run -d --name app-query-worker -p 8002:8002 \
   --network host \
   -e APP_ENV=devhome -e CONFIG_DIR=/app/configs \
   -e OPENAI_API_KEY=sk-xxx \
   -e MINIO_ACCESS_KEY=minioadmin -e MINIO_SECRET_KEY=minioadmin \
   -e MONGO_URL='mongodb://admin:123456@127.0.0.1:27017/?authSource=admin' \
   -v $(pwd)/configs:/app/configs:ro \
-  -v /tmp/logs/svc-query:/app/logs \
-  aipaas/svc-query:latest
+  -v /tmp/logs/app-query-worker:/app/logs \
+  aipaas/app-query-worker:latest
 ```
 
 #### 5.2.2 模型服务
@@ -693,9 +693,9 @@ deploy/docker/
 
 #### 5.3.2 启动顺序
 
-依赖链：`init-app-dirs` → `milvus（来自 base 编排，依赖 etcd + minio）/ minio / mongodb` → `svc-model-embedding / svc-model-reranker` → `svc-ingest / svc-query` → `frontend`。**编排依赖 base 编排的 milvus / minio / mongodb**，主编排通过 `depends_on`（`service_healthy`）等待它们就绪；两个业务服务还会等待两个模型服务 `healthy` 后再启动。
+依赖链：`init-app-dirs` → `milvus（来自 base 编排，依赖 etcd + minio）/ minio / mongodb` → `svc-model-embedding / svc-model-reranker` → `app-ingest-worker / app-query-worker` → `frontend`。**编排依赖 base 编排的 milvus / minio / mongodb**，主编排通过 `depends_on`（`service_healthy`）等待它们就绪；两个业务服务还会等待两个模型服务 `healthy` 后再启动。
 
-另有一条可选依赖：启用 `nacos` profile 时，`svc-ingest` / `svc-query` 还会等待 `nacos` 服务 `healthy` 后再启动（对应 `common.nacos.enabled=true`，见 [3.5](#35-nacos-服务与接口注册)）。该依赖声明为 `required: false`，因此**未启用 profile 时 compose 会自动忽略它**，不影响无 Nacos 的部署方式。
+另有一条可选依赖：启用 `nacos` profile 时，`app-ingest-worker` / `app-query-worker` 还会等待 `nacos` 服务 `healthy` 后再启动（对应 `common.nacos.enabled=true`，见 [3.5](#35-nacos-服务与接口注册)）。该依赖声明为 `required: false`，因此**未启用 profile 时 compose 会自动忽略它**，不影响无 Nacos 的部署方式。
 
 推荐启动步骤：
 
@@ -714,14 +714,14 @@ docker compose up -d svc-model-embedding svc-model-reranker
 #    depends_on 会自动拉起 base 编排的 milvus / minio / mongodb 及 init 容器，
 #    并等待 milvus / minio / 两个模型服务 healthy 后再启动
 #    需要注册到 Nacos 时追加 nacos profile，业务服务会等 nacos healthy 后再启动：
-#      COMPOSE_PROFILES=nacos docker compose up -d svc-ingest svc-query
-docker compose up -d svc-ingest svc-query
+#      COMPOSE_PROFILES=nacos docker compose up -d app-ingest-worker app-query-worker
+docker compose up -d app-ingest-worker app-query-worker
 
 # 4. 查看状态
 docker compose ps
 
 # 5. 查看实时日志
-docker compose logs -f svc-ingest
+docker compose logs -f app-ingest-worker
 docker compose logs -f --tail=100 svc-model-embedding
 
 # 6. 停止
@@ -734,7 +734,7 @@ docker compose down
 > docker compose up -d milvus minio mongodb
 > docker compose ps milvus minio mongodb
 > docker compose up -d svc-model-embedding svc-model-reranker
-> docker compose up -d svc-ingest svc-query
+> docker compose up -d app-ingest-worker app-query-worker
 > ```
 
 #### 5.3.3 compose 配置与寻址
@@ -746,7 +746,7 @@ docker compose down
 | `CONFIG_PACKAGE_DIR` | `../../pymodules/configs` | 宿主机配置包，只读挂载到 `/app/configs` |
 | `MODEL_BASE_DIR` | `../../models` | 宿主机模型根目录，分别挂载为 `bge-m3`、`bge-reranker-large` |
 | `TORCH_VARIANT` | `gpu`（默认）/ `cpu` | 模型服务镜像的 torch 构建 |
-| `INGEST_WORKER_PORT` / `QUERY_WORKER_PORT` | `8001` / `8002` | 业务服务监听端口（容器内 + 宿主机映射同源） |
+| `APP_INGEST_WORKER_PORT` / `APP_QUERY_WORKER_PORT` | `8001` / `8002` | 业务服务监听端口（容器内 + 宿主机映射同源） |
 | `MODEL_EMBEDDING_WORKER_PORT` / `MODEL_RERANKER_WORKER_PORT` | `8003` / `8004` | 模型服务监听端口（容器内 + 宿主机映射同源） |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MONGO_URL` / `OPENAI_API_KEY` / `MINERU_API_TOKEN` | — | 密钥，经 `env_file` + `environment` 注入 |
 
@@ -764,10 +764,10 @@ docker compose down
 
 ```bash
 # 裸机 / 容器通用
-INGEST_WORKER_PORT=9000 .venv/bin/python -m ingest_worker.api.app
+APP_INGEST_WORKER_PORT=9000 .venv/bin/python -m app_ingest_worker.api.app
 
 # compose：改 deploy/docker/.env，容器监听、宿主机映射、服务间调用地址会一起变
-INGEST_WORKER_PORT=9000 docker-compose up -d
+APP_INGEST_WORKER_PORT=9000 docker-compose up -d
 ```
 
 `devhome` / `devcompany` 覆盖层会把这些地址改成对应的开发网络地址，部署时按实际环境选择 `APP_ENV`。compose 已为四个服务预填好挂载与依赖，见 [docker-compose.yaml](file:///coding/aipaas/deploy/docker/docker-compose.yaml)。
@@ -778,22 +778,22 @@ INGEST_WORKER_PORT=9000 docker-compose up -d
 
 四个模块共用同一套配置加载机制（`CONFIG_DIR` + `APP_ENV`，`extra="forbid"`），公共节点 `common` 见 [3.3 节](#33-配置加载与环境变量)；本章只列各模块自己的启动命令、接口与专属配置。
 
-### 6.1 ingest-worker（端口 8001）
+### 6.1 app-ingest-worker（端口 8001）
 
-**职责**：接收文档上传 → LangGraph 编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus）；入口 `ingest_worker.api.app:app`。
+**职责**：接收文档上传 → LangGraph 编排（PDF转MD → 图片处理 → 文档切片 → 主体识别 → BGE 向量化 → 写入 Milvus）；入口 `app_ingest_worker.api.app:app`。
 
 **快速启动**：
 
 ```bash
 cd pymodules
-uv run uvicorn ingest_worker.api.app:app --host 0.0.0.0 --port 8001 --reload
+uv run uvicorn app_ingest_worker.api.app:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 **接口清单**：
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/health` | 存活探针，返回 `{"status":"ok","service":"svc-ingest"}` |
+| GET | `/health` | 存活探针，返回 `{"status":"ok","service":"app-ingest-worker"}` |
 | GET | `/import.html` | 文件导入前端页面 |
 | POST | `/upload` | 多文件上传（form-data，字段 `files`），每个文件生成一个 `task_id` |
 | GET | `/status/{task_id}` | 任务状态：`status` / `done_list` / `running_list` |
@@ -810,7 +810,7 @@ curl -s -X POST http://localhost:8001/upload -F "files=@./test.pdf"
 curl -s http://localhost:8001/status/<task_id>
 ```
 
-**配置项**（`ingest_worker` 命名空间）：
+**配置项**（`app_ingest_worker` 命名空间）：
 
 | 配置键 | 默认值 | 说明 |
 |---|---|---|
@@ -822,15 +822,15 @@ curl -s http://localhost:8001/status/<task_id>
 
 依赖的公共节点：`common.milvus`、`common.minio`、`common.mongo`、`common.mineru`、`common.llm`、`common.embedding_service`。
 
-### 6.2 query-worker（端口 8002）
+### 6.2 app-query-worker（端口 8002）
 
-**职责**：接收用户查询 → LangGraph 编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出）；入口 `query_worker.api.app:app`。
+**职责**：接收用户查询 → LangGraph 编排（主体确认 → 向量检索 / HyDE 检索 / MCP Web 搜索 → RRF 融合 → 重排 → SSE 流式输出）；入口 `app_query_worker.api.app:app`。
 
 **快速启动**：
 
 ```bash
 cd pymodules
-uv run uvicorn query_worker.api.app:app --host 0.0.0.0 --port 8002 --reload
+uv run uvicorn app_query_worker.api.app:app --host 0.0.0.0 --port 8002 --reload
 ```
 
 **接口清单**：
@@ -865,7 +865,7 @@ curl -s "http://localhost:8002/history/demo-1?limit=50"
 curl -s -X DELETE http://localhost:8002/history/demo-1
 ```
 
-**配置项**（`query_worker` 命名空间）：
+**配置项**（`app_query_worker` 命名空间）：
 
 | 配置键 | 默认值 | 说明 |
 |---|---|---|
@@ -1053,13 +1053,13 @@ apps/model-reranker-worker/             # 端口 8004
 
 | 文件 | import |
 |---|---|
-| `ingest-worker/.../f_node_bge_embedding.py` | `aipaas_llm.lm.embedding_http_utils.generate_embeddings` |
-| `ingest-worker/.../e_node_item_name_recognition.py` | 同上 |
-| `query-worker/.../a_node_item_name_confirm.py` | 同上 |
-| `query-worker/.../b_node_search_embedding.py` | 同上 |
-| `query-worker/.../c_node_search_embedding_hyde.py` | 同上 |
+| `app-ingest-worker/.../f_node_bge_embedding.py` | `aipaas_llm.lm.embedding_http_utils.generate_embeddings` |
+| `app-ingest-worker/.../e_node_item_name_recognition.py` | 同上 |
+| `app-query-worker/.../a_node_item_name_confirm.py` | 同上 |
+| `app-query-worker/.../b_node_search_embedding.py` | 同上 |
+| `app-query-worker/.../c_node_search_embedding_hyde.py` | 同上 |
 | `retrieval/aipaas_retrieval/milvus_utils.py` | 同上 |
-| `query-worker/.../f_node_rerank.py` | `aipaas_llm.lm.reranker_http_utils.rerank_documents` |
+| `app-query-worker/.../f_node_rerank.py` | `aipaas_llm.lm.reranker_http_utils.rerank_documents` |
 
 调用地址与超时取自 `common.embedding_service` / `common.rerank_service`；`aipaas-llm` 不依赖 `dashscope` / `FlagEmbedding` / `pymilvus[model]`，只保留 `httpx` 客户端。
 
@@ -1104,7 +1104,7 @@ apps/model-reranker-worker/             # 端口 8004
 
 | 配置键 | 默认值 | 说明 |
 |--------|--------|------|
-| `file_prefix` | `null` | 日志文件名前缀；为 `null` 时按模块名推导（下划线转连字符，如 `ingest_worker` → `ingest-worker`）。 |
+| `file_prefix` | `null` | 日志文件名前缀；为 `null` 时按模块名推导（下划线转连字符，如 `app_ingest_worker` → `app-ingest-worker`）。 |
 | `console_enable` | `true` | 是否启用控制台输出。 |
 | `console_level` | `INFO` | 控制台日志级别。 |
 | `file_enable` | `true` | 是否启用文件输出。 |
@@ -1120,9 +1120,9 @@ apps/model-reranker-worker/             # 端口 8004
 ```
 
 示例：
-- 开发机 ingest-worker：`pymodules/logs/ingest-worker_20261110.log`
-- 容器内 ingest-worker：`/app/logs/ingest-worker_20261110.log`
-- 容器内 query-worker：`/app/logs/query-worker_20261110.log`
+- 开发机 app-ingest-worker：`pymodules/logs/app-ingest-worker_20261110.log`
+- 容器内 app-ingest-worker：`/app/logs/app-ingest-worker_20261110.log`
+- 容器内 app-query-worker：`/app/logs/app-query-worker_20261110.log`
 
 ### 8.4 日志轮转与清理
 
@@ -1136,9 +1136,9 @@ apps/model-reranker-worker/             # 端口 8004
 四个 Dockerfile 都声明了 `VOLUME ["/app/logs", "/app/models"]`。compose 进一步把 `/app/logs` 映射到宿主机目录：
 
 ```yaml
-# docker-compose.yaml 中 svc-ingest 的 volumes
+# docker-compose.yaml 中 app-ingest-worker 的 volumes
 volumes:
-  - ${DOCKER_LOG_DIRECTORY:-.}/logs/svc-ingest:/app/logs
+  - ${DOCKER_LOG_DIRECTORY:-.}/logs/app-ingest-worker:/app/logs
 ```
 
 宿主机日志目录由 `.env` 中的 `DOCKER_LOG_DIRECTORY` 控制，默认相对路径为 `deploy/docker/logs/<服务名>/`。主编排的 `init-app-dirs` 会在启动前预创建这些目录并修正属主。
@@ -1161,8 +1161,8 @@ logger.exception("LangGraph 全流程执行失败")  # 自动带完整堆栈
 
 | 服务 | 端点 | Dockerfile healthcheck | compose healthcheck |
 |------|------|------------------------|---------------------|
-| svc-ingest | `/health` ✅ | ✅ 已声明 | ✅ 已声明 |
-| svc-query | `/health` ✅ | ✅ 已声明 | ✅ 已声明 |
+| app-ingest-worker | `/health` ✅ | ✅ 已声明 | ✅ 已声明 |
+| app-query-worker | `/health` ✅ | ✅ 已声明 | ✅ 已声明 |
 | svc-model-embedding | `/health`（存活）+ `/ready`（就绪，模型未加载返回 503） | ✅ 已声明 | ✅ 已声明 |
 | svc-model-reranker | `/health`（存活）+ `/ready`（就绪，模型未加载返回 503） | ✅ 已声明 | ✅ 已声明 |
 
@@ -1218,13 +1218,13 @@ members = [
 
 **步骤 4**：被依赖的包追加 `[tool.uv.sources]`
 
-如果 `svc-ingest` 要依赖新包，执行：
+如果 `app-ingest-worker` 要依赖新包，执行：
 
 ```bash
-uv add --package svc-ingest aipaas-vector-store
+uv add --package app-ingest-worker aipaas-vector-store
 ```
 
-uv 会自动在 `apps/ingest-worker/pyproject.toml` 的 `[tool.uv.sources]` 中追加 `aipaas-vector-store = { workspace = true }`。
+uv 会自动在 `apps/app-ingest-worker/pyproject.toml` 的 `[tool.uv.sources]` 中追加 `aipaas-vector-store = { workspace = true }`。
 
 **步骤 5**：重新锁文件并同步
 
@@ -1238,7 +1238,7 @@ uv lock && uv sync --all-packages --group cpu
 # 冒烟
 uv run python -c "import aipaas_vector_store; print('ok')"
 # 依赖方向校验（packages/ 下不得 import apps/）
-grep -rn "from ingest_worker\|from query_worker\|import ingest_worker\|import query_worker" packages/
+grep -rn "from app_ingest_worker\|from app_query_worker\|import app_ingest_worker\|import app_query_worker" packages/
 # 应该返回 0 行
 ```
 
@@ -1248,7 +1248,7 @@ grep -rn "from ingest_worker\|from query_worker\|import ingest_worker\|import qu
 
 **步骤 1-5**：同新增包流程（目录 → pyproject.toml → 根 workspace members → uv lock & sync）。
 
-**步骤 6**：编写 Dockerfile（参考 ingest-worker / query-worker 的双阶段模板）
+**步骤 6**：编写 Dockerfile（参考 app-ingest-worker / app-query-worker 的双阶段模板）
 
 **步骤 7**：`deploy/docker/docker-compose.yaml` 追加服务定义（build context、environment、ports、volumes、healthcheck、depends_on）。关键要素：
 - 环境变量中必须设置 `APP_ENV`、`CONFIG_DIR=/app/configs` 及所需密钥
@@ -1267,7 +1267,7 @@ grep -rn "from ingest_worker\|from query_worker\|import ingest_worker\|import qu
 
 ```bash
 cd pymodules
-uv run python -m compileall -q packages/ apps/ingest-worker/ apps/query-worker/ apps/model-embedding-worker/ apps/model-reranker-worker/
+uv run python -m compileall -q packages/ apps/app-ingest-worker/ apps/app-query-worker/ apps/model-embedding-worker/ apps/model-reranker-worker/
 # 无输出 = 全部通过
 ```
 
@@ -1282,8 +1282,8 @@ import aipaas_retrieval
 import aipaas_storage
 import aipaas_pipeline
 import aipaas_mcp_agents
-import ingest_worker
-import query_worker
+import app_ingest_worker
+import app_query_worker
 import model_embedding_worker
 import model_reranker_worker
 print('all imports ok')
@@ -1295,7 +1295,7 @@ print('all imports ok')
 ```bash
 cd pymodules
 # 正向：packages 内的包不得 import apps 目录
-grep -rn "from ingest_worker\|from query_worker\|import ingest_worker\|import query_worker" packages/
+grep -rn "from app_ingest_worker\|from app_query_worker\|import app_ingest_worker\|import app_query_worker" packages/
 # 理想输出：0 行
 
 # 正向：下层包不得 import 上层包
@@ -1307,8 +1307,8 @@ grep -rn "from aipaas_retrieval" packages/llm/
 ### 10.4 端点验证
 
 ```bash
-curl -s http://localhost:8001/health   # ingest-worker → {"status": "ok", "service": "svc-ingest"}
-curl -s http://localhost:8002/health   # query-worker → {"ok": true}
+curl -s http://localhost:8001/health   # app-ingest-worker → {"status": "ok", "service": "app-ingest-worker"}
+curl -s http://localhost:8002/health   # app-query-worker → {"ok": true}
 curl -s http://localhost:8003/ready    # 嵌入模型 → 200 且含 backend / dim
 curl -s http://localhost:8004/ready    # 重排序模型 → 200 且含 backend / model
 ```
@@ -1318,18 +1318,18 @@ curl -s http://localhost:8004/ready    # 重排序模型 → 200 且含 backend 
 ```bash
 cd pymodules
 export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome
-uv run uvicorn ingest_worker.api.app:app --port 8001 &
+uv run uvicorn app_ingest_worker.api.app:app --port 8001 &
 
 # 查看日志文件是否按预期命名（前缀由模块名推导）
-ls -la logs/ingest-worker_*.log
-tail -f logs/ingest-worker_*.log
+ls -la logs/app-ingest-worker_*.log
+tail -f logs/app-ingest-worker_*.log
 ```
 
 ### 10.6 Docker 镜像构建验证
 
 ```bash
 cd pymodules
-docker build -f apps/ingest-worker/Dockerfile -t test-ingest . 2>&1 | tail -20
+docker build -f apps/app-ingest-worker/Dockerfile -t test-ingest . 2>&1 | tail -20
 # 最终应看到 "Successfully tagged test-ingest:latest"
 ```
 
@@ -1371,7 +1371,7 @@ export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome
 **修复**：镜像内已设置 `PROJECT_ROOT=/app`，compose 也已挂载日志卷。若手动 `docker run`，务必加：
 ```bash
 -e PROJECT_ROOT=/app \
--v /host/logs/svc-ingest:/app/logs
+-v /host/logs/app-ingest-worker:/app/logs
 ```
 
 ### Q5：模型下载慢，每次重建镜像都要重新下
@@ -1381,16 +1381,16 @@ export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome
 **修复**：挂载模型缓存卷到宿主机持久化：
 ```bash
 docker run ... \
-  -v /host/models/svc-ingest:/app/models \
-  aipaas/svc-ingest:latest
+  -v /host/models/app-ingest-worker:/app/models \
+  aipaas/app-ingest-worker:latest
 ```
 
 compose 中也可追加：
 ```yaml
-svc-ingest:
+app-ingest-worker:
   volumes:
-    - ${DOCKER_LOG_DIRECTORY}/logs/svc-ingest:/app/logs
-    - ${DOCKER_MODEL_DIRECTORY:-./models}/svc-ingest:/app/models
+    - ${DOCKER_LOG_DIRECTORY}/logs/app-ingest-worker:/app/logs
+    - ${DOCKER_MODEL_DIRECTORY:-./models}/app-ingest-worker:/app/models
 ```
 
 ### Q6：`uv lock --check` 失败
@@ -1453,8 +1453,8 @@ export CONFIG_DIR=$(pwd)/configs APP_ENV=devhome   # 配置包 + 环境覆盖层
 # ---------- 开发启动（先模型，后业务） ----------
 uv run uvicorn model_embedding_worker.api.app:app --port 8003 --reload
 uv run uvicorn model_reranker_worker.api.app:app  --port 8004 --reload
-uv run uvicorn ingest_worker.api.app:app --port 8001 --reload
-uv run uvicorn query_worker.api.app:app  --port 8002 --reload
+uv run uvicorn app_ingest_worker.api.app:app --port 8001 --reload
+uv run uvicorn app_query_worker.api.app:app  --port 8002 --reload
 
 # ---------- 依赖变更 ----------
 uv add    --package aipaas-retrieval elasticsearch>=8.0.0
@@ -1463,8 +1463,8 @@ uv lock && uv sync --all-packages --group cpu
 
 # ---------- 镜像构建 ----------
 cd pymodules
-docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest .
-docker build -f apps/query-worker/Dockerfile  -t aipaas/svc-query  .
+docker build -f apps/app-ingest-worker/Dockerfile -t aipaas/app-ingest-worker .
+docker build -f apps/app-query-worker/Dockerfile  -t aipaas/app-query-worker  .
 # 模型服务：先建基座（--network host 必加；TORCH_VARIANT 决定 CPU / GPU），再建业务镜像
 docker build --network host --build-arg TORCH_VARIANT=gpu -f docker/base/Dockerfile -t aipaas/aipaas-torch-gpu-base:local .
 docker build --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local -f apps/model-embedding-worker/Dockerfile -t aipaas/svc-model-embedding .
@@ -1473,6 +1473,6 @@ docker build --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:local -f apps/m
 # ---------- compose ----------
 cd deploy/docker
 docker compose up -d svc-model-embedding svc-model-reranker   # 先起模型服务
-docker compose up -d svc-ingest svc-query   # 自动拉起依赖的 base 中间件（milvus/minio/mongodb）
-docker compose logs -f svc-ingest
+docker compose up -d app-ingest-worker app-query-worker   # 自动拉起依赖的 base 中间件（milvus/minio/mongodb）
+docker compose logs -f app-ingest-worker
 ```

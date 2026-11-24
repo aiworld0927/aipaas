@@ -25,8 +25,8 @@
 | --- | --- | --- |
 | `javaplat/apps/platform-management` | Java 21 / Spring Boot 3 / Maven | 管理服务：登录/刷新/注销、用户与 RBAC、知识库、文档、审计落库、内容策略、系统配置、导入任务和数据库、Flyway、MinIO、完整密钥 |
 | `javaplat/apps/platform-gateway` | Java 21 / Spring Boot 3 / Maven | 统一入口网关：本地 JWT 验签与 JTI 撤销校验、身份头重建、`/api/v1/**` 流式代理、问答安全编排、审计事件发布、Trace/幂等/SSE |
-| `pymodules/apps/ingest-worker` | Python 3.12 / FastAPI | 文档解析、清洗、分块、元数据、Embedding 和标准简介；默认 8001 |
-| `pymodules/apps/query-worker` | Python 3.12 / FastAPI | 向量检索、权限过滤、生成、引用、拒答和 SSE；默认 8002 |
+| `pymodules/apps/app-ingest-worker` | Python 3.12 / FastAPI | 文档解析、清洗、分块、元数据、Embedding 和标准简介；默认 8001 |
+| `pymodules/apps/app-query-worker` | Python 3.12 / FastAPI | 向量检索、权限过滤、生成、引用、拒答和 SSE；默认 8002 |
 | `pymodules/apps/model-embedding-worker` | Python 3.12 / torch | BGE-M3（或在线 Embedding）独立推理，dense + sparse；默认 8003 |
 | `pymodules/apps/model-reranker-worker` | Python 3.12 / torch | bge-reranker-large（或 DashScope TextReRank）独立推理；默认 8004 |
 | `pymodules/packages` | uv workspace | `pipeline`、`retrieval`、`generation` 等可复用 AI 业务包 |
@@ -35,7 +35,7 @@
 | `deploy/docker` | Docker Compose | P0 交付骨架与开发全量两套编排，含 Prometheus/Grafana/Alertmanager |
 | `docs` | Markdown | 架构、部署、解析、质量、安全、验收和上线材料 |
 
-> 状态说明：P0 已有可复现验收材料，真实 AI 能力位于 `ingest-worker`（导入/解析/入库）、`query-worker`（检索/生成/SSE）及共享包，经 `platform-gateway` 统一对外暴露，Web 前端经 `nginx /api/` 代理到网关调用。不要把“契约冻结”或“容器健康”单独理解为真实模型生产链路已接通，详见[架构说明的集成边界](docs/02_架构设计/01_系统架构说明.md#81-p0-compose契约与平台交付骨架)。
+> 状态说明：P0 已有可复现验收材料，真实 AI 能力位于 `app-ingest-worker`（导入/解析/入库）、`app-query-worker`（检索/生成/SSE）及共享包，经 `platform-gateway` 统一对外暴露，Web 前端经 `nginx /api/` 代理到网关调用。不要把“契约冻结”或“容器健康”单独理解为真实模型生产链路已接通，详见[架构说明的集成边界](docs/02_架构设计/01_系统架构说明.md#81-p0-compose契约与平台交付骨架)。
 
 ## 快速开始
 
@@ -117,8 +117,8 @@ aipaas/
 | Java 本地启动 | `cd javaplat && ./mvnw -pl apps/platform-gateway -am spring-boot:run`（容器内端口 8080，宿主机默认 8081）、`./mvnw -pl apps/platform-management -am spring-boot:run`（8080，需可连 PostgreSQL 与 Redis） |
 | Python 环境 | `cd pymodules && uv sync --all-packages --group cpu` |
 | Python 测试 | `cd pymodules && uv run pytest tests -q` |
-| 导入服务 | `cd pymodules && uv run python -m ingest_worker.api.app` |
-| 查询服务 | 另一个终端执行 `cd pymodules && uv run python -m query_worker.api.app` |
+| 导入服务 | `cd pymodules && uv run python -m app_ingest_worker.api.app` |
+| 查询服务 | 另一个终端执行 `cd pymodules && uv run python -m app_query_worker.api.app` |
 | 嵌入 / 重排服务 | `uv run python -m model_embedding_worker.api.app` / `uv run python -m model_reranker_worker.api.app` |
 | Web 开发 | `cd web && npm ci && npm run dev` |
 | Web 构建 | `cd web && npm run build` |

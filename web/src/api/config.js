@@ -1,7 +1,7 @@
 /**
  * API 地址配置
  * 前端统一经 platform-gateway 调用：开发走 Vite 代理 /api，生产走 nginx /api/ 反代。
- * 不再直连 svc-query / svc-ingest（旧的 /query-api、/import-api 旁路已下线）。
+ * 不再直连 app-query-worker / app-ingest-worker（旧的 /query-api、/import-api 旁路已下线）。
  */
 /**
  * P0 契约网关入口（BasePath /api/v1 已包含在 p0Client 的路径拼装里）

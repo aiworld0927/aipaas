@@ -15,10 +15,10 @@ docker compose build frontend && docker compose up --no-deps -d frontend
 
 # python 单工程构建
 # 1. 仅重新构建指定服务的镜像
-docker compose build svc-ingest
+docker compose build app-ingest-worker
 # 2. 仅重建并启动该服务（--no-deps 防止连带重启依赖服务）
-docker compose up --no-deps -d svc-ingest
-# docker compose build svc-ingest && docker compose up --no-deps -d svc-ingest
+docker compose up --no-deps -d app-ingest-worker
+# docker compose build app-ingest-worker && docker compose up --no-deps -d app-ingest-worker
 
 # 模型工程
 

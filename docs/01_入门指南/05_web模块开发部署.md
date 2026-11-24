@@ -13,8 +13,8 @@ AIPaaS 前端是一个 Vite + React 的单页应用（SPA），为 RAG 问答、
 - **开发端口**：5173（见 `vite.config.js`）
 - **构建产物**：`dist/`（静态文件，由 Nginx 托管）
 - **后端代理**：
-  - `/query-api/*` → 后端查询服务 `svc-query`（端口 8001）
-  - `/import-api/*` → 后端导入服务 `svc-ingest`（端口 8000）
+  - `/query-api/*` → 后端查询服务 `app-query-worker`（端口 8001）
+  - `/import-api/*` → 后端导入服务 `app-ingest-worker`（端口 8000）
 
 ### 目录结构
 
@@ -77,7 +77,7 @@ npm run dev
 | `/query-api/*` | `http://127.0.0.1:8001/*` |
 | `/import-api/*` | `http://127.0.0.1:8000/*` |
 
-开发时需要后端两个 Python 服务（`svc-query` 端口 8001、`svc-ingest` 端口 8000）在本机运行，否则页面功能无法正常使用。
+开发时需要后端两个 Python 服务（`app-query-worker` 端口 8001、`app-ingest-worker` 端口 8000）在本机运行，否则页面功能无法正常使用。
 
 ---
 
@@ -145,11 +145,11 @@ cp .env.example .env   # 首次使用
 docker compose up -d
 ```
 
-前端服务 `frontend` 定义在主编排 [docker-compose.yaml](../../deploy/docker/docker-compose.yaml) 中（主编排 `include` 基础编排 `docker-compose-base.yaml`），全量启动会自动拉起（等待依赖的 svc-ingest / svc-query healthy）。
+前端服务 `frontend` 定义在主编排 [docker-compose.yaml](../../deploy/docker/docker-compose.yaml) 中（主编排 `include` 基础编排 `docker-compose-base.yaml`），全量启动会自动拉起（等待依赖的 app-ingest-worker / app-query-worker healthy）。
 
 ### 只启前端模块
 
-前端依赖后端 `svc-ingest`（8000）和 `svc-query`（8001）健康。`up -d frontend` 会按 `depends_on` 自动拉起两个 Python 服务及其依赖的中间件：
+前端依赖后端 `app-ingest-worker`（8000）和 `app-query-worker`（8001）健康。`up -d frontend` 会按 `depends_on` 自动拉起两个 Python 服务及其依赖的中间件：
 
 ```bash
 docker compose up -d frontend
@@ -161,8 +161,8 @@ docker compose up -d frontend
 
 ```yaml
 environment:
-  QUERY_API_UPSTREAM: http://svc-query:8001
-  IMPORT_API_UPSTREAM: http://svc-ingest:8000
+  QUERY_API_UPSTREAM: http://app-query-worker:8001
+  IMPORT_API_UPSTREAM: http://app-ingest-worker:8000
 ```
 
 容器内通过 Docker 内部网络（`aipaas-network`）以服务名解析 DNS，无需写主机 IP。
@@ -203,7 +203,7 @@ exec nginx -g 'daemon off;'
 
 2. **`resolver 127.0.0.11` + 变量形式 `proxy_pass`**：
    - Docker 内置 DNS 在所有 bridge / compose 网络固定为 `127.0.0.11`
-   - 上游地址写成 `set $query_upstream ${QUERY_API_UPSTREAM}; proxy_pass $query_upstream;`，而不是 `proxy_pass http://svc-query:8001;`
+   - 上游地址写成 `set $query_upstream ${QUERY_API_UPSTREAM}; proxy_pass $query_upstream;`，而不是 `proxy_pass http://app-query-worker:8001;`
    - **效果**：DNS 解析推迟到每个请求发起时（而非容器启动时），避免后端服务尚未就绪就导致 Nginx 报 `[emerg] host not found in upstream` 并崩溃退出
 
 3. **SPA fallback**：
@@ -262,8 +262,8 @@ function App() {
 
 所有对后端的请求**必须**走 `/query-api/*` 或 `/import-api/*` 前缀：
 
-- 查询 / 问答类 → 走 `/query-api/*`（对应后端 `svc-query:8001`）
-- 文档导入 / 写入类 → 走 `/import-api/*`（对应后端 `svc-ingest:8000`）
+- 查询 / 问答类 → 走 `/query-api/*`（对应后端 `app-query-worker:8001`）
+- 文档导入 / 写入类 → 走 `/import-api/*`（对应后端 `app-ingest-worker:8000`）
 
 ```js
 // 示例：在 src/api/chat.js 中调用查询服务
@@ -313,8 +313,8 @@ npm install
 
 - 确认后端 Python 服务在本机运行：
   ```bash
-  curl http://127.0.0.1:8001/health   # svc-query
-  curl http://127.0.0.1:8000/health   # svc-ingest
+  curl http://127.0.0.1:8001/health   # app-query-worker
+  curl http://127.0.0.1:8000/health   # app-ingest-worker
   ```
 - 确认前端代码里的请求路径前缀正确（`/query-api/xxx` 而非 `/xxx`）
 - 确认 `vite.config.js` 未被误改，proxy.target 仍指向 `127.0.0.1:8001` / `127.0.0.1:8000`
@@ -335,7 +335,7 @@ try_files $uri $uri/ /index.html;
 
 ### Q4：容器启动后找不到后端（`host not found in upstream`）
 
-**反例**：写死 `proxy_pass http://svc-query:8001;`，容器启动时 DNS 无法解析就直接退出。
+**反例**：写死 `proxy_pass http://app-query-worker:8001;`，容器启动时 DNS 无法解析就直接退出。
 
 **正例**（当前项目做法）：`resolver 127.0.0.11` + `set` + 变量形式 `proxy_pass`：
 

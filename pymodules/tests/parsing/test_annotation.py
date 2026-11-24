@@ -218,8 +218,8 @@ def _client(service):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from ingest_worker.api.dependencies import get_parse_service
-    from ingest_worker.api.routers import metadata, parse
+    from app_ingest_worker.api.dependencies import get_parse_service
+    from app_ingest_worker.api.routers import metadata, parse
 
     app = FastAPI()
     app.include_router(parse.router)

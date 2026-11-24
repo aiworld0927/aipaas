@@ -18,8 +18,8 @@ from aipaas_generation import (
     TokenUsage,
 )
 from helpers import DemoAccess, FakeChatClient, FakeRetriever, build_manager
-from query_worker.api.generation_stream import StreamRegistry
-from query_worker.api.routers import generation
+from app_query_worker.api.generation_stream import StreamRegistry
+from app_query_worker.api.routers import generation
 
 ACCESS_HEADERS = {
     "X-User-Id": "user-1",

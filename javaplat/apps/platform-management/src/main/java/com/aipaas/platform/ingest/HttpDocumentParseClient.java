@@ -31,7 +31,7 @@ public class HttpDocumentParseClient implements DocumentParseClient {
     private final String formulaMode;
 
     public HttpDocumentParseClient(ObjectMapper mapper,
-                                   @Value("${aipaas.parse.service-url:http://ingest-worker:8000}") String serviceUrl,
+                                   @Value("${aipaas.parse.service-url:http://app-ingest-worker:8000}") String serviceUrl,
                                    @Value("${aipaas.parse.connect-timeout:PT5S}") Duration connectTimeout,
                                    @Value("${aipaas.parse.read-timeout:PT180S}") Duration readTimeout,
                                    @Value("${aipaas.parse.revision-mode:ignore}") String revisionMode,

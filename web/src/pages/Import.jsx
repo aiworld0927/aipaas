@@ -9,7 +9,7 @@ import {
 
 /**
  * 文件导入页：拖拽上传 + 任务状态轮询。
- * 调用链路：web → nginx /api/ → platform-gateway → platform-management → svc-ingest。
+ * 调用链路：web → nginx /api/ → platform-gateway → platform-management → app-ingest-worker。
  * 上传进度由 XHR 提供；任务进度/状态经网关拉取 management 的 ingest task 视图。
  */
 const TERMINAL_OK = new Set(['COMPLETED', 'SUCCEEDED', 'DONE']);

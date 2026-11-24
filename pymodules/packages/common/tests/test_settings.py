@@ -69,14 +69,14 @@ common:
 """
 
 MINIMAL_MODULES = """
-ingest_worker:
+app_ingest_worker:
   max_content_length: 500
   min_content_length: 200
   item_name_chunk_k: 3
   item_name_chunk_size: 2500
   image_extensions: [.jpg, .png]
 
-query_worker:
+app_query_worker:
   query_high_threshold: 0.65
   query_mid_threshold: 0.55
   rerank_max_topk: 10
@@ -159,7 +159,7 @@ class LoadSettingsTest(unittest.TestCase):
         os.environ.pop("EMBEDDING_ONLINE_API_KEY", None)
         os.environ.pop("TEXT_RERANK_API_KEY", None)
 
-        for module, port in (("ingest_worker", None), ("query_worker", None),
+        for module, port in (("app_ingest_worker", None), ("app_query_worker", None),
                              ("model_embedding_worker", 8101), ("model_reranker_worker", 8102)):
             settings_mod._reset_for_test()
             s = load_settings(module)
@@ -170,9 +170,9 @@ class LoadSettingsTest(unittest.TestCase):
                 self.assertEqual(s.module.port, port)
         # 模块字段抽查
         settings_mod._reset_for_test()
-        self.assertEqual(load_settings("query_worker").module.query_mid_threshold, 0.55)
+        self.assertEqual(load_settings("app_query_worker").module.query_mid_threshold, 0.55)
         settings_mod._reset_for_test()
-        self.assertEqual(load_settings("ingest_worker").module.item_name_chunk_k, 3)
+        self.assertEqual(load_settings("app_ingest_worker").module.item_name_chunk_k, 3)
 
     def test_nested_api_key_fallback(self):
         os.environ.update({"OPENAI_API_KEY": "sk-main"})
@@ -192,13 +192,13 @@ class LoadSettingsTest(unittest.TestCase):
         self._prepare_tmp_pkg()
         del os.environ["CONFIG_DIR"]
         with self.assertRaises(SettingsError):
-            load_settings("query_worker")
+            load_settings("app_query_worker")
 
     def test_invalid_app_env(self):
         self._prepare_tmp_pkg()
         os.environ["APP_ENV"] = "prod"
         with self.assertRaises(SettingsError):
-            load_settings("query_worker")
+            load_settings("app_query_worker")
 
     def test_unregistered_module(self):
         self._prepare_tmp_pkg()
@@ -206,19 +206,19 @@ class LoadSettingsTest(unittest.TestCase):
             load_settings("unknown_worker")
 
     def test_extra_key_forbidden(self):
-        self._prepare_tmp_pkg(env_content="query_worker:\n  typo_key: 1\n")
+        self._prepare_tmp_pkg(env_content="app_query_worker:\n  typo_key: 1\n")
         with self.assertRaises(ValidationError):
-            load_settings("query_worker")
+            load_settings("app_query_worker")
 
     def test_env_interpolation(self):
         self._prepare_tmp_pkg()
         os.environ["MINIO_ACCESS_KEY"] = "ak-from-env"
-        s = load_settings("query_worker")
+        s = load_settings("app_query_worker")
         self.assertEqual(s.common.minio.access_key_str, "ak-from-env")
 
     def test_crop_isolation_other_module_missing_secret(self):
-        # ingest_worker 命名空间引用无默认值的缺失变量：加载 query_worker 不受影响，
-        # 加载 ingest_worker 自身才应在 resolve 阶段失败
+        # app_ingest_worker 命名空间引用无默认值的缺失变量：加载 app_query_worker 不受影响，
+        # 加载 app_ingest_worker 自身才应在 resolve 阶段失败
         self._prepare_tmp_pkg()
         base = Path(os.environ["CONFIG_DIR"]) / "aipaas_config.base.yaml"
         base.write_text(
@@ -227,19 +227,19 @@ class LoadSettingsTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        s = load_settings("query_worker")
+        s = load_settings("app_query_worker")
         self.assertEqual(s.module.query_high_threshold, 0.65)
 
         settings_mod._reset_for_test()
         with self.assertRaises(InterpolationResolutionError):
-            load_settings("ingest_worker")
+            load_settings("app_ingest_worker")
 
     def test_double_load_same_module_cached_and_different_module_rejected(self):
         self._prepare_tmp_pkg()
-        s1 = load_settings("query_worker")
-        self.assertIs(load_settings("query_worker"), s1)
+        s1 = load_settings("app_query_worker")
+        self.assertIs(load_settings("app_query_worker"), s1)
         with self.assertRaises(SettingsError):
-            load_settings("ingest_worker")
+            load_settings("app_ingest_worker")
 
     def test_get_settings_before_load_raises(self):
         with self.assertRaises(SettingsError):

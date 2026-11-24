@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from aipaas_retrieval import ACTION_DENIED, InMemoryAuditSink, RetrievalService
-from query_worker.api.routers.retrieval import access_from_headers, get_retrieval_service_dep, router
+from app_query_worker.api.routers.retrieval import access_from_headers, get_retrieval_service_dep, router
 
 HEADERS = {
     "X-User-Id": "u1",

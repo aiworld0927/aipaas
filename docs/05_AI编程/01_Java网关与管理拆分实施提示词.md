@@ -1,7 +1,7 @@
 测试 Embedding reranker 在线模式
 
-ingest-worker 重命名 app-ingest-worker
-query-worker 重命名 app-query-worker
+app-ingest-worker（已完成重命名）
+app-query-worker（已完成重命名）
 
 异步编程：
 学习知识点：

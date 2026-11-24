@@ -2,7 +2,7 @@
 
 AIPaaS 的 Python AI 服务工程，采用 **uv workspace monorepo** 管理：多个可独立部署的业务应用与分层共享包共用同一份锁文件、同一个虚拟环境 `pymodules/.venv`。
 
-> 当前 P0 已新增 `packages/pipeline`、`packages/retrieval` 的金融标准检索能力和 `packages/generation`；`apps` 下可部署模块为 `ingest-worker`（svc-ingest）、`query-worker`（svc-query）与 `model-*-worker`。下文迁移记录保留历史状态，模块成员以 `pyproject.toml` 为准，跨语言集成边界以[总架构说明](../docs/03_架构说明.md)为准。
+> 当前 P0 已新增 `packages/pipeline`、`packages/retrieval` 的金融标准检索能力和 `packages/generation`；`apps` 下可部署模块为 `app-ingest-worker`（app-ingest-worker）、`app-query-worker`（app-query-worker）与 `model-*-worker`。下文迁移记录保留历史状态，模块成员以 `pyproject.toml` 为准，跨语言集成边界以[总架构说明](../docs/03_架构说明.md)为准。
 
 本文档是**总文档**，负责说明工程总体情况与公共包；每个可独立部署的模块拆分为独立文档，详见下方导航。
 
@@ -11,8 +11,8 @@ AIPaaS 的 Python AI 服务工程，采用 **uv workspace monorepo** 管理：�
 | 层级 | 文档 | 覆盖内容 |
 | --- | --- | --- |
 | 总 | [README.md](README.md)（本文） | 总体架构、目录结构、workspace、配置体系、公共包、部署与测试 |
-| 分 | [docs/ingest-worker.md](docs/ingest-worker.md) | 文档导入服务 `svc-ingest`：接口、导入图、节点、MinIO/Milvus、镜像 |
-| 分 | [docs/query-worker.md](docs/query-worker.md) | 知识库查询服务 `svc-query`：接口、查询图、SSE、商品名确认、重排 |
+| 分 | [docs/app-ingest-worker.md](docs/app-ingest-worker.md) | 文档导入服务 `app-ingest-worker`：接口、导入图、节点、MinIO/Milvus、镜像 |
+| 分 | [docs/app-query-worker.md](docs/app-query-worker.md) | 知识库查询服务 `app-query-worker`：接口、查询图、SSE、商品名确认、重排 |
 | 分 | [docs/model-embedding-worker.md](docs/model-embedding-worker.md) | 嵌入模型服务：BGE-M3 / 在线后端、接口、torch 基座镜像 |
 | 分 | [docs/model-reranker-worker.md](docs/model-reranker-worker.md) | 重排模型服务：BGE-Reranker / DashScope、接口、基座镜像 |
 | 分 | [docs/eval-runner.md](docs/eval-runner.md) | 离线 RAG 评估脚本：流程、指标、适配状态 |
@@ -22,8 +22,8 @@ AIPaaS 的 Python AI 服务工程，采用 **uv workspace monorepo** 管理：�
 
 | 服务 | 目录 | workspace 成员 | 端口 | 职责 |
 | --- | --- | --- | --- | --- |
-| 文档导入 | `apps/ingest-worker` | 是（`svc-ingest`） | 8001 | 文件上传、解析、切分、商品名识别、向量化、入库（LangGraph 编排） |
-| 知识库查询 | `apps/query-worker` | 是（`svc-query`） | 8002 | 商品名确认、检索、RRF、重排、答案生成、SSE 流式输出 |
+| 文档导入 | `apps/app-ingest-worker` | 是（`app-ingest-worker`） | 8001 | 文件上传、解析、切分、商品名识别、向量化、入库（LangGraph 编排） |
+| 知识库查询 | `apps/app-query-worker` | 是（`app-query-worker`） | 8002 | 商品名确认、检索、RRF、重排、答案生成、SSE 流式输出 |
 | 嵌入模型 | `apps/model-embedding-worker` | 是 | 8003 | BGE-M3 / 在线 Embedding 独立推理服务（dense + sparse） |
 | 重排模型 | `apps/model-reranker-worker` | 是 | 8004 | BGE-Reranker / DashScope TextReRank 独立推理服务 |
 | 离线评测 | `apps/eval-runner` | 否 | — | ragas 评测脚本（由根目录 `eval/` 迁入，待适配新目录） |
@@ -42,24 +42,24 @@ pymodules/                                  # Python monorepo（uv workspace 根
 ├── README.md                               # 总文档（总体 + 公共包）
 │
 ├── docs/                                   # 分文档：每个独立部署模块一篇
-│   ├── ingest-worker.md
-│   ├── query-worker.md
+│   ├── app-ingest-worker.md
+│   ├── app-query-worker.md
 │   ├── model-embedding-worker.md
 │   ├── model-reranker-worker.md
 │   ├── eval-runner.md
 │   └── apis.md
 │
 ├── apps/                                   # 可独立部署的业务应用
-│   ├── ingest-worker/                      # name = svc-ingest
+│   ├── app-ingest-worker/                      # name = app-ingest-worker
 │   │   ├── pyproject.toml
 │   │   ├── Dockerfile
-│   │   └── ingest_worker/                  # ★ 应用内命名空间包
+│   │   └── app_ingest_worker/                  # ★ 应用内命名空间包
 │   │       ├── api/                        # app / dependencies / import_service / routers
 │   │       └── graph/                      # main / state / nodes（a~g）
-│   ├── query-worker/                       # name = svc-query
+│   ├── app-query-worker/                       # name = app-query-worker
 │   │   ├── pyproject.toml
 │   │   ├── Dockerfile
-│   │   └── query_worker/                   # ★ 应用内命名空间包
+│   │   └── app_query_worker/                   # ★ 应用内命名空间包
 │   │       ├── api/                        # app / dependencies / query_service / routers
 │   │       └── graph/                      # main_v1 / main_v2 / state / nodes
 │   ├── model-embedding-worker/             # 嵌入推理服务
@@ -124,10 +124,10 @@ apps/*  ──►  packages/*
 - **单向依赖**：`apps/* → packages/*`，`packages/*` 禁止反向依赖 `apps/*`
 - `packages/common` 是最底层，不依赖其他共享包
 - `packages/model-clients` 只依赖 `common`；`retrieval` 依赖 `common` + `model-clients`；`storage` / `nacos` / `mcp-agents` 只依赖 `common`
-- `ingest-worker` 依赖 `common / model-clients / nacos / retrieval / storage`
-- `query-worker` 在此基础上额外依赖 `mcp-agents1.0`（联网搜索）
+- `app-ingest-worker` 依赖 `common / model-clients / nacos / retrieval / storage`
+- `app-query-worker` 在此基础上额外依赖 `mcp-agents1.0`（联网搜索）
 - 两个模型推理服务只依赖 `common`，模型运行时（torch / FlagEmbedding）由根 workspace 的 `cpu|gpu` 分组提供
-- 应用内一律使用命名空间包（`ingest_worker.*` / `query_worker.*` / `model_embedding_worker.*` / `model_reranker_worker.*`），**禁止**使用 `graph.*`、`api.*` 这类顶层名——多个应用共存时会发生包名遮蔽
+- 应用内一律使用命名空间包（`app_ingest_worker.*` / `app_query_worker.*` / `model_embedding_worker.*` / `model_reranker_worker.*`），**禁止**使用 `graph.*`、`api.*` 这类顶层名——多个应用共存时会发生包名遮蔽
 - 所有第三方依赖在**成员** `pyproject.toml` 声明；根 `pyproject.toml` 不声明依赖
 - 服务型应用声明 `[tool.hatch.build.targets.wheel] packages = [...]`，保证 editable 安装后模块名全局唯一
 
@@ -153,10 +153,10 @@ cp .env.example .env          # 填写密钥后使用
 uv sync --all-packages --group cpu
 
 # 文档导入服务 http://127.0.0.1:8001
-uv run python -m ingest_worker.api.app
+uv run python -m app_ingest_worker.api.app
 
 # 知识库查询服务 http://127.0.0.1:8002
-uv run python -m query_worker.api.app
+uv run python -m app_query_worker.api.app
 
 # 嵌入模型服务 http://127.0.0.1:8003
 uv run python -m model_embedding_worker.api.app
@@ -168,15 +168,15 @@ uv run python -m model_reranker_worker.api.app
 入口统一使用 `python -m`：模块入口会先 `load_settings(<module_name>)`，再导入业务模块。若用 uvicorn，请显式指定 `--port` 并保证与配置/环境变量一致：
 
 ```bash
-uv run uvicorn query_worker.api.app:app --port 8002 --reload
+uv run uvicorn app_query_worker.api.app:app --port 8002 --reload
 ```
 
 容器构建（在 `pymodules` 目录执行）：
 
 ```bash
 # 两个业务服务
-docker build -f apps/query-worker/Dockerfile  -t aipaas/svc-query  .
-docker build -f apps/ingest-worker/Dockerfile -t aipaas/svc-ingest .
+docker build -f apps/app-query-worker/Dockerfile  -t aipaas/app-query-worker  .
+docker build -f apps/app-ingest-worker/Dockerfile -t aipaas/app-ingest-worker .
 
 # 两个模型服务：先构建 torch 基座，再构建应用镜像
 docker build --network host --build-arg TORCH_VARIANT=gpu \
@@ -232,10 +232,10 @@ docker build --network host --build-arg BASE_IMAGE=aipaas/aipaas-torch-gpu-base:
 | `EMBEDDING_ONLINE_API_KEY` / `TEXT_RERANK_API_KEY` | 模型服务在线后端独立密钥（缺省回退 `OPENAI_API_KEY`） |
 | `EMBEDDING_SERVICE_URL` / `RERANKER_SERVICE_URL` | 业务侧模型服务地址 |
 | `NACOS_ENABLED` / `NACOS_SERVER_ADDR` / `NACOS_NAMESPACE` / `NACOS_GROUP` / `NACOS_USERNAME` / `NACOS_PASSWORD` / `NACOS_REGISTER_IP` | Nacos 注册 |
-| `INGEST_WORKER_HOST/PORT`、`QUERY_WORKER_HOST/PORT`、`MODEL_EMBEDDING_WORKER_HOST/PORT`、`MODEL_RERANKER_WORKER_HOST/PORT` | 覆盖各服务监听地址 |
+| `APP_INGEST_WORKER_HOST/PORT`、`APP_QUERY_WORKER_HOST/PORT`、`MODEL_EMBEDDING_WORKER_HOST/PORT`、`MODEL_RERANKER_WORKER_HOST/PORT` | 覆盖各服务监听地址 |
 | `PROJECT_ROOT` | 项目根目录（容器内为 `/app`） |
 
-常用业务阈值已收敛到 `query_worker` 命名空间（`query_high_threshold`、`query_mid_threshold`、`rerank_max_topk`、`rerank_min_topk`、`rerank_gap_abs`、`rerank_gap_ratio`、`max_context_chars`），不再通过散落的 `os.getenv` 读取。
+常用业务阈值已收敛到 `app_query_worker` 命名空间（`query_high_threshold`、`query_mid_threshold`、`rerank_max_topk`、`rerank_min_topk`、`rerank_gap_abs`、`rerank_gap_ratio`、`max_context_chars`），不再通过散落的 `os.getenv` 读取。
 
 ## 公共包部分
 
@@ -306,7 +306,7 @@ Milvus 适配层（历史规划中的 ES / Qdrant / Neo4j 未实现）：
 
 ### packages/mcp-agents1.0 / mcp-agents2.0
 
-- `mcp-agents1.0`（distribution `aipaas-mcp-agent1`，Python 包 `aipaas_mcp_agents`）：`mcp>=1.19.0,<2` + `openai-agents<0.20.0`，被 `query-worker` 使用。
+- `mcp-agents1.0`（distribution `aipaas-mcp-agent1`，Python 包 `aipaas_mcp_agents`）：`mcp>=1.19.0,<2` + `openai-agents<0.20.0`，被 `app-query-worker` 使用。
   - `call_web_search_mcp(rewritten_query, max_retries=3)`：使用 `MCPServerStreamableHttp` 连接百炼 MCP，调用 `bailian_web_search`（`count=2`），失败按 1/2/4 秒指数退避，最终抛错。
 - `mcp-agents2.0`（distribution `aipaas-mcp-agent2`）：`mcp>=2,<3` + `openai-agents==0.23.1`，**不在 workspace**，暂未被任何成员依赖，独立管理。
 
@@ -314,8 +314,8 @@ Milvus 适配层（历史规划中的 ES / Qdrant / Neo4j 未实现）：
 
 | 服务 | 主要接口 | 详细文档 |
 | --- | --- | --- |
-| 导入（8001） | `POST /upload`、`GET /status/{task_id}`、`GET /import.html`、`GET /health` | [docs/ingest-worker.md](docs/ingest-worker.md) |
-| 查询（8002） | `POST /query`、`GET /stream/{session_id}`、`GET/DELETE /history/{session_id}`、`GET /health` | [docs/query-worker.md](docs/query-worker.md) |
+| 导入（8001） | `POST /upload`、`GET /status/{task_id}`、`GET /import.html`、`GET /health` | [docs/app-ingest-worker.md](docs/app-ingest-worker.md) |
+| 查询（8002） | `POST /query`、`GET /stream/{session_id}`、`GET/DELETE /history/{session_id}`、`GET /health` | [docs/app-query-worker.md](docs/app-query-worker.md) |
 | 嵌入（8003） | `POST /v1/embeddings`、`GET /v1/model/info`、`GET /health`、`GET /ready` | [docs/model-embedding-worker.md](docs/model-embedding-worker.md) |
 | 重排（8004） | `POST /v1/rerank`、`GET /v1/model/info`、`GET /health`、`GET /ready` | [docs/model-reranker-worker.md](docs/model-reranker-worker.md) |
 | 平台 API（8000） | `/ImageList`、`/PackageSearch`、`/PackageSearchNew`、`/ImageConstruct`、`/ImageConstruct_pypi`、`/TargetSelect`、`/items`、`/users` | [docs/apis.md](docs/apis.md) |
@@ -355,7 +355,7 @@ uv run python tests/16-test-config-load.py
 | 规划项 | 状态 | 说明 |
 | --- | --- | --- |
 | `packages/core` | 未建 | 独立领域模型 / Protocol / ABC；当前基础能力在 `packages/common/core` |
-| `packages/ingestion` | 未建 | parsers / cleaners / chunkers；当前解析逻辑仍在 `ingest_worker/graph` |
+| `packages/ingestion` | 未建 | parsers / cleaners / chunkers；当前解析逻辑仍在 `app_ingest_worker/graph` |
 | `packages/embeddings` | 未建 | 嵌入适配独立包；当前客户端在 `packages/model-clients`，推理在 `apps/model-embedding-worker` |
 | `packages/observability` | 未建 | OTel / token 计量；当前仅有 `common/core/log` |
 | `packages/eval` | 未建 | 指标 / 数据集 / LLM-as-judge |
@@ -376,7 +376,7 @@ uv run python tests/16-test-config-load.py
 | `milvus/es/qdrant/neo4j/reranker_http` → `packages/retrieval` | 检索能力独立成包 |
 | `mongo/mysql/minio/kubernetes` → `packages/storage` | 存储与基础设施客户端独立成包 |
 | `rag_base.py` → `packages/pipeline` | 编排基类独立成包 |
-| 应用源码收进 `ingest_worker/`、`query_worker/` | 消除两个应用 `graph`/`api` 顶层包名冲突 |
+| 应用源码收进 `app_ingest_worker/`、`app_query_worker/` | 消除两个应用 `graph`/`api` 顶层包名冲突 |
 | `prompts/`、`conf/` → `configs/` | 配置与提示词单一根目录 |
 | 根 `eval/` → `apps/eval-runner/` | 评测执行器归入 apps |
 | 删除空目录 `app/`、`libs/` | 迁移后清理 |
@@ -399,8 +399,8 @@ uv run python tests/16-test-config-load.py
 | 文档 | 内容来源 |
 | --- | --- |
 | `README.md` | 总体部分 + 公共包部分（原 README 全部章节保留并修正端口、路径、包名） |
-| `docs/ingest-worker.md` | 导入服务的接口、图、节点、部署细节 |
-| `docs/query-worker.md` | 查询服务的接口、图、SSE、商品名确认、重排、部署细节 |
+| `docs/app-ingest-worker.md` | 导入服务的接口、图、节点、部署细节 |
+| `docs/app-query-worker.md` | 查询服务的接口、图、SSE、商品名确认、重排、部署细节 |
 | `docs/model-embedding-worker.md` | 嵌入服务的后端、接口、配置、基座镜像 |
 | `docs/model-reranker-worker.md` | 重排服务的后端、接口、配置、基座镜像 |
 | `docs/eval-runner.md` | 评测脚本流程、指标、适配状态与已知问题 |

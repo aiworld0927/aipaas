@@ -16,7 +16,7 @@ from aipaas_generation import (
     RefusalStats,
 )
 from helpers import FakeChatClient, FakeRetriever, build_manager
-from query_worker.api.routers import generation
+from app_query_worker.api.routers import generation
 
 ACCESS_HEADERS = {
     "X-User-Id": "user-1",

@@ -12,7 +12,7 @@ class HostPortSettings(_Base):
     """所有 HTTP worker 共用的监听地址。
 
     端口统一由环境变量 `{MODULE_NAME大写}_PORT` / `{MODULE_NAME大写}_HOST` 覆盖
-    （如 INGEST_WORKER_PORT=9000），未设置时取 YAML 中的默认值。
+    （如 APP_INGEST_WORKER_PORT=9000），未设置时取 YAML 中的默认值。
     """
 
     host: str = "0.0.0.0"

@@ -7,7 +7,7 @@
 使用方式::
 
     lifespan = AppLifespan()
-    lifespan.add(nacos_lifespan("svc-ingest"))       # 组件自带完整 lifespan
+    lifespan.add(nacos_lifespan("app-ingest-worker"))       # 组件自带完整 lifespan
     lifespan.add(mysql_lifespan(settings))           # 未来：MySQL 初始化/释放
     lifespan.add_hooks(init_es, close_es)            # 或只提供 init/dispose 钩子
 

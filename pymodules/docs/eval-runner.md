@@ -113,8 +113,8 @@ from app.clients.lm.lm_utils import get_llm_client
 | `app.core.log.logger` | `aipaas_common.core.log.logger` |
 | `app.clients.lm.lm_utils.get_llm_client` | `aipaas_model_clients.lm.lm_utils.get_llm_client` |
 | `app.clients.lm.embedding_utils.generate_embeddings` | `aipaas_model_clients.lm.embedding_http_utils.generate_embeddings`（异步为 `agenerate_embeddings`） |
-| `app.agents.query_process.main_graph.query_app` | `query_worker.graph.main_v2.KBQueryWorkflowV2` |
-| `app.agents.query_process.state.create_default_query_state` | `query_worker.graph.state.create_default_query_state` |
+| `app.agents.query_process.main_graph.query_app` | `app_query_worker.graph.main_v2.KBQueryWorkflowV2` |
+| `app.agents.query_process.state.create_default_query_state` | `app_query_worker.graph.state.create_default_query_state` |
 
 同时 `apps/eval-runner` 未纳入根 `pyproject.toml` 的 workspace，也没有独立 `pyproject.toml` / Dockerfile，因此依赖（ragas、pandas 等）需在适配时补齐。
 
@@ -122,7 +122,7 @@ from app.clients.lm.lm_utils import get_llm_client
 
 适配时需要一并处理：
 
-1. **导入路径**：如上表，全部改为 `aipaas_*` / `query_worker`。
+1. **导入路径**：如上表，全部改为 `aipaas_*` / `app_query_worker`。
 2. **同步/异步入口**：新查询图推荐 `asyncio.run(KBQueryWorkflowV2().arun(state, stream=False))`；当前脚本假定 `query_app.invoke` 同步可用。
 3. **嵌入适配器方法签名**：`BgeM3EmbeddingsAdapter.embed_documents` / `embed_query` 缺少 `self`，作为实例方法被 ragas 调用时会因参数错位抛 `TypeError`，需要改为 `def embed_documents(self, texts)` 与 `def embed_query(self, text)`。
 4. **嵌入客户端**：新实现通过 HTTP 调用 `model-embedding-worker`，评估前需保证该服务可用，或改为本地加载。
@@ -131,7 +131,7 @@ from app.clients.lm.lm_utils import get_llm_client
 ## 6. 依赖与部署
 
 - 无 Dockerfile、无 pyproject，不参与 `uv sync --all-packages`。
-- 计划依赖：`ragas`、`pandas`、`langchain-core`，以及查询链路所需的 `query-worker`、`aipaas-common`、`aipaas-model-clients`。
+- 计划依赖：`ragas`、`pandas`、`langchain-core`，以及查询链路所需的 `app-query-worker`、`aipaas-common`、`aipaas-model-clients`。
 - 评估会真实调用 LLM、嵌入服务、Milvus、MongoDB 与联网检索，属于**有外部副作用的集成测试**，建议在测试环境运行。
 
 ## 7. 注意事项

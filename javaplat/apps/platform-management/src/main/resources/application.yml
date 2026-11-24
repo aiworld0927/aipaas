@@ -93,7 +93,7 @@ aipaas:
       secret-key: ${AIPAAS_MINIO_SECRET_KEY:}
       bucket: ${AIPAAS_MINIO_BUCKET:aipaas-p0}
   parse:
-    service-url: ${AIPAAS_PARSE_SERVICE_URL:http://ingest-worker:8000}
+    service-url: ${AIPAAS_PARSE_SERVICE_URL:http://app-ingest-worker:8000}
     connect-timeout: ${AIPAAS_PARSE_CONNECT_TIMEOUT:PT5S}
     read-timeout: ${AIPAAS_PARSE_READ_TIMEOUT:PT180S}
     revision-mode: ${AIPAAS_PARSE_REVISION_MODE:ignore}
